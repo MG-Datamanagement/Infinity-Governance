@@ -1,0 +1,70 @@
+version: "3.9"
+
+networks:
+  default:
+    name: datahub_network
+    external: true
+
+services:
+  postgres_ig:
+    image: postgres:16
+    container_name: datahub-postgres-ig
+    environment:
+      POSTGRES_USER: semantic_user
+      POSTGRES_PASSWORD: semantic_pass
+      POSTGRES_DB: semantic_search
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U semantic_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin_ig:
+    image: dpage/pgadmin4
+    container_name: datahub-pgadmin-ig
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+    depends_on:
+      - postgres_ig
+    networks:
+      - default
+
+  unified-api:
+    build: .
+    container_name: datahub-unified-api
+    depends_on:
+      postgres_ig:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+      - ./results:/app/results
+    environment:
+      DATAHUB_GRAPHQL_URL: http://nginx-proxy/graphql
+      PG_HOST: postgres_ig
+      PG_PORT: 5432
+      PG_DB: semantic_search
+      PG_USER: semantic_user
+      PG_PASS: semantic_pass
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
+      AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
+      AZURE_DEPLOYMENT: ${AZURE_DEPLOYMENT:-gpt-35-turbo-16k}
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+    networks:
+      - default
+
+volumes:
+  pgdata:
