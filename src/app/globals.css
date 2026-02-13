@@ -27,7 +27,7 @@
   }
 
   .stat-card {
-    @apply card p-4;
+    @apply card p-3;
   }
 
   .badge {

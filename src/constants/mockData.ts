@@ -69,6 +69,26 @@ export const MOCK_COMPLIANCE_FRAMEWORKS: ComplianceFramework[] = [
     lastUpdated: '3 hours ago',
     items: [],
   },
+   {
+    id: 'euaiact',
+    name: 'EU AI Act',
+    score: 45,
+    policiesTotal: 20,
+    policiesComplete: 2,
+    status: 'critical',
+    lastUpdated: '5 hours ago',
+    items: [],
+  },
+  {
+    id: 'internal',
+    name: 'Internal',
+    score: 92,
+    policiesTotal: 20,
+    policiesComplete: 18,
+    status: 'excellent',
+    lastUpdated: '1 hours ago',
+    items: [],
+  },
 ];
 
 export const MOCK_COMPLIANCE_ISSUES: ComplianceIssue[] = [

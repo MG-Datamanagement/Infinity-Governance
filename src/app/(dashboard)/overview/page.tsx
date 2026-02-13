@@ -57,19 +57,19 @@ function OverviewContent() {
       <TabNavigation />
 
       {/* Action Button */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
         <div>
           <p className="text-sm text-gray-600 font-medium">Monitor your data governance health and activities</p>
         </div>
-        <div className='flex gap-3'>
+        <div className='flex items-center gap-3'>
           <div>
-            <button className="p-2 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-dark transition-colors flex items-center gap-2 whitespace-nowrap">
+            <button className="px-2 py-2 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-dark transition-colors flex items-center gap-2 whitespace-nowrap">
               <Database size={16} />
               Add Data Source
             </button>
           </div>
           <div>
-            <select aria-label='Quick Actions' className='p-2 text-gray-800 text-xs font-medium rounded-md border border-gray-200 hover:bg-white transition-colors flex items-center whitespace-nowrap'>
+            <select aria-label='Quick Actions' className='px-2 py-2 text-gray-800 text-xs font-medium rounded-md border-2 border-gray-200 hover:bg-white transition-colors flex items-center whitespace-nowrap'>
               <option disabled selected hidden value="">Quick Actions</option>
               <option value="exportReport">Export Report</option>
               <option value="runScan">Run Scan</option>
@@ -79,111 +79,112 @@ function OverviewContent() {
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <ErrorBoundary fallback={<DataErrorFallback retry={refetchStats} />}>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          <StatCard
-            icon={Database}
-            iconColor="text-blue-600"
-            label="Total Assets"
-            value={stats?.totalAssets || 0}
-            change={stats?.totalAssetsChange}
-            changeType="positive"
-          />
-          <StatCard
-            icon={Shield}
-            iconColor="text-green-600"
-            label="Governance Score"
-            value={`${stats?.governanceScore}%` || '0%'}
-            change={stats?.governanceScoreStatus}
-            changeType="neutral"
-          />
-          <StatCard
-            icon={Tag}
-            iconColor="text-blue-600"
-            label="Classified"
-            value={stats?.classified || 0}
-            change={stats?.classifiedChange}
-            changeType="positive"
-          />
-          <StatCard
-            icon={Eye}
-            iconColor="text-yellow-600"
-            label="Pending Review"
-            value={stats?.pendingReview || 0}
-          />
-          <StatCard
-            icon={LucideMessageSquareWarning}
-            iconColor="text-gray-600"
-            label="At Risk Domains"
-            value={stats?.aiRiskDomains || 0}
-          />
-          <StatCard
-            icon={LucideMessageSquareWarning}
-            iconColor="text-gray-600"
-            label="At Risk Domains"
-            value={stats?.aiRiskDomains || 0}
-          />
-        </div>
-      </ErrorBoundary>
+      <div className='grid grid-cols-1 lg:grid-cols-[6fr_2fr] gap-3'>
+        <div className='grid lg:grid-rows-[1fr_5fr] gap-3'>
+          {/* Stats Grid */}
+          <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+            <StatCard
+              icon={Database}
+              iconColor="text-blue-600"
+              label="Total Assets"
+              value={stats?.totalAssets || 0}
+              change={stats?.totalAssetsChange}
+              changeType="positive"
+            />
+            <StatCard
+              icon={Shield}
+              iconColor="text-green-600"
+              label="Governance Score"
+              value={`${stats?.governanceScore}%` || '0%'}
+              change={stats?.governanceScoreStatus}
+              changeType="neutral"
+            />
+            <StatCard
+              icon={Tag}
+              iconColor="text-blue-600"
+              label="Classified"
+              value={stats?.classified || 0}
+              change={stats?.classifiedChange}
+              changeType="positive"
+            />
+            <StatCard
+              icon={Eye}
+              iconColor="text-yellow-600"
+              label="Pending Review"
+              value={stats?.pendingReview || 0}
+            />
+            <StatCard
+              icon={LucideMessageSquareWarning}
+              iconColor="text-gray-600"
+              label="At Risk Domains"
+              value={stats?.aiRiskDomains || 0}
+            />
+            <StatCard
+              icon={LucideMessageSquareWarning}
+              iconColor="text-gray-600"
+              label="At Risk Domains"
+              value={stats?.aiRiskDomains || 0}
+            />
+          </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-        {/* Compliance Overview */}
-        <div className="xl:col-span-4">
-          <ErrorBoundary>
-            <div className="card p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <h3 className="text-sm font-semibold text-gray-900">Compliance Overview</h3>
-                <Shield className="text-green-600" size={16} />
-              </div>
-
-              {!frameworksLoading && frameworks && (
-                <div className="space-y-3">
-                  <div className='p-1.5 bg-green-100/40 rounded-lg'>
-                    <p className="text-xs text-gray-600 leading-relaxed">
-                      Your governance is in excellent shape! All critical compliance frameworks are above
-                      90%, with GDPR and SOC 2 leading at 96% and 98%. HIPAA needs attention at 79% -
-                      consider reviewing data classification policies.
-                    </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Compliance Overview */}
+            <div className='grid'>
+              <ErrorBoundary>
+                <div className="card p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-sm font-semibold text-gray-900">Compliance Overview</h3>
+                    <Shield className="text-green-600" size={16} />
                   </div>
 
-                  {frameworks.map((framework) => (
-                    <div key={framework.id} className="flex-col items-center justify-between space-y-1">
-                      <div className='flex justify-between items-center'>
-                        <div className="text-xs text-gray-700">{framework.name}</div>
-                        <div className="text-sm font-medium text-gray-900 text-right">
-                          {framework.score}%
-                        </div>
+                  {!frameworksLoading && frameworks && (
+                    <div className="space-y-4">
+                      <div className='p-1.5 bg-green-100/40 rounded-lg'>
+                        <p className="text-xs text-gray-600 leading-relaxed">
+                          Your governance is in excellent shape! All critical compliance frameworks are above
+                          90%, with GDPR and SOC 2 leading at 96% and 98%. HIPAA needs attention at 79% -
+                          consider reviewing data classification policies.
+                        </p>
                       </div>
-                      <div className="gap-2">
-                        <div className="bg-gray-200 rounded-full h-2">
-                          <div
-                            className={cn(
-                              'h-2 rounded-full transition-all',
-                              framework.status === 'excellent' ? 'bg-success' :
-                                framework.status === 'warning' ? 'bg-warning' : 'bg-danger'
-                            )}
-                            style={{ width: `${framework.score}%` }}
-                          />
-                        </div>
+
+                      <div>
+                        {frameworks.map((framework) => (
+                          <div key={framework.id} className="flex-col items-center justify-between space-y-2">
+                            <div className='flex justify-between items-center'>
+                              <div className="text-xs text-gray-700">{framework.name}</div>
+                              <div className="text-sm font-medium text-gray-900 text-right">
+                                {framework.score}%
+                              </div>
+                            </div>
+                            <div className="gap-2">
+                              <div className="bg-gray-200 rounded-full h-2">
+                                <div
+                                  className={cn(
+                                    'h-2 rounded-full transition-all',
+                                    framework.status === 'excellent' ? 'bg-success' :
+                                      framework.status === 'warning' ? 'bg-warning' : 'bg-danger'
+                                  )}
+                                  style={{ width: `${framework.score}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div>
+                        <button className="w-full p-1 text-sm text-center rounded-md bg-gray-100 text-gray-800 font-medium hover:bg-gray-200 hover:text-primary">
+                          Details →
+                        </button>
                       </div>
                     </div>
-                  ))}
-
-                  <button className="w-full p-1 text-sm text-center rounded-md bg-gray-100 text-gray-800 font-medium hover:bg-gray-200 hover:text-primary">
-                    Details →
-                  </button>
+                  )}
                 </div>
-              )}
+              </ErrorBoundary>
             </div>
-          </ErrorBoundary>
-        </div>
 
-        {/* AI Governance Snapshot */}
-        <div className="xl:col-span-4">
-          <ErrorBoundary fallback={<DataErrorFallback retry={refetchAI} />}>
-            <div className="card p-4">
+            {/* AI Governance Snapshot */}
+            <div className="grid card p-4">
               <div className="mb-4">
                 <h3 className="text-sm font-semibold text-gray-900">AI Governance Snapshot</h3>
                 <p className="text-[10px] text-gray-400">Real-time AI model monitoring</p>
@@ -245,14 +246,9 @@ function OverviewContent() {
                 </div>
               )}
             </div>
-          </ErrorBoundary>
-        </div>
 
-        {/* Bottom Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* Top Domains */}
-          <ErrorBoundary>
-            <div className="card p-4">
+            {/* Top Domains */}
+            <div className="grid card p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className='flex justify-between items-center gap-2'>
                   <h3 className="font-semibold text-gray-900">Top Domains</h3>
@@ -278,11 +274,9 @@ function OverviewContent() {
                 </div>
               )}
             </div>
-          </ErrorBoundary>
 
-          <ErrorBoundary>
             {/* Top Platforms */}
-            <div className="card p-4">
+            <div className="grid card p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className='flex justify-between items-center gap-2'>
                   <h3 className="font-semibold text-gray-900">Top Platforms</h3>
@@ -307,76 +301,76 @@ function OverviewContent() {
                 </div>
               )}
             </div>
-          </ErrorBoundary>
+          </div>
         </div>
 
-      </div>
-      {/* Recent Activity */}
-      <div className="xl:col-span-4">
-        <ErrorBoundary>
-          <div className="card overflow-hidden h-full flex flex-col">
-            <div className='flex items-center justify-center'>
-              {/* Tabs */}
-              <div className="flex gap-3 border-b border-gray-200">
-                <button
-                  onClick={() => setActivityTab('recent')}
-                  className={cn(
-                    'px-4 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1',
-                    activityTab === 'recent'
-                      ? 'text-primary border-primary bg-gray-200'
-                      : 'text-gray-500 border-transparent hover:text-gray-700'
-                  )}
-                >
-                  <Activity size={16} />
-                  Recent Activity
-                </button>
-                <button
-                  onClick={() => setActivityTab('viewed')}
-                  className={cn(
-                    'px-4 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1',
-                    activityTab === 'viewed'
-                      ? 'text-primary border-primary bg-gray-200'
-                      : 'text-gray-500 border-transparent hover:text-gray-700'
-                  )}
-                >
-                  <Clock size={16} />
-                  Recently Viewed
-                </button>
+        {/* Recent Activity */}
+        <div className="grid">
+          <ErrorBoundary>
+            <div className="card overflow-hidden flex flex-col">
+              <div className='flex items-center justify-center'>
+                {/* Tabs */}
+                <div className="flex gap-4 border-b border-gray-200">
+                  <button
+                    onClick={() => setActivityTab('recent')}
+                    className={cn(
+                      'px-2 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2',
+                      activityTab === 'recent'
+                        ? 'text-primary border-primary'
+                        : 'text-gray-500 border-transparent hover:text-gray-700'
+                    )}
+                  >
+                    <Activity size={16} />
+                    Recent Activity
+                  </button>
+                  <button
+                    onClick={() => setActivityTab('viewed')}
+                    className={cn(
+                      'px-2 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2',
+                      activityTab === 'viewed'
+                        ? 'text-primary border-primary'
+                        : 'text-gray-500 border-transparent hover:text-gray-700'
+                    )}
+                  >
+                    <Clock size={16} />
+                    Recently Viewed
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto">
-              <div className="divide-y divide-gray-100">
-                {!activityLoading && activity && activity.slice(0, 10).map((item) => (
-                  <div key={item.id} className="px-2 md:px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-100 rounded flex items-center justify-center flex-shrink-0">
-                        <Database size={14} className="text-purple-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-gray-900 truncate">
-                          {item.name}
+              <div className="flex-1 overflow-y-auto">
+                <div className="divide-y divide-gray-100">
+                  {!activityLoading && activity && activity.slice(0, 10).map((item) => (
+                    <div key={item.id} className="px-2 md:px-4 py-3 hover:bg-gray-50 cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-purple-100 rounded flex items-center justify-center flex-shrink-0">
+                          <Database size={14} className="text-purple-600" />
                         </div>
-                        <div className="text-xs text-gray-500">
-                          {item.type} • {item.table}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs font-medium text-gray-900 truncate">
+                            {item.name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {item.type} • {item.table}
+                          </div>
                         </div>
-                      </div>
-                      <div className="text-xs text-gray-400 flex-shrink-0">
-                        {item.timestamp}
+                        <div className="text-xs text-gray-400 flex-shrink-0">
+                          {item.timestamp}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-2 border-t border-gray-200">
+                <button className="text-primary text-sm font-medium hover:underline w-full text-center">
+                  View all recently viewed
+                </button>
               </div>
             </div>
-
-            <div className="p-2 border-t border-gray-200">
-              <button className="text-primary text-sm font-medium hover:underline w-full text-center">
-                View all recently viewed
-              </button>
-            </div>
-          </div>
-        </ErrorBoundary>
+          </ErrorBoundary>
+        </div>
       </div>
 
 
