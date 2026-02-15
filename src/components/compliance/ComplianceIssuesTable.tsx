@@ -21,19 +21,19 @@ export function ComplianceIssuesTable({ issues }: ComplianceIssuesTableProps) {
     <div className="card">
       {/* Header */}
       <div className="p-2 md:p-4 border-b border-gray-200">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-4">
-          <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-2">
+          <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
             <AlertCircle className="text-red-600" size={20} />
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-gray-900">Open Compliance Issues</h3>
-            <p className="text-sm text-gray-500">{filteredIssues.length} items requiring attention</p>
+            <h3 className="text-sm font-semibold text-gray-900">Open Compliance Issues</h3>
+            <p className="text-xs text-gray-500">{filteredIssues.length} items requiring attention</p>
           </div>
         </div>
 
         {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
           <input
             type="text"
             value={searchTerm}
@@ -49,22 +49,22 @@ export function ComplianceIssuesTable({ issues }: ComplianceIssuesTableProps) {
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Issue
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Framework
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Severity
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Dataset
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Assignee
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Due Date
               </th>
             </tr>
@@ -72,26 +72,26 @@ export function ComplianceIssuesTable({ issues }: ComplianceIssuesTableProps) {
           <tbody className="bg-white divide-y divide-gray-200">
             {filteredIssues.map((issue) => (
               <tr key={issue.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4">
+                <td className="px-2 py-1.5">
                   <div className="text-sm text-gray-900">{issue.issue}</div>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-2 py-1.5">
                   <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                     {issue.framework}
                   </span>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-2 py-1.5">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getSeverityColor(issue.severity)}`}>
                     {issue.severity}
                   </span>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-2 py-1.5">
                   <div className="text-sm text-gray-600 font-mono">{issue.dataset}</div>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-2 py-1.5">
                   <div className="text-sm text-gray-900">{issue.assignee}</div>
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-2 py-1.5">
                   <div className="text-sm text-gray-600">{issue.dueDate}</div>
                 </td>
               </tr>

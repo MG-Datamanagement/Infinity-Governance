@@ -61,7 +61,7 @@ function OverviewContent() {
         <div>
           <p className="text-sm text-gray-600 font-medium">Monitor your data governance health and activities</p>
         </div>
-        <div className='flex items-center gap-3'>
+        <div className='flex items-center gap-2'>
           <div>
             <button className="px-2 py-2 bg-primary text-white text-xs font-medium rounded-md hover:bg-primary-dark transition-colors flex items-center gap-2 whitespace-nowrap">
               <Database size={16} />
@@ -69,7 +69,7 @@ function OverviewContent() {
             </button>
           </div>
           <div>
-            <select aria-label='Quick Actions' className='px-2 py-2 text-gray-800 text-xs font-medium rounded-md border-2 border-gray-200 hover:bg-white transition-colors flex items-center whitespace-nowrap'>
+            <select aria-label='Quick Actions' className='px-2 py-2 text-gray-800 text-xs font-medium rounded-md border-2 border-gray-200 bg-white transition-colors flex items-center whitespace-nowrap'>
               <option disabled selected hidden value="">Quick Actions</option>
               <option value="exportReport">Export Report</option>
               <option value="runScan">Run Scan</option>
@@ -79,10 +79,10 @@ function OverviewContent() {
         </div>
       </div>
 
-      <div className='grid grid-cols-1 lg:grid-cols-[6fr_2fr] gap-3'>
-        <div className='grid lg:grid-rows-[1fr_5fr] gap-3'>
+      <div className='grid grid-cols-1 lg:grid-cols-[6fr_2fr] gap-2'>
+        <div className='grid lg:grid-rows-[1fr_5fr] gap-2'>
           {/* Stats Grid */}
-          <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+          <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2">
             <StatCard
               icon={Database}
               iconColor="text-blue-600"
@@ -127,7 +127,7 @@ function OverviewContent() {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {/* Compliance Overview */}
             <div className='grid'>
               <ErrorBoundary>
@@ -185,7 +185,7 @@ function OverviewContent() {
 
             {/* AI Governance Snapshot */}
             <div className="grid card p-4">
-              <div className="mb-4">
+              <div className="mb-2">
                 <h3 className="text-sm font-semibold text-gray-900">AI Governance Snapshot</h3>
                 <p className="text-[10px] text-gray-400">Real-time AI model monitoring</p>
               </div>
@@ -264,7 +264,7 @@ function OverviewContent() {
                   {domains.map((domain, idx) => (
                     <div key={idx} className="flex items-center justify-between py-1">
                       <span className="text-sm text-gray-700">{domain.domain}</span>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900">
                           {domain.count} {domain.count === 1 ? 'asset' : 'assets'}
                         </span>
@@ -310,29 +310,29 @@ function OverviewContent() {
             <div className="card overflow-hidden flex flex-col">
               <div className='flex items-center justify-center'>
                 {/* Tabs */}
-                <div className="flex gap-4 border-b border-gray-200">
+                <div className="flex gap-2 border-b border-gray-200">
                   <button
                     onClick={() => setActivityTab('recent')}
                     className={cn(
-                      'px-2 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2',
+                      'px-2 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1',
                       activityTab === 'recent'
                         ? 'text-primary border-primary'
                         : 'text-gray-500 border-transparent hover:text-gray-700'
                     )}
                   >
-                    <Activity size={16} />
+                    <Activity size={15} />
                     Recent Activity
                   </button>
                   <button
                     onClick={() => setActivityTab('viewed')}
                     className={cn(
-                      'px-2 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-2',
+                      'px-2 py-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1',
                       activityTab === 'viewed'
                         ? 'text-primary border-primary'
                         : 'text-gray-500 border-transparent hover:text-gray-700'
                     )}
                   >
-                    <Clock size={16} />
+                    <Clock size={15} />
                     Recently Viewed
                   </button>
                 </div>
@@ -342,7 +342,7 @@ function OverviewContent() {
                 <div className="divide-y divide-gray-100">
                   {!activityLoading && activity && activity.slice(0, 10).map((item) => (
                     <div key={item.id} className="px-2 md:px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-purple-100 rounded flex items-center justify-center flex-shrink-0">
                           <Database size={14} className="text-purple-600" />
                         </div>

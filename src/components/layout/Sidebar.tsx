@@ -57,7 +57,7 @@ export function Sidebar() {
   return (
     <aside className={cn(
       'bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-300',
-      sidebarCollapsed ? 'w-[52px]' : 'w-56'
+      sidebarCollapsed ? 'w-[52px]' : 'w-52'
     )}>
       {/* Logo */}
       <div className="p-3 border-b border-gray-200 flex items-center justify-between">
@@ -79,7 +79,7 @@ export function Sidebar() {
       {/* Toggle Button */}
       <button
         onClick={toggleSidebar}
-        className={cn("absolute w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 z-20", sidebarCollapsed ? "top-9 left-9" : "top-11 left-52" )}
+        className={cn("absolute w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 z-20", sidebarCollapsed ? "top-9 left-10" : "top-11 left-[198px]" )}
       >
         {sidebarCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
       </button>

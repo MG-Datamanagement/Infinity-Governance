@@ -10,27 +10,27 @@ interface ComplianceTrendsChartProps {
 export function ComplianceTrendsChart({ data }: ComplianceTrendsChartProps) {
   return (
     <div className="card p-4">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="font-semibold text-gray-900">Compliance Score Trends</h3>
-          <p className="text-sm text-gray-500">Last 6 months performance</p>
+          <h3 className="text-sm font-bold text-gray-900">Compliance Score Trends</h3>
+          <p className="text-xs text-gray-500">Last 6 months performance</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-success font-medium">
+        <div className="flex items-center gap-1 text-xs text-success font-medium">
           +7% Overall
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={300}>
+      <ResponsiveContainer width="100%" height={250}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
             dataKey="month"
-            tick={{ fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: '#6b7280', fontSize: 10 }}
             tickLine={{ stroke: '#e5e7eb' }}
           />
           <YAxis
             domain={[60, 100]}
-            tick={{ fill: '#6b7280', fontSize: 12 }}
+            tick={{ fill: '#6b7280', fontSize: 10 }}
             tickLine={{ stroke: '#e5e7eb' }}
           />
           <Tooltip
@@ -42,9 +42,9 @@ export function ComplianceTrendsChart({ data }: ComplianceTrendsChartProps) {
             }}
           />
           <Legend
-            wrapperStyle={{ paddingTop: '20px' }}
+            wrapperStyle={{ paddingTop: '5px', fontSize: '14px' }}
             iconType="line"
-            iconSize={14}
+            iconSize={12}
           />
           <Line
             type="monotone"

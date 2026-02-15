@@ -1,6 +1,6 @@
 import { ComplianceFramework } from '@/types';
 import { cn } from '@/lib/utils';
-import { Check, Clock } from 'lucide-react';
+import { Check, Clock, InfoIcon } from 'lucide-react';
 
 interface ComplianceFrameworkCardProps {
   framework: ComplianceFramework;
@@ -34,50 +34,52 @@ export function ComplianceFrameworkCard({ framework }: ComplianceFrameworkCardPr
   };
 
   return (
-    <div className={cn('card p-4 border-l-4', getStatusColor(framework.status))}>
+    <div className={cn('card p-2 space-y-1')}>
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div>
-          <h3 className="font-semibold text-gray-900 mb-1">{framework.name}</h3>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <Clock size={12} />
-            <span>{framework.lastUpdated}</span>
-          </div>
+      <div className="flex flex-col space-y-1">
+        <div className='gap-1 flex items-center'>
+          <h3 className="text-sm font-semibold text-gray-900">{framework.name}</h3>
+          <InfoIcon size={16} />
         </div>
-        <div className="text-right">
-          <div className="text-2xl font-bold text-gray-900">{framework.score}%</div>
+        <div className="text-right flex justify-between items-center">
+          <div className="text-lg font-bold text-gray-900">{framework.score}%</div>
           <div className="text-xs text-gray-500 capitalize">{framework.status}</div>
         </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="mb-4">
-        <div className="flex justify-between text-xs text-gray-600 mb-1">
-          <span>
-            {framework.policiesComplete} of {framework.policiesTotal} Policies
-          </span>
-        </div>
+      <div className="space-y-1">
         <div className="w-full bg-gray-200 rounded-full h-2">
           <div
             className={cn('h-2 rounded-full transition-all', getProgressColor(framework.status))}
             style={{ width: `${framework.score}%` }}
           />
         </div>
+        <div className="flex justify-between text-xs text-gray-600">
+          <span>
+            {framework.policiesComplete} of {framework.policiesTotal} Policies
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-gray-500">
+        <Clock size={12} />
+        <span>{framework.lastUpdated}</span>
       </div>
 
       {/* Items */}
       {framework.items && framework.items.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {framework.items.map((item, idx) => (
-            <div key={idx} className="flex items-start gap-2 text-sm">
+            <div key={idx} className="flex items-start gap-2 text-xs">
               {item.completed ? (
                 <Check size={16} className="text-success mt-0.5 flex-shrink-0" />
               ) : (
-                <div className="w-4 h-4 border-2 border-warning rounded mt-0.5 flex-shrink-0" />
+                null
               )}
               <span className={cn(item.completed ? 'text-gray-700' : 'text-warning')}>
-                {item.label}
-                {item.count && ` +${item.count} more`}
+                {!item.count && item.label}
+                {item.count && ` +${item.count} ${item.label}`}
               </span>
             </div>
           ))}
