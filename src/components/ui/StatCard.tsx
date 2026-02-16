@@ -21,9 +21,9 @@ export function StatCard({
   return (
     <div className="stat-card">
       <div className="flex items-start justify-between mb-3">
-        <div className="w-full flex items-center justify-between gap-1">
+        <div className="w-full flex items-center justify-between">
           <span className="text-xs text-gray-600">{label}</span>
-          <Icon size={18} className={cn(iconColor)} />
+          <Icon size={20} className={cn(iconColor)} />
         </div>
       </div>
       <div>

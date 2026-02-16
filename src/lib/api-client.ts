@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 
-export type APIType = 'rest' | 'graphql';
+export type APIType = 'rest';
 
 class APIClient {
   private restClient: AxiosInstance;
@@ -15,28 +15,28 @@ class APIClient {
     });
 
     // Request interceptor for auth tokens
-    this.restClient.interceptors.request.use(
-      (config) => {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
+    // this.restClient.interceptors.request.use(
+    //   (config) => {
+    //     const token = localStorage.getItem('auth_token');
+    //     if (token) {
+    //       config.headers.Authorization = `Bearer ${token}`;
+    //     }
+    //     return config;
+    //   },
+    //   (error) => Promise.reject(error)
+    // );
 
     // Response interceptor for error handling
-    this.restClient.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          // Handle unauthorized
-          window.location.href = '/login';
-        }
-        return Promise.reject(error);
-      }
-    );
+    // this.restClient.interceptors.response.use(
+    //   (response) => response,
+    //   (error) => {
+    //     if (error.response?.status === 401) {
+    //       // Handle unauthorized
+    //       window.location.href = '/login';
+    //     }
+    //     return Promise.reject(error);
+    //   }
+    // );
   }
 
   setAPIType(type: APIType) {
@@ -78,16 +78,16 @@ class APIClient {
   }
 
   // GraphQL specific method
-  async query<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-    if (this.apiType === 'graphql') {
-      const response = await this.restClient.post<{ data: T }>('/graphql', {
-        query,
-        variables,
-      });
-      return response.data.data;
-    }
-    throw new Error('GraphQL mode not enabled');
-  }
+  // async query<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+  //   if (this.apiType === 'graphql') {
+  //     const response = await this.restClient.post<{ data: T }>('/graphql', {
+  //       query,
+  //       variables,
+  //     });
+  //     return response.data.data;
+  //   }
+  //   throw new Error('GraphQL mode not enabled');
+  // }
 }
 
 export const apiClient = new APIClient();

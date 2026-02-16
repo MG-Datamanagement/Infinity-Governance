@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { mockApiService } from '@/services/mock';
+import { apiServices } from '@/services/apiServices';
 
 export const useComplianceFrameworks = () => {
   return useQuery({
@@ -25,7 +26,8 @@ export const useComplianceTrends = () => {
 export const useDashboardStats = () => {
   return useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: mockApiService.getDashboardStats,
+    queryFn: apiServices.getDashboardStats,
+    retry: 1
   });
 };
 
@@ -46,20 +48,29 @@ export const useModelRiskTrends = () => {
 export const useDomainAssets = () => {
   return useQuery({
     queryKey: ['domain-assets'],
-    queryFn: mockApiService.getDomainAssets,
+    queryFn: apiServices.getDomainAssets,
   });
 };
 
 export const usePlatformUsage = () => {
   return useQuery({
     queryKey: ['platform-usage'],
-    queryFn: mockApiService.getPlatformUsage,
+    queryFn: apiServices.getPlatformUsage,
   });
 };
 
-export const useRecentActivity = () => {
+export const useRecentlyViewed = (userUrn: string) => {
+  return useQuery({
+    queryKey: ['recently-viewed'],
+    queryFn: () => apiServices.getRecentlyViewed(userUrn),
+    enabled: !!userUrn,
+  });
+};
+
+export const useRecentActivity = (userUrn: string) => {
   return useQuery({
     queryKey: ['recent-activity'],
-    queryFn: mockApiService.getRecentActivity,
+    queryFn: () => apiServices.getRecentActivity(userUrn),
+    enabled: !!userUrn,
   });
 };
