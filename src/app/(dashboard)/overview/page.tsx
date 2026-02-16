@@ -26,13 +26,11 @@ import {
   Clock,
   Activity,
   Table,
-  Globe, 
-  LucideLoader2
+  Globe,
+  LucideLoader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-
-
 
 function OverviewContent() {
   const [activityTab, setActivityTab] = useState<"recent" | "viewed">("recent");
@@ -317,9 +315,15 @@ function OverviewContent() {
                   <h3 className="font-semibold text-gray-900">Top Domains</h3>
                   <TrendingUp size={16} className="text-green-600" />
                 </div>
-                {domainsLoading ? <LucideLoader2 size={16} className="text-primary" /> : <button disabled className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed">
+                {/* {domainsLoading ? <LucideLoader2 size={16} className="text-primary" /> : <button disabled className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed">
                   View All →
-                </button>}
+                </button>} */}
+                <button
+                  disabled
+                  className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+                >
+                  View All →
+                </button>
               </div>
 
               {!domainsLoading && domains && (
@@ -351,9 +355,22 @@ function OverviewContent() {
                   <h3 className="font-semibold text-gray-900">Top Platforms</h3>
                   <Database size={16} className="text-blue-800" />
                 </div>
-                {platformsLoading ? <LucideLoader2 size={16} className="text-primary" /> : <button disabled className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed">
+                {/* {platformsLoading ? (
+                  <LucideLoader2 size={16} className="text-primary" />
+                ) : (
+                  <button
+                    disabled
+                    className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+                  >
+                    View All →
+                  </button>
+                )} */}
+                <button
+                  disabled
+                  className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+                >
                   View All →
-                </button>}
+                </button>
               </div>
 
               {!platformsLoading && platforms && (
@@ -396,7 +413,11 @@ function OverviewContent() {
                         : "text-gray-500 border-transparent hover:text-gray-700",
                     )}
                   >
-                    {activityLoading ? <LucideLoader2 size={16} className="text-primary" /> : <Activity size={15} />}
+                    {/* {activityLoading ? (
+                      <LucideLoader2 size={16} className="text-primary" />
+                    ) : (
+                    )} */}
+                    <Activity size={15} />
                     Recent Activity
                   </button>
                   <button
@@ -408,7 +429,11 @@ function OverviewContent() {
                         : "text-gray-500 border-transparent hover:text-gray-700",
                     )}
                   >
-                    {recentlyViewedLoading ? <LucideLoader2 size={16} className="text-primary" /> : <Clock size={15} />}
+                    {/* {recentlyViewedLoading ? (
+                      <LucideLoader2 size={16} className="text-primary" />
+                    ) : (
+                    )} */}
+                    <Clock size={15} />
                     Recently Viewed
                   </button>
                 </div>
@@ -450,7 +475,10 @@ function OverviewContent() {
               </div>
 
               <div className="p-2 border-t border-gray-200">
-                <button disabled className="text-primary text-sm font-medium hover:underline w-full text-center disabled:text-gray-300 disabled:cursor-not-allowed">
+                <button
+                  disabled
+                  className="text-primary text-sm font-medium hover:underline w-full text-center disabled:text-gray-300 disabled:cursor-not-allowed"
+                >
                   {activityTab === "viewed"
                     ? "View all recently viewed"
                     : "View all recent activity"}
