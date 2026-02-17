@@ -1,3 +1,5 @@
+export type InlineStateType = "loading" | "empty" | "error";
+
 export interface User {
   id: string;
   name: string;
@@ -11,7 +13,7 @@ export interface ComplianceFramework {
   score: number;
   policiesTotal: number;
   policiesComplete: number;
-  status: 'excellent' | 'warning' | 'critical';
+  status: "excellent" | "warning" | "critical";
   lastUpdated: string;
   items?: ComplianceItem[];
 }
@@ -26,7 +28,7 @@ export interface ComplianceIssue {
   id: string;
   issue: string;
   framework: string;
-  severity: 'HIGH' | 'MEDIUM' | 'LOW';
+  severity: "HIGH" | "MEDIUM" | "LOW";
   dataset: string;
   assignee: string;
   dueDate: string;
@@ -105,12 +107,7 @@ export interface DashboardEntityMetricsResponse extends BaseApiResponse {
 
 export type EntityCounts = Record<EntityType, number>;
 
-export type EntityType =
-  | "DOMAIN"
-  | "TAG"
-  | "DATASET"
-  | "INCIDENT";
-
+export type EntityType = "DOMAIN" | "TAG" | "DATASET" | "INCIDENT";
 
 export interface DomainWithCount {
   urn: string;
@@ -124,7 +121,6 @@ export interface TopDomainsWithCountsResponse extends BaseApiResponse {
   total_assets_in_domains: number;
   domains: DomainWithCount[];
 }
-
 
 export interface PlatformWithCount {
   platform_urn: string;

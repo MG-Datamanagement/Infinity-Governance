@@ -15,16 +15,16 @@ class APIClient {
     });
 
     // Request interceptor for auth tokens
-    // this.restClient.interceptors.request.use(
-    //   (config) => {
-    //     const token = localStorage.getItem('auth_token');
-    //     if (token) {
-    //       config.headers.Authorization = `Bearer ${token}`;
-    //     }
-    //     return config;
-    //   },
-    //   (error) => Promise.reject(error)
-    // );
+    this.restClient.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('auth_token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => Promise.reject(error)
+    );
 
     // Response interceptor for error handling
     // this.restClient.interceptors.response.use(

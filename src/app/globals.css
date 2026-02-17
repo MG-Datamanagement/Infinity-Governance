@@ -27,10 +27,19 @@
   }
 
   .stat-card {
-    @apply card px-2.5 py-3;
+    @apply card px-2.5 py-2.5;
   }
 
   .badge {
     @apply inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium;
   }
+}
+
+::-webkit-scrollbar {
+  width: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 4px;
 }
