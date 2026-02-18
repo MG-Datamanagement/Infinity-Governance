@@ -1,7 +1,14 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.6
+# FastAPI and web framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==1.10.13  # Changed to v1 for DataHub compatibility
+# Database
 asyncpg==0.29.0
-aiohttp==3.10.5
-pydantic==2.9.2
-python-multipart==0.0.9
-
+psycopg2-binary==2.9.9
+# DataHub SDK with specific extras for all your sources
+acryl-datahub[postgres,mysql,mongodb,snowflake]==0.12.1.2
+# Utilities
+python-dotenv==1.0.0
+python-multipart==0.0.6
+tenacity==8.2.3
+orjson==3.9.10

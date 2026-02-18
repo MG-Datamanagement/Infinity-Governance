@@ -86,7 +86,7 @@ Microservices/
 python app.py
 
 # Production with Uvicorn
-uvicorn app:app --host 0.0.0.0 --port 8001
+uvicorn app:app --host 0.0.0.0 --port 8005
 
 # With Docker
 docker-compose up

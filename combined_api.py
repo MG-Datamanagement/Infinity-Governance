@@ -44,6 +44,8 @@ app.add_middleware(
 # ENVIRONMENT CONFIGURATION
 # ============================================================================
 DATAHUB_GRAPHQL_URL = os.getenv("DATAHUB_GRAPHQL_URL", "http://nginx-proxy/graphql")
+# DATAHUB_GRAPHQL_URL = os.getenv("DATAHUB_GRAPHQL_URL", "http://nginx-proxy/graphql")
+
 PG_HOST = os.getenv("PG_HOST", "postgres")
 PG_PORT = int(os.getenv("PG_PORT", "5432"))
 PG_DB = os.getenv("PG_DB", "semantic_search")
