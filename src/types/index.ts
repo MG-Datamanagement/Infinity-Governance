@@ -1,5 +1,10 @@
 export type InlineStateType = "loading" | "empty" | "error";
 
+export type Option = {
+  value: string;
+  label: string;
+};
+
 export interface User {
   id: string;
   name: string;

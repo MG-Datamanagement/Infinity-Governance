@@ -23,14 +23,6 @@ export const useComplianceTrends = () => {
   });
 };
 
-export const useDashboardStats = () => {
-  return useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: apiServices.getDashboardStats,
-    retry: 1
-  });
-};
-
 export const useAISnapshot = () => {
   return useQuery({
     queryKey: ['ai-snapshot'],
@@ -45,24 +37,32 @@ export const useModelRiskTrends = () => {
   });
 };
 
+export const useDashboardStats = () => {
+  return useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: mockApiService.getDashboardStats,
+    retry: 1
+  });
+};
+
 export const useDomainAssets = () => {
   return useQuery({
     queryKey: ['domain-assets'],
-    queryFn: apiServices.getDomainAssets,
+    queryFn: mockApiService.getDomainAssets,
   });
 };
 
 export const usePlatformUsage = () => {
   return useQuery({
     queryKey: ['platform-usage'],
-    queryFn: apiServices.getPlatformUsage,
+    queryFn: mockApiService.getPlatformUsage,
   });
 };
 
 export const useRecentlyViewed = (userUrn: string) => {
   return useQuery({
     queryKey: ['recently-viewed'],
-    queryFn: () => apiServices.getRecentlyViewed(userUrn),
+    queryFn: () => mockApiService.getRecentlyViewed(userUrn),
     enabled: !!userUrn,
   });
 };
@@ -70,7 +70,7 @@ export const useRecentlyViewed = (userUrn: string) => {
 export const useRecentActivity = (userUrn: string) => {
   return useQuery({
     queryKey: ['recent-activity'],
-    queryFn: () => apiServices.getRecentActivity(userUrn),
+    queryFn: () => mockApiService.getRecentActivity(userUrn),
     enabled: !!userUrn,
   });
 };

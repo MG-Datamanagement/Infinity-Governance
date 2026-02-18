@@ -1,14 +1,14 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
-import './globals.css';
-import { Providers } from './providers';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { Providers } from "./providers";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: 'Infinity Governance',
-  description: 'Data governance and compliance platform',
+  title: "Infinity Governance",
+  description: "Data governance and compliance platform",
 };
 
 export default function RootLayout({
