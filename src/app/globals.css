@@ -15,7 +15,7 @@
 
 @layer components {
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors cursor-pointer;
+    @apply flex items-center gap-3 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 rounded-lg transition-colors cursor-pointer;
   }
 
   .sidebar-link.active {
@@ -35,11 +35,34 @@
   }
 }
 
+/* Custom scrollbar styles */
+
 ::-webkit-scrollbar {
   width: 3px;
 }
 
 ::-webkit-scrollbar-thumb {
   background: #e5e7eb;
+  /* background: #d1d5db; */
   border-radius: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Bounce animation for typing indicator */
+@keyframes bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
 }

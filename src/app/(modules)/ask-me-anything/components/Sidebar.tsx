@@ -1,0 +1,174 @@
+import React from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Plus,
+  Plug,
+  History,
+  MessageSquarePlusIcon,
+  Trash2Icon,
+} from "lucide-react";
+import { ChatSession } from "../types";
+import { cn } from "../../../../lib/utils";
+
+interface SidebarProps {
+  isCollapsed: boolean;
+  sessions: ChatSession[];
+  currentSessionId: string | null;
+  onToggle: () => void;
+  onNewChat: () => void;
+  onSelectSession: (sessionId: string) => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  isCollapsed,
+  sessions,
+  currentSessionId,
+  onToggle,
+  onNewChat,
+  onSelectSession,
+  searchQuery,
+  onSearchChange,
+}) => {
+  const filteredSessions = sessions.filter((session) =>
+    session.title.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  return (
+    <aside
+      className={cn(
+        "bg-white border-r border-gray-200 flex flex-col transition-all duration-300 relative",
+        isCollapsed ? "w-[52px] px-2 py-1.5 gap-2" : "w-60 p-3 gap-4",
+      )}
+    >
+      {/* Toggle Button */}
+      <button
+        onClick={onToggle}
+        className={cn(
+          "absolute w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 z-20",
+          isCollapsed ? "top-12 left-11" : "top-12 left-[230px]",
+        )}
+      >
+        {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+      </button>
+
+      {/* New Chat */}
+      <div className="">
+        <button
+          onClick={onNewChat}
+          className={cn(
+            "w-full bg-indigo-600 text-white rounded-md p-2.5 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors",
+            "p-2",
+          )}
+          title={isCollapsed ? "New Chat" : ""}
+        >
+          <div>
+            <MessageSquarePlusIcon size={16} />
+          </div>
+          {!isCollapsed && <span>New Chat</span>}
+        </button>
+      </div>
+
+      {/* Search */}
+      <button
+        onClick={(event) => {
+          event?.preventDefault();
+          isCollapsed && onToggle();
+        }}
+        className={cn(
+          "w-full flex justify-center items-center p-2 rounded-md text-sm outline-none focus:border-indigo-600",
+          "border border-gray-300",
+        )}
+      >
+        <div>
+          <Search size={16} className="text-gray-500 font-bold" />
+        </div>
+        {!isCollapsed && (
+          <input
+            type="text"
+            placeholder="Search chats..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            className="border-none outline-none shadow-none px-2 w-full"
+          />
+        )}
+      </button>
+
+      {/* History */}
+      <div className="flex-1 overflow-y-auto space-y-1">
+        <button
+          onClick={(event) => {
+            event?.preventDefault();
+            isCollapsed && onToggle();
+          }}
+          className={cn(
+            "w-full flex justify-between items-center",
+            isCollapsed
+              ? "border border-gray-300 rounded-md p-2 focus:border-indigo-600"
+              : "border-none p-1",
+          )}
+        >
+          {!isCollapsed && (
+            <div className="text-xs font-semibold text-gray-500 tracking-wide">
+              History
+            </div>
+          )}
+          <div>
+            <History size={16} className="text-gray-500 font-bold" />
+          </div>
+        </button>
+
+        <div className="space-y-1">
+          {filteredSessions.map((session) => (
+            <button
+              key={session.id}
+              onClick={() => onSelectSession(session.id)}
+              title={isCollapsed ? session.title : ""}
+              className={cn(
+                "w-full flex items-center rounded-md px-3 py-2 text-left text-sm transition-colors truncate",
+                currentSessionId === session.id
+                  ? "bg-indigo-50 text-indigo-600"
+                  : "hover:bg-gray-100",
+                isCollapsed && "justify-center",
+                "group",
+              )}
+            >
+              <div className="flex justify-between items-center w-full">
+                {!isCollapsed && (
+                  <span className="text-xs text-gray-700 truncate max-w-40 shrink-1">
+                    {session.title}
+                  </span>
+                )}
+                {!isCollapsed && (
+                  <div className="hidden group-hover:block">
+                    <Trash2Icon
+                      size={12}
+                      className="text-gray-600 hover:text-red-600"
+                    />
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="border-t border-gray-200 p-3">
+        <div
+          className={cn(
+            "flex items-center gap-2 text-xs text-gray-500",
+            isCollapsed && "justify-center",
+          )}
+          title={isCollapsed ? "Connected to 8 sources" : ""}
+        >
+          <Plug size={14} />
+          {!isCollapsed && <span>Connected to 8 sources</span>}
+        </div>
+      </div>
+    </aside>
+  );
+};

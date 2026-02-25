@@ -32,7 +32,7 @@ const GOVERN_ITEMS = [
 
 const ADMIN_ITEMS = [
   { icon: Database, label: 'Data Sources', href: '/data-sources' },
-  { icon: MdOutlineAutoAwesome, label: 'Ask Me Anything', href: '/ask' },
+  { icon: MdOutlineAutoAwesome, label: 'Ask Me Anything', href: '/ask-me-anything' },
   { icon: BarChart3, label: 'Analytics', href: '/analytics' },
 ];
 
@@ -85,8 +85,8 @@ export function Sidebar() {
       </button>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-2 px-1">
-        <nav className="space-y-2">
+      <div className="flex-1 overflow-y-auto py-2.5 px-1">
+        <nav className="space-y-3">
           {/* Main */}
           <div>
             <Link

@@ -18,9 +18,17 @@ const config: Config = {
         warning: "#F59E0B",
         danger: "#EF4444",
         info: "#3B82F6",
+        indigo: {
+          50: "#EEF2FF",
+          600: "#5B4FE5",
+          700: "#4A3FCC",
+        },
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
+      },
+      animation: {
+        bounce: "bounce 1.4s infinite",
       },
     },
   },
