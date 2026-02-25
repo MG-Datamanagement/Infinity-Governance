@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -36,12 +36,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const filteredSessions = sessions.filter((session) =>
     session.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const chatHistorySeacrhRef = useRef<HTMLInputElement>(null);
 
   return (
     <aside
       className={cn(
-        "bg-white border-r border-gray-200 flex flex-col transition-all duration-300 relative",
-        isCollapsed ? "w-[52px] px-2 py-1.5 gap-2" : "w-60 p-3 gap-4",
+        "bg-white border-r border-gray-200 flex flex-col gap-1 transition-all duration-300 relative",
+        isCollapsed ? "w-[52px]" : "w-60",
       )}
     >
       {/* Toggle Button */}
@@ -56,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </button>
 
       {/* New Chat */}
-      <div className="">
+      <div className={cn(isCollapsed ? "px-2 py-1.5" : "p-3")}>
         <button
           onClick={onNewChat}
           className={cn(
@@ -73,32 +74,45 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Search */}
-      <button
-        onClick={(event) => {
-          event?.preventDefault();
-          isCollapsed && onToggle();
-        }}
-        className={cn(
-          "w-full flex justify-center items-center p-2 rounded-md text-sm outline-none focus:border-indigo-600",
-          "border border-gray-300",
-        )}
-      >
-        <div>
-          <Search size={16} className="text-gray-500 font-bold" />
-        </div>
-        {!isCollapsed && (
-          <input
-            type="text"
-            placeholder="Search chats..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="border-none outline-none shadow-none px-2 w-full"
-          />
-        )}
-      </button>
+      <div className={cn(isCollapsed ? "px-2 py-1.5" : "px-3 py-1")}>
+        <button
+          onClick={(event) => {
+            event?.preventDefault();
+            if (isCollapsed) {
+              onToggle();
+              chatHistorySeacrhRef.current &&
+                chatHistorySeacrhRef.current.focus();
+            }
+          }}
+          className={cn(
+            "w-full flex justify-center items-center rounded-md text-sm outline-none focus:border-indigo-600",
+            "border border-gray-300",
+            "px-3 py-2",
+          )}
+        >
+          <div>
+            <Search size={16} className="text-gray-500 font-bold" />
+          </div>
+          {!isCollapsed && (
+            <input
+              type="text"
+              ref={chatHistorySeacrhRef}
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="border-none outline-none shadow-none px-2 w-full"
+            />
+          )}
+        </button>
+      </div>
 
       {/* History */}
-      <div className="flex-1 overflow-y-auto space-y-1">
+      <div
+        className={cn(
+          "flex-1 overflow-y-auto space-y-1",
+          isCollapsed ? "px-2 py-1.5" : "p-2",
+        )}
+      >
         <button
           onClick={(event) => {
             event?.preventDefault();
@@ -121,39 +135,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </button>
 
-        <div className="space-y-1">
-          {filteredSessions.map((session) => (
-            <button
-              key={session.id}
-              onClick={() => onSelectSession(session.id)}
-              title={isCollapsed ? session.title : ""}
-              className={cn(
-                "w-full flex items-center rounded-md px-3 py-2 text-left text-sm transition-colors truncate",
-                currentSessionId === session.id
-                  ? "bg-indigo-50 text-indigo-600"
-                  : "hover:bg-gray-100",
-                isCollapsed && "justify-center",
-                "group",
-              )}
-            >
-              <div className="flex justify-between items-center w-full">
-                {!isCollapsed && (
-                  <span className="text-xs text-gray-700 truncate max-w-40 shrink-1">
-                    {session.title}
-                  </span>
+        {!isCollapsed ? (
+          <div className="space-y-1">
+            {filteredSessions.map((session) => (
+              <button
+                key={session.id}
+                onClick={() => onSelectSession(session.id)}
+                title={isCollapsed ? session.title : ""}
+                className={cn(
+                  "w-full flex items-center rounded-md px-3 py-2 text-left text-sm transition-colors truncate",
+                  currentSessionId === session.id
+                    ? "bg-indigo-50 text-indigo-600"
+                    : "hover:bg-gray-100",
+                  isCollapsed && "justify-center",
+                  "group",
                 )}
-                {!isCollapsed && (
-                  <div className="hidden group-hover:block">
-                    <Trash2Icon
-                      size={12}
-                      className="text-gray-600 hover:text-red-600"
-                    />
-                  </div>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
+              >
+                <div className="flex justify-between items-center w-full">
+                  {!isCollapsed && (
+                    <span className="text-xs text-gray-700 truncate max-w-40 shrink-1">
+                      {session.title}
+                    </span>
+                  )}
+                  {!isCollapsed && (
+                    <div className="hidden group-hover:block">
+                      <Trash2Icon
+                        size={12}
+                        className="text-gray-600 hover:text-red-600"
+                      />
+                    </div>
+                  )}
+                </div>
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {/* Footer */}
@@ -166,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           title={isCollapsed ? "Connected to 8 sources" : ""}
         >
           <Plug size={14} />
-          {!isCollapsed && <span>Connected to 8 sources</span>}
+          {isCollapsed ? 8 : <span>Connected to 8 sources</span>}
         </div>
       </div>
     </aside>

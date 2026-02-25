@@ -2,7 +2,7 @@ import { IconType } from "react-icons/lib";
 
 // Core Types
 export interface Message {
-  role: 'human' | 'ai';
+  role: "human" | "ai";
   content: string;
   created_at: string;
 }
@@ -36,10 +36,44 @@ export interface ChatRequest {
   reasoning: boolean;
 }
 
+// Enhanced API Response Types
+export interface ToolDetail {
+  tool: string;
+  args: Record<string, any>;
+  result_preview: string;
+  source_label: string;
+  source_type: string;
+}
+
+export interface ReasoningTool {
+  label: string;
+  icon: string;
+  raw: string;
+}
+
+export interface ReasoningSource {
+  label: string;
+  icon: string;
+  type: string;
+}
+
+export interface Source {
+  label: string;
+  type: string;
+  pill: string;
+  icon: string;
+}
+
 export interface ChatResponse {
   answer: string;
   reasoning?: string[];
-  sources?: string[];
+  reasoning_summary?: string;
+  reasoning_tools?: ReasoningTool[];
+  reasoning_sources?: ReasoningSource[];
+  sources?: Source[];
+  tools_detail?: ToolDetail[];
+  tools_used?: string[];
+  agents_used?: string[];
   suggestions?: string[];
   session_id: string;
   timestamp: string;
@@ -51,7 +85,7 @@ export interface Agent {
   id: string;
   name: string;
   description: string;
-  icon: string | IconType;
+  icon: string| IconType;
   alert?: string;
   tag?: string;
   disabled: boolean;
