@@ -154,12 +154,14 @@ const MOCK_SESSION_DETAIL: SessionDetailResponse = {
       content:
         "List all tags in the system and show which catalogs and columns each tag is assigned to",
       created_at: "2026-02-24T09:33:29.934507+05:30",
+      error: false,
     },
     {
       role: "ai",
       content:
         "Here are all the tags in the system along with the catalogs and columns they are assigned to:\n\n1. Tag: Confidential\n   - Description: Sensitive business or user data that must not be disclosed without authorization, including internal documents and trade secrets.\n   - Assigned Catalogs: 0\n   - Assigned Columns: 4",
       created_at: "2026-02-24T09:33:42.230729+05:30",
+      error: false,
     },
   ],
 };

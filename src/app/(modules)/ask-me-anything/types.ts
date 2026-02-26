@@ -5,6 +5,7 @@ export interface Message {
   role: "human" | "ai";
   content: string;
   created_at: string;
+  error: boolean;
 }
 
 export interface ChatSession {
@@ -85,7 +86,7 @@ export interface Agent {
   id: string;
   name: string;
   description: string;
-  icon: string| IconType;
+  icon: string | IconType;
   alert?: string;
   tag?: string;
   disabled: boolean;
@@ -110,4 +111,13 @@ export interface UIState {
   showReasoningPanel: boolean;
   selectedAgents: string[];
   selectedDatasets: string[];
+  showAIPreferences: boolean;
+  aiPreferences: AIPreferences;
 }
+
+export interface AIPreferences {
+  multiAgentOrchestration: boolean;
+  deepAnalysis: boolean;
+  autoRemediation: boolean;
+}
+

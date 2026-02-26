@@ -22,6 +22,7 @@ import {
 import { MdOutlineAutoAwesome } from "react-icons/md";
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/appStore';
+import { LuSparkles } from 'react-icons/lu';
 
 const GOVERN_ITEMS = [
   { icon: BookOpen, label: 'Glossary', href: '/glossary' },
@@ -32,7 +33,7 @@ const GOVERN_ITEMS = [
 
 const ADMIN_ITEMS = [
   { icon: Database, label: 'Data Sources', href: '/data-sources' },
-  { icon: MdOutlineAutoAwesome, label: 'Ask Me Anything', href: '/ask-me-anything' },
+  { icon: LuSparkles, label: 'Ask Me Anything', href: '/ask-me-anything' },
   { icon: BarChart3, label: 'Analytics', href: '/analytics' },
 ];
 

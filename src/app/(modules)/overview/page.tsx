@@ -67,9 +67,6 @@ function OverviewContent() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page export — top-level ErrorBoundary as safety net
-// ---------------------------------------------------------------------------
 export default function OverviewPage() {
   return (
     <ErrorBoundary>

@@ -8,6 +8,7 @@ import {
   History,
   MessageSquarePlusIcon,
   Trash2Icon,
+  Loader2,
 } from "lucide-react";
 import { ChatSession } from "../types";
 import { cn } from "../../../../lib/utils";
@@ -21,6 +22,9 @@ interface SidebarProps {
   onSelectSession: (sessionId: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  onRetryFetchHistroy: () => void;
+  isHistoryLoading: boolean;
+  isChatLoading: boolean;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,6 +36,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectSession,
   searchQuery,
   onSearchChange,
+  onRetryFetchHistroy,
+  isHistoryLoading,
+  isChatLoading,
 }) => {
   const filteredSessions = sessions.filter((session) =>
     session.title.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -113,27 +120,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isCollapsed ? "px-2 py-1.5" : "p-2",
         )}
       >
-        <button
-          onClick={(event) => {
-            event?.preventDefault();
-            isCollapsed && onToggle();
-          }}
-          className={cn(
-            "w-full flex justify-between items-center",
-            isCollapsed
-              ? "border border-gray-300 rounded-md p-2 focus:border-indigo-600"
-              : "border-none p-1",
-          )}
-        >
-          {!isCollapsed && (
-            <div className="text-xs font-semibold text-gray-500 tracking-wide">
-              History
-            </div>
-          )}
-          <div>
-            <History size={16} className="text-gray-500 font-bold" />
-          </div>
-        </button>
+        <div>
+          <button
+            onClick={(event) => {
+              event?.preventDefault();
+              isCollapsed && onToggle();
+            }}
+            className={cn(
+              "w-full flex justify-between items-center",
+              isCollapsed
+                ? "border border-gray-300 rounded-md p-2 focus:border-indigo-600"
+                : "border-none p-1",
+            )}
+          >
+            {!isCollapsed && (
+              <div className="text-xs font-semibold text-gray-500 tracking-wide">
+                History
+              </div>
+            )}
+            {isHistoryLoading ? (
+              <Loader2 size={16} className="text-gray-500 animate-spin" />
+            ) : (
+              <History size={16} className="text-gray-500 font-bold" />
+            )}
+          </button>
+        </div>
 
         {!isCollapsed ? (
           <div className="space-y-1">
@@ -153,18 +164,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex justify-between items-center w-full">
                   {!isCollapsed && (
-                    <span className="text-xs text-gray-700 truncate max-w-40 shrink-1">
+                    <span className="text-[13px] text-gray-700 truncate max-w-40 shrink-1">
                       {session.title}
                     </span>
                   )}
                   {!isCollapsed && (
-                    <div className="hidden group-hover:block">
+                    <button
+                      onClick={(event) => event.stopPropagation()}
+                      className="hidden group-hover:block rounded-sm"
+                    >
                       <Trash2Icon
-                        size={12}
+                        size={14}
                         className="text-gray-600 hover:text-red-600"
                       />
-                    </div>
+                    </button>
                   )}
+                  {/* {isChatLoading &&
+                    !isCollapsed &&
+                    currentSessionId !== session.id && (
+                      <button
+                        onClick={(event) => event.stopPropagation()}
+                        className="rounded-sm"
+                      >
+                        <Loader2
+                          size={16}
+                          className="text-indigo-600 animate-spin"
+                        />
+                      </button>
+                    )} */}
                 </div>
               </button>
             ))}

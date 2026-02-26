@@ -23,12 +23,24 @@ const config: Config = {
           600: "#5B4FE5",
           700: "#4A3FCC",
         },
+        teal: {
+          50: "#F0FDFA",
+          300: "#5EEAD4",
+          600: "#0D9488",
+          700: "#0F766E",
+        },
+        orange: {
+          50: "#FFF7ED",
+          300: "#FDBA74",
+          600: "#EA580C",
+          700: "#C2410C",
+        },
       },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
       },
       animation: {
-        bounce: "bounce 1.4s infinite",
+        bounce: "bounce 1s infinite",
       },
     },
   },

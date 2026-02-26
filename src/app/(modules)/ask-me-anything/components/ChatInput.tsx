@@ -17,6 +17,8 @@ interface ChatInputProps {
   placeholder?: string;
   isDatasetModalOpen: boolean;
   isAgentModalOpen: boolean;
+  replyTo: null | string;
+  handleReplyTo: (replyTo: null | string) => void;
 }
 
 export const ChatInput: React.FC<ChatInputProps> = ({
@@ -31,6 +33,8 @@ export const ChatInput: React.FC<ChatInputProps> = ({
   isAgentModalOpen,
   isDatasetModalOpen,
   placeholder = "Ask Me Anything...!",
+  replyTo,
+  handleReplyTo,
 }) => {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -59,8 +63,29 @@ export const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className="border-t border-gray-200 px-6 py-2 mx-auto w-full">
+      {replyTo && (
+        <div className="w-full flex justify-between items-center gap-1 bg-gray-50 border-t border-l border-r rounded-tl-xl rounded-tr-xl p-2 border-gray-200 transition-all">
+          <span className="line-clamp-1 text-xs text-slate-500">
+            Replying to: {replyTo}
+          </span>
+          <button
+            className="opacity-60 hover:opacity-100 transition-opacity"
+            onClick={() => handleReplyTo(null)}
+          >
+            <IoClose size={14} />
+          </button>
+        </div>
+      )}
+
       {(selectedDatasets.length > 0 || selectedAgents.length > 0) && (
-        <div className="flex gap-1 flex-wrap bg-gray-50 border-t border-l border-r rounded-tl-xl rounded-tr-xl p-2 border-gray-200 transition-all">
+        <div
+          className={cn(
+            "flex gap-1 flex-wrap bg-gray-50 transition-all p-2 border-t border-l border-r border-gray-200",
+            replyTo
+              ? "rounded-tl-none rounded-tr-none"
+              : "rounded-tl-xl rounded-tr-xl",
+          )}
+        >
           {selectedDatasets.map((datasetId) => (
             <span
               key={datasetId}
@@ -97,7 +122,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
       <div
         className={cn(
           "flex items-center gap-2 border border-gray-300 rounded-xl p-2 focus-within:border-indigo-600 transition-all",
-          selectedDatasets.length > 0 || selectedAgents.length > 0
+          selectedDatasets.length > 0 || selectedAgents.length > 0 || replyTo
             ? "rounded-tl-none rounded-tr-none"
             : "",
         )}
@@ -132,7 +157,7 @@ export const ChatInput: React.FC<ChatInputProps> = ({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="flex-1 bg-transparent border-none outline-none resize-none text-base p-1 max-h-[200px] leading-relaxed"
+          className="flex-1 bg-transparent border-none outline-none resize-none text-sm p-1 max-h-[200px] leading-relaxed"
         />
 
         <button
