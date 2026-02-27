@@ -10,8 +10,9 @@ import {
   Trash2Icon,
   Loader2,
 } from "lucide-react";
-import { ChatSession } from "../types";
 import { cn } from "../../../../lib/utils";
+import { ChatSession } from "@/types";
+import { IoRefreshSharp } from "react-icons/io5";
 
 interface SidebarProps {
   isCollapsed: boolean;
@@ -121,29 +122,53 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
       >
         <div>
-          <button
-            onClick={(event) => {
-              event?.preventDefault();
-              isCollapsed && onToggle();
-            }}
-            className={cn(
-              "w-full flex justify-between items-center",
-              isCollapsed
-                ? "border border-gray-300 rounded-md p-2 focus:border-indigo-600"
-                : "border-none p-1",
-            )}
-          >
-            {!isCollapsed && (
-              <div className="text-xs font-semibold text-gray-500 tracking-wide">
-                History
-              </div>
-            )}
-            {isHistoryLoading ? (
-              <Loader2 size={16} className="text-gray-500 animate-spin" />
-            ) : (
-              <History size={16} className="text-gray-500 font-bold" />
-            )}
-          </button>
+          {!filteredSessions.length && !isHistoryLoading ? (
+            <button
+              title="Refetch History"
+              onClick={(event) => {
+                event?.stopPropagation();
+                onRetryFetchHistroy();
+              }}
+              className={cn(
+                "w-full flex justify-between items-center",
+                isCollapsed
+                  ? "border border-gray-300 rounded-md p-2 hover:text-indigo-600"
+                  : "border-none p-1",
+              )}
+            >
+              {!isCollapsed && (
+                <div className="text-xs font-semibold text-gray-500 tracking-wide">
+                  History
+                </div>
+              )}
+              <IoRefreshSharp size={16} className="text-gray-600 font-bold" />
+            </button>
+          ) : (
+            <button
+              title="Chat History"
+              onClick={(event) => {
+                event?.stopPropagation();
+                isCollapsed && onToggle();
+              }}
+              className={cn(
+                "w-full flex justify-between items-center",
+                isCollapsed
+                  ? "border border-gray-300 rounded-md p-2 focus:border-indigo-600"
+                  : "border-none p-1",
+              )}
+            >
+              {!isCollapsed && (
+                <div className="text-xs font-semibold text-gray-500 tracking-wide">
+                  History
+                </div>
+              )}
+              {isHistoryLoading ? (
+                <Loader2 size={16} className="text-gray-500 animate-spin" />
+              ) : (
+                <History size={16} className="text-gray-500 font-bold" />
+              )}
+            </button>
+          )}
         </div>
 
         {!isCollapsed ? (
@@ -164,7 +189,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <div className="flex justify-between items-center w-full">
                   {!isCollapsed && (
-                    <span className="text-[13px] text-gray-700 truncate max-w-40 shrink-1">
+                    <span className="text-[13px] text-gray-700 truncate max-w-52 shrink-1">
                       {session.title}
                     </span>
                   )}

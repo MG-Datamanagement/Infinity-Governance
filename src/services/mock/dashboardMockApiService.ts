@@ -13,7 +13,7 @@ import {
 // Simulate API delay
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-export const mockApiService = {
+export const dashboardMockApiService = {
   async getComplianceFrameworks() {
     await delay(300);
     return MOCK_COMPLIANCE_FRAMEWORKS;

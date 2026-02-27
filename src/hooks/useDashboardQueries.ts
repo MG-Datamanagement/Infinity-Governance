@@ -1,46 +1,46 @@
 import { useQuery } from '@tanstack/react-query';
-import { mockApiService } from '@/services/mock';
-import { apiServices } from '@/services/apiServices';
+import { dashboardMockApiService } from '@/services/mock/dashboardMockApiService';
+import { dashbpardApiServices } from '@/services/dashbpardApiServices';
 
 export const useComplianceFrameworks = () => {
   return useQuery({
     queryKey: ['compliance-frameworks'],
-    queryFn: mockApiService.getComplianceFrameworks,
+    queryFn: dashboardMockApiService.getComplianceFrameworks,
   });
 };
 
 export const useComplianceIssues = () => {
   return useQuery({
     queryKey: ['compliance-issues'],
-    queryFn: mockApiService.getComplianceIssues,
+    queryFn: dashboardMockApiService.getComplianceIssues,
   });
 };
 
 export const useComplianceTrends = () => {
   return useQuery({
     queryKey: ['compliance-trends'],
-    queryFn: mockApiService.getComplianceTrends,
+    queryFn: dashboardMockApiService.getComplianceTrends,
   });
 };
 
 export const useAISnapshot = () => {
   return useQuery({
     queryKey: ['ai-snapshot'],
-    queryFn: mockApiService.getAISnapshot,
+    queryFn: dashboardMockApiService.getAISnapshot,
   });
 };
 
 export const useModelRiskTrends = () => {
   return useQuery({
     queryKey: ['model-risk-trends'],
-    queryFn: mockApiService.getModelRiskTrends,
+    queryFn: dashboardMockApiService.getModelRiskTrends,
   });
 };
 
 export const useDashboardStats = () => {
   return useQuery({
     queryKey: ['dashboard-stats'],
-    queryFn: apiServices.getDashboardStats,
+    queryFn: dashbpardApiServices.getDashboardStats,
     retry: 1
   });
 };
@@ -48,21 +48,21 @@ export const useDashboardStats = () => {
 export const useDomainAssets = () => {
   return useQuery({
     queryKey: ['domain-assets'],
-    queryFn: apiServices.getDomainAssets,
+    queryFn: dashbpardApiServices.getDomainAssets,
   });
 };
 
 export const usePlatformUsage = () => {
   return useQuery({
     queryKey: ['platform-usage'],
-    queryFn: apiServices.getPlatformUsage,
+    queryFn: dashbpardApiServices.getPlatformUsage,
   });
 };
 
 export const useRecentlyViewed = (userUrn: string) => {
   return useQuery({
     queryKey: ['recently-viewed'],
-    queryFn: () => apiServices.getRecentlyViewed(userUrn),
+    queryFn: () => dashbpardApiServices.getRecentlyViewed(userUrn),
     enabled: !!userUrn,
   });
 };
@@ -70,7 +70,7 @@ export const useRecentlyViewed = (userUrn: string) => {
 export const useRecentActivity = (userUrn: string) => {
   return useQuery({
     queryKey: ['recent-activity'],
-    queryFn: () => apiServices.getRecentActivity(userUrn),
+    queryFn: () => dashbpardApiServices.getRecentActivity(userUrn),
     enabled: !!userUrn,
   });
 };

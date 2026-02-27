@@ -18,7 +18,7 @@ import {
   useRecentActivity,
   useComplianceFrameworks,
   useRecentlyViewed,
-} from "@/hooks/useQueries";
+} from "@/hooks/useDashboardQueries";
 
 const USER_URN = "urn:li:corpuser:datahub";
 

@@ -26,16 +26,12 @@ export function SectionCard({ title, icon, isLoading, children }: Props) {
           {icon}
         </div>
 
-        {isLoading ? (
-          <LucideLoader2 size={16} className="text-primary animate-spin" />
-        ) : (
-          <button
-            disabled
-            className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
-          >
-            View All →
-          </button>
-        )}
+        <button
+          disabled={isLoading || true}
+          className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+        >
+          View All →
+        </button>
       </div>
 
       {children}

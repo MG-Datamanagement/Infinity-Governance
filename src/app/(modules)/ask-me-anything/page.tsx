@@ -6,8 +6,6 @@ import { ChatMessage } from "./components/ChatMessage";
 import { ChatInput } from "./components/ChatInput";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { AgentModal, DatasetModal } from "./components/Modals";
-import { chatAPI } from "./api";
-import { MOCK_AGENTS, MOCK_DATASETS } from "./mockData";
 import {
   Message,
   ChatSession,
@@ -15,11 +13,13 @@ import {
   ReasoningTool,
   Source,
   ToolDetail,
-} from "./types";
+} from "../../../types";
 import { RiRobot2Line } from "react-icons/ri";
 import { cn } from "@/lib/utils";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingFallback } from "@/components/Fallbacks";
+import { chatApiServices } from "@/services/chatApiServices";
+import { MOCK_AGENTS, MOCK_DATASETS } from "@/services/mock/chatMockApiService";
 
 const AskMeAnything: React.FC = () => {
   // UI State
@@ -82,7 +82,7 @@ const AskMeAnything: React.FC = () => {
   const loadHistory = async () => {
     setIsHistoryLoading(true);
     try {
-      const history = await chatAPI.getHistory();
+      const history = await chatApiServices.getHistory();
       setSessions(history.sessions);
     } catch (error) {
       console.error("Failed to load history:", error);
@@ -103,7 +103,7 @@ const AskMeAnything: React.FC = () => {
     setIsThinking(true);
 
     try {
-      const response = await chatAPI.sendMessage({
+      const response = await chatApiServices.sendMessage({
         message: content,
         session_id: currentSessionId,
         memory: uiState.memoryEnabled,
@@ -196,7 +196,7 @@ const AskMeAnything: React.FC = () => {
   const handleSelectSession = async (sessionId: string) => {
     setIsSessionLoading(true);
     try {
-      const sessionDetail = await chatAPI.getSessionDetail(sessionId);
+      const sessionDetail = await chatApiServices.getSessionDetail(sessionId);
       setMessages(sessionDetail.messages);
       setCurrentSessionId(sessionId);
       setMessageResponses(new Map());

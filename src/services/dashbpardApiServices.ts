@@ -1,9 +1,10 @@
-import { apiClient } from "@/lib/api-client";
+import { dashboardApiClient } from "@/lib/api-clients/dashboardApiClient";
 import {
   DashboardEntityMetricsResponse,
   DashboardStats,
   DomainAsset,
   DomainWithCount,
+  NewRecentActivity,
   PlatformUsage,
   PlatformWithCount,
   RecentActivity,
@@ -24,9 +25,9 @@ const config: AxiosRequestConfig = {
   },
 };
 
-export const apiServices = {
+export const dashbpardApiServices = {
   async getComplianceFrameworks() {
-    await apiClient.get("", {});
+    await dashboardApiClient.get("", {});
     return [];
   },
 
@@ -41,21 +42,21 @@ export const apiServices = {
   },
 
   async getDashboardStats() {
-    const response: DashboardEntityMetricsResponse = await apiClient.get(
-      "/dashboard/entitymetrics",
+    const response: DashboardEntityMetricsResponse = await dashboardApiClient.get(
+      "/api/v1/overview/stats",
     );
 
     const dashboardStats: DashboardStats = {
       totalAssets: response?.total_assets,
-      totalAssetsChange: "",
-      governanceScore: 0,
-      governanceScoreStatus: "",
-      classified: response?.counts?.TAG,
-      classifiedChange: "",
-      pendingReview: response?.counts?.INCIDENT,
-      aiRiskDomains: 0,
-      activeDomains: response?.counts?.DOMAIN,
-      activeTables: response?.counts?.DATASET,
+      // totalAssetsChange: "",
+      // governanceScore: 0,
+      // governanceScoreStatus: "",
+      classified: response?.total_tags,
+      // classifiedChange: "",
+      // pendingReview: 0,
+      // aiRiskDomains: 0,
+      activeDomains: response?.total_domains,
+      activeTables: response?.total_datasets,
     };
     return dashboardStats;
   },
@@ -71,14 +72,14 @@ export const apiServices = {
   },
 
   async getDomainAssets() {
-    const response: TopDomainsWithCountsResponse = await apiClient.get(
-      "/dashboard/domain_with_counts",
+    const response: TopDomainsWithCountsResponse[] = await dashboardApiClient.get(
+      "/api/v1/domains/dataset-count",
     );
-    const topDomainsWithCount: DomainAsset[] = response?.domains?.map(
-      (domain: DomainWithCount) => ({
+    const topDomainsWithCount: DomainAsset[] = response?.map(
+      (domain: TopDomainsWithCountsResponse) => ({
         domain: domain?.name,
-        count: domain?.asset_count,
-        urn: domain?.urn,
+        count: domain?.dataset_count,
+        urn: domain?.id,
       }),
     );
 
@@ -86,14 +87,14 @@ export const apiServices = {
   },
 
   async getPlatformUsage() {
-    const response: TopPlatformsWithCountsResponse = await apiClient.get(
-      "/dashboard/platforms",
+    const response: TopPlatformsWithCountsResponse = await dashboardApiClient.get(
+      "/api/v1/overview/datasets-by-platform",
     );
     const topPlatformsWithCount: PlatformUsage[] = response?.platforms?.map(
       (platform: PlatformWithCount) => ({
-        platform: platform?.platform_name,
-        urn: platform?.platform_urn,
-        count: platform?.dataset_count,
+        platform: platform?.platform,
+        urn: platform?.platform,
+        count: platform?.catalog_count,
       }),
     );
 
@@ -101,7 +102,7 @@ export const apiServices = {
   },
 
   async getRecentlyViewed(userUrn: string) {
-    const response: RecentlyViewedDatasetsResponse = await apiClient.get(
+    const response: RecentlyViewedDatasetsResponse = await dashboardApiClient.get(
       `/dashboard/recent?user_urn=${userUrn}`,
     );
     const RecentlyViewedDatasets: RecentlyViewed[] =
@@ -118,22 +119,22 @@ export const apiServices = {
   },
 
   async getRecentActivity(userUrn: string) {
-    const response: RecentAssetsActivityResponse = await apiClient.get(
-      `/dashboard/recent-assets?user_urn=${userUrn}`,
+    const response: NewRecentActivity[] = await dashboardApiClient.get(
+      `/api/v1/recent-activity`,
     );
-    const [recommendations] = response?.recommendations?.modules?.filter(
-      (recommendation: RecommendationModule) =>
-        recommendation?.moduleId === "HighUsageEntities" &&
-        recommendation?.content,
+    // const [recommendations] = response?.recommendations?.modules?.filter(
+    //   (recommendation: RecommendationModule) =>
+    //     recommendation?.moduleId === "HighUsageEntities" &&
+    //     recommendation?.content,
+    // );
+    const RecentlyViewedDatasets: RecentActivity[] = response.map(
+      (activity: NewRecentActivity) => ({
+        id: activity.msg,
+        name: activity.msg || "",
+        type: "",
+        platform: "",
+      }),
     );
-    const RecentlyViewedDatasets: RecentActivity[] = (
-      recommendations || {}
-    )?.content?.map((contentItem: RecommendationContentItem) => ({
-      id: contentItem?.entity?.urn,
-      type: contentItem?.entity?.type,
-      name: contentItem?.entity?.name || "",
-      platform: contentItem?.entity?.platform?.name || "",
-    }));
 
     return RecentlyViewedDatasets;
   },

@@ -2,7 +2,7 @@ import {
   useComplianceFrameworks,
   useComplianceIssues,
   useComplianceTrends,
-} from "@/hooks/useQueries";
+} from "@/hooks/useDashboardQueries";
 
 export function useComplianceData() {
   const frameworks = useComplianceFrameworks();

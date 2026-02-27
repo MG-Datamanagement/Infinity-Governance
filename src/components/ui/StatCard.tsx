@@ -19,26 +19,34 @@ export function StatCard({
   changeType = "neutral",
 }: StatCardProps) {
   return (
-    <div className="stat-card flex flex-col justify-between space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="text-xs/3 text-gray-600">{label}</span>
-        <Icon size={15} className={cn(iconColor, "shrink-0")} />
+    <>
+    {/* {!isLoading && !error && frameworks?.length === 0 && (
+            <InlineState
+              type="empty"
+              message="No compliance frameworks configured yet."
+            />
+          )} */}
+      <div className="stat-card flex flex-col justify-between space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-xs/3 text-gray-600">{label}</span>
+          <Icon size={15} className={cn(iconColor, "shrink-0")} />
+        </div>
+        <div className="space-y-1">
+          <div className="text-xl font-semibold text-gray-900">{value}</div>
+          {change && (
+            <div
+              className={cn(
+                "text-xs font-medium",
+                changeType === "positive" && "text-success",
+                changeType === "negative" && "text-danger",
+                changeType === "neutral" && "text-gray-600",
+              )}
+            >
+              {change}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="space-y-1">
-        <div className="text-xl font-semibold text-gray-900">{value}</div>
-        {change && (
-          <div
-            className={cn(
-              "text-xs font-medium",
-              changeType === "positive" && "text-success",
-              changeType === "negative" && "text-danger",
-              changeType === "neutral" && "text-gray-600",
-            )}
-          >
-            {change}
-          </div>
-        )}
-      </div>
-    </div>
+    </>
   );
 }

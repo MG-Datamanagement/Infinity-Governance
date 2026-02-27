@@ -44,12 +44,14 @@ function ActivityItem({ name, platform, type }: ActivityItemProps) {
           <Database size={14} className="text-purple-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-medium text-gray-900 truncate">
+          <div title={name} className="text-xs font-medium text-gray-900 truncate">
             {name}
           </div>
-          <div className="text-xs text-gray-500">
-            {platform} • {type}
-          </div>
+          {/* {platform && type && (
+            <div className="text-xs text-gray-500">
+              {platform} • {type}
+            </div>
+          )} */}
         </div>
       </div>
     </div>
@@ -112,14 +114,22 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
           {isLoading && (
             <InlineState
               type="loading"
-              message={isRecent ? "Loading recent activity..." : "Loading recently viewed..."}
+              message={
+                isRecent
+                  ? "Loading recent activity..."
+                  : "Loading recently viewed..."
+              }
             />
           )}
 
           {!isLoading && hasError && (
             <InlineState
               type="error"
-              message={isRecent ? "Failed to load recent activity." : "Failed to load recently viewed."}
+              message={
+                isRecent
+                  ? "Failed to load recent activity."
+                  : "Failed to load recently viewed."
+              }
               onRetry={onRetry}
             />
           )}
@@ -127,7 +137,11 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
           {!isLoading && !hasError && items?.length === 0 && (
             <InlineState
               type="empty"
-              message={isRecent ? "No recent activity yet." : "You haven't viewed any assets yet."}
+              message={
+                isRecent
+                  ? "No recent activity yet."
+                  : "You haven't viewed any assets yet."
+              }
             />
           )}
 
@@ -135,14 +149,16 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
             !hasError &&
             items &&
             items.length > 0 &&
-            items.slice(0, MAX_VISIBLE_ITEMS).map((item) => (
-              <ActivityItem
-                key={item.id}
-                name={item.name || ""}
-                platform={item.platform || ""}
-                type={item.type}
-              />
-            ))}
+            items
+              .slice(0, MAX_VISIBLE_ITEMS)
+              .map((item) => (
+                <ActivityItem
+                  key={item.id}
+                  name={item.name || ""}
+                  platform={item.platform || ""}
+                  type={item.type}
+                />
+              ))}
         </div>
       </div>
 
