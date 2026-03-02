@@ -8,7 +8,7 @@
 
 import { Database, Shield, Tag, Eye, Globe, Table } from "lucide-react";
 import { StatCard } from "@/components/ui/StatCard";
-import { OverviewData } from "../../hooks/useOverviewData";
+import { OverviewData } from "@/hooks/useOverviewData";
 import { DashboardStats } from "@/types";
 
 type Props = {

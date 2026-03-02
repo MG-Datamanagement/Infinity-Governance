@@ -1,8 +1,8 @@
 import { Shield, Sparkles } from "lucide-react";
 import { ComplianceScoreCard } from "@/components/ui/ComplianceScoreCard";
 import { ComplianceTrendsChart } from "@/components/charts/ComplianceTrendsChart";
-import { InlineState } from "@/components/InlineState";
-import { ComplianceData } from "../../hooks/useComplianceData";
+import { InlineState } from "@/components/ui/InlineState";
+import { ComplianceData } from "../../../hooks/useComplianceData";
 
 type Props = {
   trendsQuery: ComplianceData["trends"];

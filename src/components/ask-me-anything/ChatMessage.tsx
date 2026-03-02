@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Message, Source, ReasoningTool, ToolDetail } from "../types";
+import { Message, Source, ReasoningTool, ToolDetail } from "@/types";
 import { RiRobot2Line } from "react-icons/ri";
 import { FiUser } from "react-icons/fi";
 import { FiEdit2 } from "react-icons/fi";

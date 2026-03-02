@@ -8,11 +8,19 @@
 
 "use client";
 
-import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingFallback, DataErrorFallback } from "@/components/Fallbacks";
 import { TabNavigation } from "@/components/ui/TabNavigation";
-import { useOverviewData } from "./hooks/useOverviewData";
-import { ActivitySection, AIGovernanceSection, ComplianceSection, DomainsSection, OverviewHeader, OverviewStatsGrid, PlatformsSection } from "./components/sections";
+import { useOverviewData } from "../../../hooks/useOverviewData";
+import {
+  ActivitySection,
+  AIGovernanceSection,
+  ComplianceSection,
+  DomainsSection,
+  OverviewHeader,
+  OverviewStatsGrid,
+  PlatformsSection,
+} from "@/components/overview/sections";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 // ---------------------------------------------------------------------------
 // Inner content — rendered only after the critical stats fetch resolves
@@ -70,7 +78,7 @@ function OverviewContent() {
 export default function OverviewPage() {
   return (
     <ErrorBoundary>
-      <OverviewContent />
+      <OverviewContent />;
     </ErrorBoundary>
   );
 }

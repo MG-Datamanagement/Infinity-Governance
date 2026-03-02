@@ -6,7 +6,7 @@ import { LuBrainCircuit } from "react-icons/lu";
 import { BsArrowsAngleExpand } from "react-icons/bs";
 import { RiCollapseDiagonalLine } from "react-icons/ri";
 import { LuSparkles } from "react-icons/lu";
-import { AIPreferences } from "../types";
+import { AIPreferences } from "@/types";
 import { SlEnergy } from "react-icons/sl";
 import { GrConfigure } from "react-icons/gr";
 import { TbZoomScan } from "react-icons/tb";

@@ -1,7 +1,7 @@
 import { Shield } from "lucide-react";
-import { InlineState } from "@/components/InlineState";
+import { InlineState } from "@/components/ui/InlineState";
 import { ComplianceFrameworkCard } from "@/components/compliance/ComplianceFrameworkCard";
-import { ComplianceData } from "../../hooks/useComplianceData";
+import { ComplianceData } from "@/hooks/useComplianceData";
 
 type Props = {
   query: ComplianceData["frameworks"];

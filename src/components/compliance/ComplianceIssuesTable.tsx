@@ -4,7 +4,7 @@ import { ComplianceIssue } from "@/types";
 import { getSeverityColor } from "@/lib/utils";
 import { AlertCircle, Search } from "lucide-react";
 import { useState } from "react";
-import { InlineState } from "../InlineState";
+import { InlineState } from "../ui/InlineState";
 
 interface ComplianceIssuesTableProps {
   issues: ComplianceIssue[];

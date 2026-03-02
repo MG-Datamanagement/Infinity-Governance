@@ -9,9 +9,9 @@
 
 import { Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { InlineState } from "@/components/InlineState";
+import { InlineState } from "@/components/ui/InlineState";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { OverviewData } from "../../hooks/useOverviewData";
+import { OverviewData } from "@/hooks/useOverviewData";
 
 type Props = {
   query: OverviewData["frameworks"];

@@ -10,7 +10,7 @@ import {
   Trash2Icon,
   Loader2,
 } from "lucide-react";
-import { cn } from "../../../../lib/utils";
+import { cn } from "../../lib/utils";
 import { ChatSession } from "@/types";
 import { IoRefreshSharp } from "react-icons/io5";
 

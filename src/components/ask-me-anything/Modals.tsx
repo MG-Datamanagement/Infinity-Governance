@@ -1,10 +1,10 @@
 import React from "react";
-import { Agent, Dataset } from "../types";
 import { TbTableSpark } from "react-icons/tb";
 import { RiRobot2Line } from "react-icons/ri";
 import { IoClose } from "react-icons/io5";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Agent, Dataset } from "@/types";
 
 interface AgentModalProps {
   isOpen: boolean;

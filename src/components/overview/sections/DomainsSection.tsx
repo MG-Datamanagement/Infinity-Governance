@@ -6,8 +6,8 @@
  */
 
 import { TrendingUp } from "lucide-react";
-import { InlineState } from "@/components/InlineState";
-import { OverviewData } from "../../hooks/useOverviewData";
+import { InlineState } from "@/components/ui/InlineState";
+import { OverviewData } from "@/hooks/useOverviewData";
 import { SectionCard } from "../cards/SectionCard";
 
 type Props = {

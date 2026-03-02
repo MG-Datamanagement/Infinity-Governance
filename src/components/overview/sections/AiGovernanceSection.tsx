@@ -11,9 +11,9 @@ import {
   TrendingUp,
   Eye,
 } from "lucide-react";
-import { InlineState } from "@/components/InlineState";
+import { InlineState } from "@/components/ui/InlineState";
 import { ModelRiskChart } from "@/components/charts/ModelRiskChart";
-import { OverviewData } from "../../hooks/useOverviewData";
+import { OverviewData } from "@/hooks/useOverviewData";
 
 type Props = {
   aiQuery: OverviewData["aiSnapshot"];

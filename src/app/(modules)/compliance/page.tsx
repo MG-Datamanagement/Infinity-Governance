@@ -1,32 +1,34 @@
 "use client";
 
-import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingFallback, DataErrorFallback } from "@/components/Fallbacks";
 import { TabNavigation } from "@/components/ui/TabNavigation";
-import { useComplianceData } from "./hooks/useComplianceData";
+import { useComplianceData } from "@/hooks/useComplianceData";
 import {
   ComplianceHeader,
   ComplianceHealthSection,
   ComplianceIssuesSection,
   ComplianceFrameworksPanel,
-} from "./components/sections";
+} from "@/components/compliance/sections";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function ComplianceContent() {
   const { frameworks, issues, trends } = useComplianceData();
 
-  const allLoading = frameworks.isLoading && issues.isLoading && trends.isLoading;
+  const allLoading =
+    frameworks.isLoading && issues.isLoading && trends.isLoading;
   const allError = frameworks.error && issues.error && trends.error;
 
   if (allLoading) return <LoadingFallback />;
-  if (allError) return (
-    <DataErrorFallback
-      retry={() => {
-        frameworks.refetch();
-        issues.refetch();
-        trends.refetch();
-      }}
-    />
-  );
+  if (allError)
+    return (
+      <DataErrorFallback
+        retry={() => {
+          frameworks.refetch();
+          issues.refetch();
+          trends.refetch();
+        }}
+      />
+    );
 
   return (
     <div className="p-4 md:p-3 space-y-2">
@@ -48,7 +50,7 @@ function ComplianceContent() {
 export default function CompliancePage() {
   return (
     <ErrorBoundary>
-      <ComplianceContent />
+      <ComplianceContent />;
     </ErrorBoundary>
   );
 }

@@ -6,9 +6,9 @@
  */
 
 import { Database } from "lucide-react";
-import { InlineState } from "@/components/InlineState";
+import { InlineState } from "@/components/ui/InlineState";
 import { SectionCard } from "../cards/SectionCard";
-import { OverviewData } from "../../hooks/useOverviewData";
+import { OverviewData } from "@/hooks/useOverviewData";
 
 type Props = {
   query: OverviewData["platforms"];

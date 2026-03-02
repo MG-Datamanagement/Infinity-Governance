@@ -1,11 +1,14 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
-import { Sidebar } from "./components/Sidebar";
-import { ChatHeader } from "./components/ChatHeader";
-import { ChatMessage } from "./components/ChatMessage";
-import { ChatInput } from "./components/ChatInput";
-import { WelcomeScreen } from "./components/WelcomeScreen";
-import { AgentModal, DatasetModal } from "./components/Modals";
+import { Sidebar } from "../../../components/ask-me-anything/Sidebar";
+import { ChatHeader } from "../../../components/ask-me-anything/ChatHeader";
+import { ChatMessage } from "../../../components/ask-me-anything/ChatMessage";
+import { ChatInput } from "../../../components/ask-me-anything/ChatInput";
+import { WelcomeScreen } from "../../../components/ask-me-anything/WelcomeScreen";
+import {
+  AgentModal,
+  DatasetModal,
+} from "../../../components/ask-me-anything/Modals";
 import {
   Message,
   ChatSession,
