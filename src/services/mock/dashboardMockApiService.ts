@@ -390,6 +390,35 @@ export interface ApiSourceStats {
   }>;
 }
 
+export interface ApiOwner {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApiCatalogDetail {
+  id: string;
+  table_name: string;
+  full_name: string;
+  database_name: string;
+  schema_name: string;
+  description: string | null;
+  source_name: string;
+  source_type: string;
+  row_count: number | null;
+  column_count: number;
+  properties: any;
+  created_at: string;
+  updated_at: string;
+  owner?: string | null;
+  domains?: any[];
+  tags?: any[];
+  columns: any[];
+}
+
 export const dataSourcesService = {
   async fetchDataSources(params: { source_type?: string; status?: string; limit?: number }) {
     const url = new URL("http://172.188.2.173:8005/api/v1/sources-list");
@@ -468,6 +497,36 @@ export const dataSourcesService = {
       return await response.json();
     } catch (error) {
       console.error(`Failed to trigger ingestion for source ${sourceId}:`, error);
+      throw error;
+    }
+  },
+
+  async fetchOwnersList(limit: number = 100) {
+    const url = `http://172.188.2.173:8005/api/v1/owners-list?limit=${limit}`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      const data = await response.json();
+      return data as ApiOwner[];
+    } catch (error) {
+      console.error(`Failed to fetch owners list:`, error);
+      throw error;
+    }
+  },
+
+  async fetchCatalogDetail(catalogId: string) {
+    const url = `http://172.188.2.173:8005/api/v1/catalogs/minimal-detail/${catalogId}`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      const data = await response.json();
+      return data as ApiCatalogDetail;
+    } catch (error) {
+      console.error(`Failed to fetch catalog detail for ${catalogId}:`, error);
       throw error;
     }
   }

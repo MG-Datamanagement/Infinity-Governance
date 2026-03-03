@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 
 // ─── Only MongoDB + PostgreSQL ────────────────────────────────────────────────
@@ -393,9 +393,10 @@ const Step4: React.FC<{
   connector: typeof CONNECTORS[0];
   config: { uri: string };
   schedule: { frequency: string; hour: string; minute: string; timezone: string };
-  finish: { name: string; piiEnabled: boolean; piiApproval: boolean; failureEmail: string };
+  finish: { name: string; piiEnabled: boolean; piiApproval: boolean; failureEmail: string; owner_id: string };
+  owners: any[];
   onChange: (k: string, v: string | boolean) => void;
-}> = ({ connector, config, schedule, finish, onChange }) => {
+}> = ({ connector, config, schedule, finish, owners, onChange }) => {
   const scheduleStr = `Every ${schedule.frequency.toLowerCase()} at ${schedule.hour}:${schedule.minute}`;
 
   return (
@@ -453,15 +454,20 @@ const Step4: React.FC<{
 
       {/* Owners */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">Owners</label>
-        <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg">
-          <span className="flex items-center gap-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded px-2 py-1">
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-            DataHub
-            <button className="text-gray-400 hover:text-gray-600 ml-0.5">×</button>
-          </span>
-          <input type="text" placeholder="Add owner..." className="flex-1 text-xs text-gray-500 focus:outline-none bg-transparent" />
-        </div>
+        <label className="block text-sm font-semibold text-gray-700 mb-1.5">* Owner</label>
+        <p className="text-xs text-gray-400 mb-1.5">Select the primary owner for this data source</p>
+        <select
+          value={finish.owner_id}
+          onChange={(e) => onChange("owner_id", e.target.value)}
+          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+        >
+          <option value="">Select an owner</option>
+          {owners.map((owner) => (
+            <option key={owner.id} value={owner.id}>
+              {owner.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* PII Detection Settings */}
@@ -564,8 +570,25 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose }) => {
     enabled: true, frequency: "Daily" as Frequency, hour: "00", minute: "00", timezone: "Asia/Calcutta",
   });
   const [finish, setFinish] = useState({
-    name: "", piiEnabled: true, piiApproval: true, failureEmail: "",
+    name: "", piiEnabled: true, piiApproval: true, failureEmail: "", owner_id: "",
   });
+  const [owners, setOwners] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchOwners = async () => {
+      try {
+        const { dataSourcesService } = await import("@/services/mock");
+        const list = await dataSourcesService.fetchOwnersList();
+        setOwners(list);
+        if (list.length > 0 && !finish.owner_id) {
+          setFinish(p => ({ ...p, owner_id: list[0].id }));
+        }
+      } catch (err) {
+        console.error("Failed to fetch owners", err);
+      }
+    };
+    fetchOwners();
+  }, []);
 
   const connector = CONNECTORS.find((c) => c.id === selectedId) ?? CONNECTORS[0];
 
@@ -591,7 +614,7 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose }) => {
         source_type: selectedId,
         description: finish.name || `Source for ${connector.name}`,
         schedule: `${schedule.hour}:${schedule.minute} ${schedule.timezone === 'Asia/Calcutta' ? 'GMT+5:30' : schedule.timezone}`,
-        owner_id: "3e05bb25-43b7-4bd3-8a0f-f3b2d5c45d2a", // Removed hardcoded owner_id
+        owner_id: finish.owner_id,
       };
 
       if (selectedId === 'postgresql') {
@@ -703,6 +726,7 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose }) => {
             config={config}
             schedule={schedule}
             finish={finish}
+            owners={owners}
             onChange={updateFinish}
           />
         )}

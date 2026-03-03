@@ -51,7 +51,41 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
     const [statusFilter, setStatusFilter] = useState("All");
     const [piiFilter, setPIIFilter] = useState(false);
 
-    const allDatasets = datasetsBySource[sourceId] ?? [];
+    const [allDatasets, setAllDatasets] = useState<Dataset[]>([]);
+    const [sourceName, setSourceName] = useState<string>(sourceId);
+    const [isLoading, setIsLoading] = useState(true);
+
+    React.useEffect(() => {
+        const loadDatasets = async () => {
+            setIsLoading(true);
+            try {
+                const { dataSourcesService } = await import("@/services/mock");
+                const stats = await dataSourcesService.fetchSourceStats(sourceId);
+                if (stats) {
+                    if (stats.source_name) setSourceName(stats.source_name);
+                    if (stats.catalogs) {
+                        const mapped: Dataset[] = stats.catalogs.map(cat => ({
+                            id: cat.catalog_id,
+                            name: cat.table_name || cat.full_name,
+                            hasPII: false,
+                            type: 'Table',
+                            rows: cat.row_count ? cat.row_count.toString() : null,
+                            columns: cat.column_count || 0,
+                            size: null,
+                            lastSync: 'Just now',
+                            status: 'Healthy'
+                        }));
+                        setAllDatasets(mapped);
+                    }
+                }
+            } catch (err) {
+                console.error("Error fetching datasets:", err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadDatasets();
+    }, [sourceId]);
 
     const filtered = useMemo(() => {
         let list = allDatasets;
@@ -85,7 +119,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                     <a href="/data-sources" className="hover:text-gray-600 transition-colors">Data Sources</a>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                    <span className="text-gray-600 font-medium">{sourceId}</span>
+                    <span className="text-gray-600 font-medium">{sourceName}</span>
                 </nav>
 
                 {/* Header */}
@@ -99,7 +133,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                         </button>
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                                {sourceId} Datasets
+                                {sourceName} Datasets
                             </h1>
                             <p className="text-gray-400 mt-0.5 text-sm">
                                 Browse and manage all datasets ingested from this source
@@ -169,8 +203,8 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                         <button
                             onClick={() => setPIIFilter((v) => !v)}
                             className={`flex items-center gap-1.5 pl-8 pr-3 py-2 border rounded-lg text-sm transition-colors relative ${piiFilter
-                                    ? "bg-indigo-50 border-indigo-300 text-indigo-700"
-                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                                ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                                : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
                                 }`}
                         >
                             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
@@ -205,69 +239,78 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                             </tr>
                         </thead>
                         <tbody>
-                            {filtered.map((dataset) => (
-                                <tr
-                                    key={dataset.id}
-                                    className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
-                                >
-                                    {/* Name */}
-                                    <td className="py-3.5 px-4">
-                                        <div className="flex items-start gap-2.5">
-                                            <TypeIcon type={dataset.type} />
-                                            <div>
-                                                <p className="text-sm font-medium text-gray-800">{dataset.name}</p>
-                                                {dataset.hasPII && (
-                                                    <span className="inline-block mt-0.5 text-[10px] font-semibold text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-1.5 py-0.5">
-                                                        PII Detected
-                                                    </span>
-                                                )}
-                                            </div>
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan={8} className="py-16 text-center">
+                                        <div className="flex flex-col items-center gap-2">
+                                            <div className="w-8 h-8 border-4 border-indigo-600/20 border-t-indigo-600 rounded-full animate-spin" />
+                                            <p className="text-sm text-gray-400">Loading datasets...</p>
                                         </div>
                                     </td>
-
-                                    {/* Type */}
-                                    <td className="py-3.5 px-4 text-sm text-gray-500">{dataset.type}</td>
-
-                                    {/* Rows */}
-                                    <td className="py-3.5 px-4 text-sm text-indigo-600 font-medium">
-                                        {dataset.rows ?? "—"}
-                                    </td>
-
-                                    {/* Columns */}
-                                    <td className="py-3.5 px-4 text-sm text-gray-600">{dataset.columns}</td>
-
-                                    {/* Size */}
-                                    <td className="py-3.5 px-4 text-sm text-gray-600">{dataset.size ?? "—"}</td>
-
-                                    {/* Last Sync */}
-                                    <td className="py-3.5 px-4 text-sm text-gray-500">{dataset.lastSync}</td>
-
-                                    {/* Status */}
-                                    <td className="py-3.5 px-4">
-                                        <StatusBadge status={dataset.status} />
-                                    </td>
-
-                                    {/* Actions */}
-                                    <td className="py-3.5 px-4 text-right">
-                                        <button
-                                            onClick={() => goToDetail(dataset.id)}
-                                            className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
-                                        >
-                                            View Details
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                            </svg>
-                                        </button>
-                                    </td>
                                 </tr>
-                            ))}
-
-                            {filtered.length === 0 && (
+                            ) : filtered.length === 0 ? (
                                 <tr>
                                     <td colSpan={8} className="py-16 text-center text-sm text-gray-400">
                                         No datasets found
                                     </td>
                                 </tr>
+                            ) : (
+                                filtered.map((dataset) => (
+                                    <tr
+                                        key={dataset.id}
+                                        className="border-b border-gray-50 hover:bg-gray-50 transition-colors"
+                                    >
+                                        {/* Name */}
+                                        <td className="py-3.5 px-4">
+                                            <div className="flex items-start gap-2.5">
+                                                <TypeIcon type={dataset.type} />
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-800">{dataset.name}</p>
+                                                    {dataset.hasPII && (
+                                                        <span className="inline-block mt-0.5 text-[10px] font-semibold text-yellow-600 bg-yellow-50 border border-yellow-200 rounded px-1.5 py-0.5">
+                                                            PII Detected
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        {/* Type */}
+                                        <td className="py-3.5 px-4 text-sm text-gray-500">{dataset.type}</td>
+
+                                        {/* Rows */}
+                                        <td className="py-3.5 px-4 text-sm text-indigo-600 font-medium">
+                                            {dataset.rows ?? "—"}
+                                        </td>
+
+                                        {/* Columns */}
+                                        <td className="py-3.5 px-4 text-sm text-gray-600">{dataset.columns}</td>
+
+                                        {/* Size */}
+                                        <td className="py-3.5 px-4 text-sm text-gray-600">{dataset.size ?? "—"}</td>
+
+                                        {/* Last Sync */}
+                                        <td className="py-3.5 px-4 text-sm text-gray-500">{dataset.lastSync}</td>
+
+                                        {/* Status */}
+                                        <td className="py-3.5 px-4">
+                                            <StatusBadge status={dataset.status} />
+                                        </td>
+
+                                        {/* Actions */}
+                                        <td className="py-3.5 px-4 text-right">
+                                            <button
+                                                onClick={() => goToDetail(dataset.id)}
+                                                className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                                            >
+                                                View Details
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                </svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
                             )}
                         </tbody>
                     </table>
