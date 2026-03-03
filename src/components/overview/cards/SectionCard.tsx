@@ -19,7 +19,7 @@ type Props = {
 
 export function SectionCard({ title, icon, isLoading, children }: Props) {
   return (
-    <div className="card p-4">
+    <div className="card p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold text-gray-900">{title}</h3>
@@ -27,10 +27,10 @@ export function SectionCard({ title, icon, isLoading, children }: Props) {
         </div>
 
         <button
-          disabled={isLoading || true}
-          className="text-primary text-sm font-medium hover:underline disabled:text-gray-300 disabled:cursor-not-allowed"
+          // disabled={isLoading || true}
+          className="text-primary text-xs font-medium hover:bg-gray-200 rounded-md p-2 disabled:text-gray-300 disabled:cursor-not-allowed"
         >
-          View All →
+          View All
         </button>
       </div>
 

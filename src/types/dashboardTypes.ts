@@ -3,6 +3,7 @@ export type InlineStateType = "loading" | "empty" | "error";
 export type Option = {
   value: string;
   label: string;
+  description?: string;
 };
 
 export interface User {
@@ -96,6 +97,7 @@ export interface RecentActivity {
   name: string;
   type: string;
   platform: string;
+  time?: string;
 }
 
 export interface NewRecentActivity {

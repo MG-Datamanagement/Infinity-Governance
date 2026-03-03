@@ -8,6 +8,7 @@ import {
   MOCK_DOMAIN_ASSETS,
   MOCK_PLATFORM_USAGE,
   MOCK_RECENT_ACTIVITY,
+  MOCK_RECENTLY_VIEWED,
 } from '@/constants/mockData';
 
 // Simulate API delay
@@ -58,4 +59,9 @@ export const dashboardMockApiService = {
     await delay(250);
     return MOCK_RECENT_ACTIVITY;
   },
+
+  async getRecentlyViewed() {
+    await delay(250);
+    return MOCK_RECENTLY_VIEWED
+  }
 };

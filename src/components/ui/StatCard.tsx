@@ -20,12 +20,6 @@ export function StatCard({
 }: StatCardProps) {
   return (
     <>
-    {/* {!isLoading && !error && frameworks?.length === 0 && (
-            <InlineState
-              type="empty"
-              message="No compliance frameworks configured yet."
-            />
-          )} */}
       <div className="stat-card flex flex-col justify-between space-y-1">
         <div className="flex items-center justify-between">
           <span className="text-xs/3 text-gray-600">{label}</span>

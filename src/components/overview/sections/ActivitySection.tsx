@@ -11,7 +11,7 @@
 
 import { useState } from "react";
 import { Activity, Clock, Database } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeAgo } from "@/lib/utils";
 import { InlineState } from "@/components/ui/InlineState";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OverviewData } from "@/hooks/useOverviewData";
@@ -28,7 +28,7 @@ const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "viewed", label: "Recently Viewed", icon: Clock },
 ];
 
-const MAX_VISIBLE_ITEMS = 10;
+const MAX_VISIBLE_ITEMS = 6;
 
 type ActivityItemProps = {
   name: string;
@@ -38,13 +38,16 @@ type ActivityItemProps = {
 
 function ActivityItem({ name, platform, type }: ActivityItemProps) {
   return (
-    <div className="px-2 md:px-4 py-3 hover:bg-gray-50 cursor-pointer">
+    <div className="p-2 hover:bg-gray-50 cursor-pointer">
       <div className="flex items-center gap-2">
         <div className="w-8 h-8 bg-purple-100 rounded flex items-center justify-center flex-shrink-0">
           <Database size={14} className="text-purple-600" />
         </div>
         <div className="flex-1 min-w-0">
-          <div title={name} className="text-xs font-medium text-gray-900 truncate">
+          <div
+            title={name}
+            className="text-xs font-medium text-gray-900 truncate"
+          >
             {name}
           </div>
           {/* {platform && type && (
@@ -53,6 +56,33 @@ function ActivityItem({ name, platform, type }: ActivityItemProps) {
             </div>
           )} */}
         </div>
+      </div>
+    </div>
+  );
+}
+
+type TimelineActivityItemProps = {
+  name: string;
+  time: string;
+};
+
+function TimelineActivityItem({ name, time }: TimelineActivityItemProps) {
+  return (
+    <div className="relative pl-6 py-3">
+      {/* Vertical Line */}
+      <div className="absolute left-[10px] top-5 -bottom-6 w-px bg-gray-200" />
+
+      {/* Dot */}
+      <div className="absolute left-[5px] top-5 w-2.5 h-2.5 rounded-full bg-indigo-600 border-2 border-white" />
+
+      {/* Content */}
+      <div>
+        <div className="text-xs font-medium text-gray-800 line-clamp-2">{name}</div>
+        {time && (
+          <div className="text-[10px] text-gray-500 mt-1">
+            {formatTimeAgo(time)}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -81,21 +111,19 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
   const onRetry = isRecent ? refetchActivity : refetchRecentlyViewed;
   const items = isRecent ? activity : recentlyViewed;
 
-  const viewAllLabel = isRecent
-    ? "View all recent activity"
-    : "View all recently viewed";
+  const viewAllLabel = isRecent ? "View All Activity" : "View All Datasets";
 
   return (
-    <div className="card overflow-hidden flex flex-col">
+    <div className="overflow-hidden lg:col-span-3">
       {/* Tab Header */}
-      <div className="flex items-center justify-center">
-        <div className="flex gap-2 border-b border-gray-200">
+      <div className="px-2 py-0">
+        <div className="flex justify-between items-center border-b border-gray-200">
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setActiveTab(id)}
               className={cn(
-                "px-1.5 py-2.5 text-xs/3 font-medium border-b-2 transition-colors flex items-center gap-1",
+                "px-1 py-2 text-[10px] font-medium border-b-2 transition-colors flex items-center gap-1 outline-none",
                 activeTab === id
                   ? "text-primary border-primary"
                   : "text-gray-500 border-transparent hover:text-gray-700",
@@ -109,7 +137,7 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
       </div>
 
       {/* Tab Body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 max-h-[400px] p-2">
         <div className="divide-y divide-gray-100">
           {isLoading && (
             <InlineState
@@ -149,28 +177,30 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
             !hasError &&
             items &&
             items.length > 0 &&
-            items
-              .slice(0, MAX_VISIBLE_ITEMS)
-              .map((item) => (
-                <ActivityItem
-                  key={item.id}
-                  name={item.name || ""}
-                  platform={item.platform || ""}
-                  type={item.type}
-                />
-              ))}
+            items.slice(0, MAX_VISIBLE_ITEMS).map((item) => (
+              <TimelineActivityItem
+                key={item.id}
+                name={item.name}
+                time={item.time || ""}
+                // platform={item.platform || ""}
+                // type={item.type}
+              />
+            ))}
+        </div>
+
+        <div className="px-6 py-1">
+          <button className="text-indigo-600 text-xs hover:text-indigo-600 hover:underline transition-colors">
+            {viewAllLabel}
+          </button>
         </div>
       </div>
 
       {/* Footer */}
-      <div className="p-2 border-t border-gray-200">
-        <button
-          disabled
-          className="text-primary text-sm font-medium hover:underline w-full text-center disabled:text-gray-300 disabled:cursor-not-allowed"
-        >
+      {/* <div className="px-0.5 py-2">
+        <button className="text-primary text-xs hover:underline w-full text-start">
           {viewAllLabel}
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }

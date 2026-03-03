@@ -257,3 +257,41 @@ export const MOCK_RECENT_ACTIVITY: RecentActivity[] = [
     timestamp: '6 hours ago',
   },
 ];
+
+export const MOCK_RECENTLY_VIEWED = [
+  {
+    id: "1",
+    name: "customers",
+    platform: "postgres_db",
+    classification: "PII",
+    createdAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
+  },
+  {
+    id: "2",
+    name: "transactions",
+    platform: "snowflake_dw",
+    classification: "Financial",
+    createdAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(), // 1 hr ago
+  },
+  {
+    id: "3",
+    name: "medical_images",
+    platform: "mongodb_atlas",
+    classification: "PHI",
+    createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3 hrs ago
+  },
+  {
+    id: "4",
+    name: "user_preferences",
+    platform: "postgres_db",
+    classification: "GDPR",
+    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(), // 5 hrs ago
+  },
+  {
+    id: "5",
+    name: "patient_records",
+    platform: "snowflake_dw",
+    classification: "HIPAA",
+    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
+  },
+];

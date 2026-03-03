@@ -1,5 +1,5 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -10,35 +10,88 @@ export function formatPercentage(value: number): string {
 }
 
 export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   });
 }
 
 export function getStatusColor(status: string): string {
   switch (status.toLowerCase()) {
-    case 'excellent':
-      return 'text-success';
-    case 'warning':
-      return 'text-warning';
-    case 'critical':
-      return 'text-danger';
+    case "excellent":
+      return "text-success";
+    case "warning":
+      return "text-warning";
+    case "critical":
+      return "text-danger";
     default:
-      return 'text-gray-600';
+      return "text-gray-600";
   }
 }
 
 export function getSeverityColor(severity: string): string {
   switch (severity) {
-    case 'HIGH':
-      return 'bg-red-100 text-red-800';
-    case 'MEDIUM':
-      return 'bg-yellow-100 text-yellow-800';
-    case 'LOW':
-      return 'bg-blue-100 text-blue-800';
+    case "HIGH":
+      return "bg-red-100 text-red-800";
+    case "MEDIUM":
+      return "bg-yellow-100 text-yellow-800";
+    case "LOW":
+      return "bg-blue-100 text-blue-800";
     default:
-      return 'bg-gray-100 text-gray-800';
+      return "bg-gray-100 text-gray-800";
   }
+}
+
+/**
+ * Converts ISO time string into:
+ *  - "Just now"
+ *  - "5 mins ago"
+ *  - "1 hr ago"
+ *  - "2 hrs ago"
+ *  - "3 days ago"
+ */
+export function formatTimeAgo(timeString: string): string {
+  const now = new Date();
+  const past = new Date(timeString);
+
+  const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+
+  if (diffInSeconds < 60) {
+    return "Just now";
+  }
+
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) {
+    return `${diffInMinutes} min${diffInMinutes > 1 ? "s" : ""} ago`;
+  }
+
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) {
+    return `${diffInHours} hr${diffInHours > 1 ? "s" : ""} ago`;
+  }
+
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`;
+}
+
+export const platformColors = [
+  "bg-blue-500",
+  "bg-green-500",
+  "bg-purple-500",
+  "bg-pink-500",
+  "bg-indigo-500",
+  "bg-orange-500",
+  "bg-teal-500",
+];
+
+export function getPlatformColor(name: string) {
+  let hash = 0;
+
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+
+  const index = Math.abs(hash) % platformColors.length;
+  return platformColors[index];
 }
