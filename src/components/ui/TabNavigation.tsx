@@ -68,9 +68,10 @@ export function TabNavigation() {
             <div>
               <Button
                 className={cn(
-                  "w-full flex items-start gap-4",
-                  "p-3 rounded-md",
-                  "hover:bg-gray-50 transition-colors text-left",
+                  "flex items-center gap-2 px-3 py-2 rounded-md",
+                  "border border-gray-300 bg-primary",
+                  "text-gray-800 font-semibold text-base",
+                  "transition-colors", "text-gray-50"
                 )}
                 icon={<PlayIcon size={16} />}
               >
@@ -80,9 +81,10 @@ export function TabNavigation() {
             <div>
               <Button
                 className={cn(
-                  "w-full flex items-start gap-4",
-                  "p-3 rounded-md",
-                  "hover:bg-gray-50 transition-colors text-left",
+                  "flex items-center gap-2 px-3 py-2 rounded-md",
+                  "border border-gray-300 bg-gray-50",
+                  "text-gray-800 font-semibold text-base",
+                  "hover:bg-gray-100 transition-colors",
                 )}
                 icon={<DownloadIcon size={16} />}
                 variant="outline"
