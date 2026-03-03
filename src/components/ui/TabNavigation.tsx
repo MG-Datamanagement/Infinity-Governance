@@ -8,11 +8,12 @@ import { Option } from "@/types";
 import QuickActionsDropdown from "./QuickActionsDropdown";
 import { Button } from "./Button";
 import { DownloadIcon, PlayIcon } from "lucide-react";
-import { useAppStore } from "@/store/appStore";
+import { DashboardTabType, useAppStore } from "@/store/appStore";
 
 export function TabNavigation() {
   const pathname = usePathname();
   const dashboardTab = useAppStore((s) => s.dashboardTab);
+  const setDashboardTab = useAppStore((s) => s.setDashboardTab);
 
   const tabs = [
     { name: "Overview", href: "/overview" },
@@ -49,6 +50,7 @@ export function TabNavigation() {
           <Link
             key={tab.href}
             href={tab.href}
+            onClick={() => setDashboardTab(tab.name as DashboardTabType)}
             className={cn(
               "pb-2 px-1 text-sm font-medium transition-colors border-b-2",
               pathname === tab.href
