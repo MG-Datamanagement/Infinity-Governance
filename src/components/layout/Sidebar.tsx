@@ -33,6 +33,7 @@ const GOVERN_ITEMS = [
 
 const ADMIN_ITEMS = [
   { icon: Database, label: 'Data Sources', href: '/data-sources' },
+  { icon: Database, label: 'Data Connectors', href: '/data-connectors' },
   { icon: LuSparkles, label: 'Ask Me Anything', href: '/ask-me-anything' },
   { icon: BarChart3, label: 'Analytics', href: '/analytics' },
 ];
