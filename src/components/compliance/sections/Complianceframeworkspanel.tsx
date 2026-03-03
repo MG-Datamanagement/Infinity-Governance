@@ -11,7 +11,7 @@ export function ComplianceFrameworksPanel({ query }: Props) {
   const { data: frameworks, isLoading, error, refetch } = query;
 
   return (
-    <div className="gap-1 border rounded-lg bg-white lg:col-span-4">
+    <div className="gap-1 border rounded-lg bg-white lg:col-span-4 border-l-4 border-l-primary">
       <div className="p-2 lg:p-6 border-b border-gray-200 space-y-2">
         <div className="gap-2 flex">
           <Shield className="text-blue-600" size={16} />
