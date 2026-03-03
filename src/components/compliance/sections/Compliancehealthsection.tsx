@@ -10,7 +10,7 @@ type Props = {
 
 function AIInsightsCard() {
   return (
-    <div className="card p-2 md:p-4 border-2 border-gray-200">
+    <div className="card p-2 md:p-6 border border-gray-200 bg-indigo-50 shadow-md">
       <div className="flex flex-col sm:flex-row items-start">
         <div className="flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2 mb-2">
@@ -24,7 +24,7 @@ function AIInsightsCard() {
               BETA
             </span>
           </div>
-          <p className="text-xs/5 text-gray-600">
+          <p className="text-xs pl-9 text-gray-500 leading-relaxed">
             Your governance is in excellent shape! All critical compliance
             frameworks are above 90%, with GDPR and SOC 2 leading at 96% and
             98%. HIPAA needs attention at 79% — consider reviewing data
@@ -40,7 +40,7 @@ export function ComplianceHealthSection({ trendsQuery }: Props) {
   const { data: trends, isLoading, error, refetch } = trendsQuery;
 
   return (
-    <div className="grid grid-cols-1 md:grid-rows-[1fr_9fr] p-2.5 border border-gray-200 rounded-lg gap-2 bg-gradient-to-br from-primary/5 via-white to-primary/5">
+    <div className="grid grid-cols-1 md:grid-rows-[1fr_9fr] p-6 border border-gray-200 rounded-lg gap-2 bg-gradient-to-br from-primary/5 via-white to-primary/5">
       {/* Section Header */}
       <div className="flex gap-2">
         <Shield size={35} className="bg-primary p-2 text-white rounded-lg" />
@@ -52,32 +52,36 @@ export function ComplianceHealthSection({ trendsQuery }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-2">
+      <div className="grid grid-cols-1 md:grid-rows-[2fr_1fr] gap-5">
         {/* Left: Score + AI Insights */}
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-[2fr_3fr] gap-5">
           <ComplianceScoreCard score={91} change="+4% from last month" />
-          <AIInsightsCard />
+
+          {/* Right: Trends Chart */}
+          <div className="grid">
+            {isLoading && (
+              <InlineState
+                type="loading"
+                message="Loading compliance trends..."
+              />
+            )}
+            {error && (
+              <InlineState
+                type="error"
+                message="Failed to load trends."
+                onRetry={refetch}
+              />
+            )}
+            {!isLoading && !error && !trends && (
+              <InlineState type="empty" message="No trend data available." />
+            )}
+            {!isLoading && !error && trends && (
+              <ComplianceTrendsChart data={trends} />
+            )}
+          </div>
         </div>
 
-        {/* Right: Trends Chart */}
-        <div className="grid">
-          {isLoading && (
-            <InlineState type="loading" message="Loading compliance trends..." />
-          )}
-          {error && (
-            <InlineState
-              type="error"
-              message="Failed to load trends."
-              onRetry={refetch}
-            />
-          )}
-          {!isLoading && !error && !trends && (
-            <InlineState type="empty" message="No trend data available." />
-          )}
-          {!isLoading && !error && trends && (
-            <ComplianceTrendsChart data={trends} />
-          )}
-        </div>
+        <AIInsightsCard />
       </div>
     </div>
   );

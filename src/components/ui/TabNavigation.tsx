@@ -5,9 +5,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Select } from "./Select";
 import { Option } from "@/types";
+import QuickActionsDropdown from "./QuickActionsDropdown";
+import { Button } from "./Button";
+import { DownloadIcon, PlayIcon } from "lucide-react";
+import { useAppStore } from "@/store/appStore";
 
 export function TabNavigation() {
   const pathname = usePathname();
+  const dashboardTab = useAppStore((s) => s.dashboardTab);
 
   const tabs = [
     { name: "Overview", href: "/overview" },
@@ -39,7 +44,7 @@ export function TabNavigation() {
 
   return (
     <div className="border-b border-gray-200 px-0 py-1 flex items-center justify-between">
-      <nav className="flex gap-6">
+      <nav className="flex gap-5">
         {tabs.map((tab) => (
           <Link
             key={tab.href}
@@ -56,7 +61,36 @@ export function TabNavigation() {
         ))}
       </nav>
       <div className="flex items-center gap-2">
-        <Select placeholder="Quick Actions" options={QUICK_ACTIONS} />
+        {dashboardTab === "Compliance" ? (
+          <>
+            <div>
+              <Button
+                className={cn(
+                  "w-full flex items-start gap-4",
+                  "p-3 rounded-md",
+                  "hover:bg-gray-50 transition-colors text-left",
+                )}
+                icon={<PlayIcon size={16} />}
+              >
+                Run Full Scan
+              </Button>
+            </div>
+            <div>
+              <Button
+                className={cn(
+                  "w-full flex items-start gap-4",
+                  "p-3 rounded-md",
+                  "hover:bg-gray-50 transition-colors text-left",
+                )}
+                icon={<DownloadIcon size={16} />}
+                variant="outline"
+              >
+                Export Report
+              </Button>
+            </div>
+          </>
+        ) : null}
+        <QuickActionsDropdown />
       </div>
     </div>
   );

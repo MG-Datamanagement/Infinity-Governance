@@ -12,11 +12,6 @@ export function OverviewHeader() {
       <p className="text-sm text-gray-600">
         Monitor your data governance health and activities
       </p>
-
-      {/* <div className="flex items-center gap-2">
-        <Button icon={<Database size={16} />}>Add Data Source</Button>
-        <Select placeholder="Quick Actions" options={QUICK_ACTIONS} />
-      </div> */}
     </div>
   );
 }

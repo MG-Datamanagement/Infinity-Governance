@@ -11,15 +11,15 @@ export function ComplianceFrameworksPanel({ query }: Props) {
   const { data: frameworks, isLoading, error, refetch } = query;
 
   return (
-    <div className="gap-1 border rounded-lg">
-      <div className="p-2 border-b-2 border-primary bg-gradient-to-br from-primary/10 via-white to-primary/5 gap-2">
-        <div className="gap-1 flex">
+    <div className="gap-1 border rounded-lg bg-white lg:col-span-4">
+      <div className="p-2 lg:p-6 border-b border-gray-200 space-y-2">
+        <div className="gap-2 flex">
           <Shield className="text-blue-600" size={16} />
-          <h2 className="text-sm/3 font-bold text-gray-900">
+          <h2 className="text-sm font-bold text-gray-900">
             Compliance Frameworks
           </h2>
         </div>
-        <p className="text-xs/[10px] text-gray-500 my-1">
+        <p className="text-xs text-gray-500">
           {frameworks?.length ?? 0} frameworks
         </p>
       </div>

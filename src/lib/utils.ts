@@ -75,21 +75,21 @@ export function formatTimeAgo(timeString: string): string {
   return `${diffInDays} day${diffInDays > 1 ? "s" : ""} ago`;
 }
 
-export const platformColors = [
-  "bg-blue-500",
-  "bg-green-500",
-  "bg-purple-500",
-  "bg-pink-500",
-  "bg-indigo-500",
-  "bg-orange-500",
-  "bg-teal-500",
+const platformColors = [
+  "#3B82F6", // blue
+  "#22C55E", // green
+  "#A855F7", // purple
+  "#EC4899", // pink
+  "#6366F1", // indigo
+  "#F97316", // orange
+  "#14B8A6", // teal
 ];
 
 export function getPlatformColor(name: string) {
-  let hash = 0;
+  let hash = 5381;
 
   for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    hash = (hash * 33) ^ name.charCodeAt(i);
   }
 
   const index = Math.abs(hash) % platformColors.length;

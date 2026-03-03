@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 interface StatCardProps {
   icon: LucideIcon;
   iconColor?: string;
+  iconBg?: string;
   label: string;
   value: string | number;
   change?: string;
@@ -13,6 +14,7 @@ interface StatCardProps {
 export function StatCard({
   icon: Icon,
   iconColor = "text-primary",
+  iconBg,
   label,
   value,
   change,
@@ -22,9 +24,13 @@ export function StatCard({
     <>
       <div className="stat-card flex flex-col justify-between space-y-1">
         <div className="flex items-center justify-between">
-          <span className="text-xs/3 text-gray-600">{label}</span>
-          <Icon size={15} className={cn(iconColor, "shrink-0")} />
+          <span className="text-xs/3 text-gray-600 font-medium">{label}</span>
+
+          <div className={cn("p-1 rounded-md", iconBg)}>
+            <Icon size={14} className={cn(iconColor, "shrink-0")} />
+          </div>
         </div>
+
         <div className="space-y-1">
           <div className="text-xl font-semibold text-gray-900">{value}</div>
           {change && (

@@ -47,9 +47,10 @@ export function PlatformsSection({ query }: Props) {
               <div className="flex items-center gap-2">
                 {/* <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0" /> */}
                 <div
-                  className={`w-2 h-2 rounded-full flex-shrink-0 ${getPlatformColor(
-                    platform.platform,
-                  )}`}
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{
+                    backgroundColor: getPlatformColor(platform.platform),
+                  }}
                 />
                 <span className="text-sm text-gray-700">
                   {platform.platform}

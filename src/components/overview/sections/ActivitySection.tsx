@@ -9,26 +9,26 @@
  * slices without caring which tab is active.
  */
 
-import { useState } from "react";
 import { Activity, Clock, Database } from "lucide-react";
 import { cn, formatTimeAgo } from "@/lib/utils";
 import { InlineState } from "@/components/ui/InlineState";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OverviewData } from "@/hooks/useOverviewData";
-
-type Tab = "recent" | "viewed";
+import { IconType } from "react-icons/lib";
+import { ActivityTabType, useAppStore } from "@/store/appStore";
 
 type Props = {
   activityQuery: OverviewData["activity"];
   recentlyViewedQuery: OverviewData["recentlyViewed"];
 };
 
-const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
+const TABS: { id: ActivityTabType; label: string; icon: React.ElementType }[] = [
   { id: "recent", label: "Recent Activity", icon: Activity },
   { id: "viewed", label: "Recently Viewed", icon: Clock },
 ];
 
-const MAX_VISIBLE_ITEMS = 6;
+const MAX_RECENT_ACTIVITY_VISIBLE_ITEMS = 6;
+const MAX_RECENTLY_VIEWED_VISIBLE_ITEMS = 6;
 
 type ActivityItemProps = {
   name: string;
@@ -61,6 +61,62 @@ function ActivityItem({ name, platform, type }: ActivityItemProps) {
   );
 }
 
+type ActivityItemV2Props = {
+  name: string;
+  platform?: string;
+  tag?: string;
+  tagColor?: string;
+  time?: string;
+  icon: IconType;
+  iconColor: string;
+};
+
+function ActivityItemV2({
+  name,
+  platform,
+  tag,
+  tagColor,
+  time,
+  icon,
+  iconColor,
+}: ActivityItemV2Props) {
+  const PlatformIcon = icon;
+  return (
+    <div className="p-3 hover:bg-gray-50 cursor-pointer transition-colors">
+      <div className="flex items-start gap-3">
+        {/* Icon */}
+        <div className="w-9 h-9 bg-gray-100 rounded-md flex items-center justify-center flex-shrink-0">
+          <PlatformIcon size={16} className={cn(iconColor)} />
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <div
+              title={name}
+              className="text-sm font-medium text-gray-900 truncate"
+            >
+              {name}
+            </div>
+
+            {tag && <ComplianceBadge label={tag} color={tagColor || ""} />}
+          </div>
+
+          <div className="flex items-center justify-between mt-1">
+            <div className="text-xs text-gray-500 truncate">{platform}</div>
+
+            {time && (
+              <div className="text-[10px] text-gray-400">
+                {formatTimeAgo(time)}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type TimelineActivityItemProps = {
   name: string;
   time: string;
@@ -77,7 +133,9 @@ function TimelineActivityItem({ name, time }: TimelineActivityItemProps) {
 
       {/* Content */}
       <div>
-        <div className="text-xs font-medium text-gray-800 line-clamp-2">{name}</div>
+        <div className="text-xs font-medium text-gray-800 line-clamp-2">
+          {name}
+        </div>
         {time && (
           <div className="text-[10px] text-gray-500 mt-1">
             {formatTimeAgo(time)}
@@ -88,9 +146,28 @@ function TimelineActivityItem({ name, time }: TimelineActivityItemProps) {
   );
 }
 
-function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("recent");
+function ComplianceBadge({ label, color }: { label: string; color: string }) {
+  const colorMap: Record<string, string> = {
+    yellow: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    blue: "bg-blue-50 text-blue-700 border-blue-200",
+    red: "bg-red-50 text-red-700 border-red-200",
+    green: "bg-green-50 text-green-700 border-green-200",
+    indigo: "bg-indigo-50 text-indigo-700 border-indigo-200",
+  };
 
+  return (
+    <span
+      className={cn(
+        "text-[10px] px-2 py-0.5 rounded-md border font-medium",
+        colorMap[color] || "bg-gray-100 text-gray-700 border-gray-200",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
   const {
     data: activity,
     isLoading: activityLoading,
@@ -104,6 +181,9 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
     error: recentlyViewedError,
     refetch: refetchRecentlyViewed,
   } = recentlyViewedQuery;
+
+  const activeTab = useAppStore((s) => s.activityTab);
+  const setActivityTab = useAppStore((s) => s.setActivityTab);
 
   const isRecent = activeTab === "recent";
   const isLoading = isRecent ? activityLoading : recentlyViewedLoading;
@@ -121,7 +201,7 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
           {TABS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
-              onClick={() => setActiveTab(id)}
+              onClick={() => setActivityTab(id)}
               className={cn(
                 "px-1 py-2 text-[10px] font-medium border-b-2 transition-colors flex items-center gap-1 outline-none",
                 activeTab === id
@@ -173,19 +253,42 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
             />
           )}
 
-          {!isLoading &&
-            !hasError &&
-            items &&
-            items.length > 0 &&
-            items.slice(0, MAX_VISIBLE_ITEMS).map((item) => (
-              <TimelineActivityItem
-                key={item.id}
-                name={item.name}
-                time={item.time || ""}
-                // platform={item.platform || ""}
-                // type={item.type}
-              />
-            ))}
+          {!isLoading && !hasError && isRecent ? (
+            <>
+              {activity &&
+                activity.length > 0 &&
+                activity
+                  .slice(0, MAX_RECENT_ACTIVITY_VISIBLE_ITEMS)
+                  .map((item) => (
+                    <TimelineActivityItem
+                      key={item.id}
+                      name={item.name}
+                      time={item.time || ""}
+                      // platform={item.platform || ""}
+                      // type={item.type}
+                    />
+                  ))}
+            </>
+          ) : (
+            <>
+              {recentlyViewed &&
+                recentlyViewed.length > 0 &&
+                recentlyViewed
+                  .slice(0, MAX_RECENTLY_VIEWED_VISIBLE_ITEMS)
+                  .map((item) => (
+                    <ActivityItemV2
+                      key={item.id}
+                      name={item.name}
+                      platform={item.platform}
+                      tag={item.tag}
+                      tagColor={item.tagColor}
+                      time={item.time || ""}
+                      icon={item.icon}
+                      iconColor={item.iconColor}
+                    />
+                  ))}
+            </>
+          )}
         </div>
 
         <div className="px-6 py-1">
