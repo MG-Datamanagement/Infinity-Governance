@@ -31,6 +31,7 @@ interface ChatMessageProps {
   onEditMessage?: (newContent: string) => void;
   isLatestHumanMessage?: boolean;
   handleReplyTo: (replyTo: null | string) => void;
+  isThinking: boolean;
 }
 
 export const ChatMessage: React.FC<ChatMessageProps> = ({
@@ -46,6 +47,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
   onEditMessage,
   isLatestHumanMessage,
   handleReplyTo,
+  isThinking
 }) => {
   const [showReasoning, setShowReasoning] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -146,8 +148,14 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                   <div className="text-sm leading-relaxed whitespace-pre-wrap">
                     {message.content}
                   </div>
+
+                  {message.edited && (
+                    <div className="text-[10px] text-white/60 mt-1 italic">
+                      Edited
+                    </div>
+                  )}
                 </div>
-                {isLatestHumanMessage && onEditMessage && (
+                {isLatestHumanMessage && onEditMessage && !isThinking && (
                   <button
                     onClick={handleEdit}
                     className="absolute -bottom-6 right-0 text-sm text-gray-500 hover:text-indigo-600 transition-all flex items-center gap-1"

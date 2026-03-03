@@ -2,10 +2,14 @@ import { IconType } from "react-icons/lib";
 
 // Core Types
 export interface Message {
+  id: string;
   role: "human" | "ai";
   content: string;
   created_at: string;
   error: boolean;
+
+  edited?: boolean;
+  edited_at?: string;
 }
 
 export interface ChatSession {
@@ -35,6 +39,7 @@ export interface ChatRequest {
   session_id: string | null;
   memory: boolean;
   reasoning: boolean;
+  reply_to?: string | null;
 }
 
 // Enhanced API Response Types

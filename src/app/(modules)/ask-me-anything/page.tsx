@@ -58,7 +58,7 @@ const AskMeAnything: React.FC = () => {
   // Response state - track enhanced responses for each message
   const [messageResponses, setMessageResponses] = useState<
     Map<
-      number,
+      string,
       {
         reasoning?: string[];
         reasoningSummary?: string;
@@ -94,15 +94,23 @@ const AskMeAnything: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (
+    content: string,
+    options?: { isEdit?: boolean },
+  ) => {
     const userMessage: Message = {
+      id: crypto.randomUUID(),
       role: "human",
       content,
       created_at: new Date().toISOString(),
       error: false,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    // Only append user message if NOT editing
+    if (!options?.isEdit) {
+      setMessages((prev) => [...prev, userMessage]);
+    }
+
     setIsThinking(true);
 
     try {
@@ -114,26 +122,31 @@ const AskMeAnything: React.FC = () => {
       });
 
       const aiMessage: Message = {
+        id: crypto.randomUUID(),
         role: "ai",
         content: response.answer,
         created_at: response.timestamp,
         error: false,
       };
 
-      setMessages((prev) => [...prev, aiMessage]);
+      setMessages((prev) => {
+        const updatedMessages = [...prev, aiMessage];
+        const aiIndex = updatedMessages.length - 1;
 
-      // Store enhanced response data for the AI message
-      setMessageResponses((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(messages.length + 1, {
-          reasoning: response.reasoning,
-          reasoningSummary: response.reasoning_summary,
-          reasoningTools: response.reasoning_tools,
-          sources: response.sources,
-          toolsDetail: response.tools_detail,
-          suggestions: response.suggestions,
+        setMessageResponses((prevMap) => {
+          const newMap = new Map(prevMap);
+          newMap.set(aiMessage.id, {
+            reasoning: response.reasoning,
+            reasoningSummary: response.reasoning_summary,
+            reasoningTools: response.reasoning_tools,
+            sources: response.sources,
+            toolsDetail: response.tools_detail,
+            suggestions: response.suggestions,
+          });
+          return newMap;
         });
-        return newMap;
+
+        return updatedMessages;
       });
 
       if (!currentSessionId) {
@@ -142,12 +155,15 @@ const AskMeAnything: React.FC = () => {
       }
     } catch (error) {
       console.error("Failed to send message:", error);
+
       const errorMessage: Message = {
+        id: crypto.randomUUID(),
         role: "ai",
         content: "Sorry, I encountered an error processing your request.",
         created_at: new Date().toISOString(),
         error: true,
       };
+
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsThinking(false);
@@ -158,31 +174,38 @@ const AskMeAnything: React.FC = () => {
     messageIndex: number,
     newContent: string,
   ) => {
-    // Remove all messages after the edited message
-    const updatedMessages = messages.slice(0, messageIndex + 1);
+    setMessages((prev) => {
+      if (messageIndex < 0 || messageIndex >= prev.length) {
+        return prev;
+      }
 
-    // Update the edited message content
-    updatedMessages[messageIndex] = {
-      ...updatedMessages[messageIndex],
-      content: newContent,
-    };
+      const truncated = prev.slice(0, messageIndex + 1);
 
-    setMessages(updatedMessages);
+      truncated[messageIndex] = {
+        ...truncated[messageIndex],
+        content: newContent,
+        edited: true,
+        edited_at: new Date().toISOString(),
+      };
 
-    // Clear responses after this message
-    setMessageResponses((prev) => {
-      const newMap = new Map(prev);
-      // Remove all responses after the edited message
-      Array.from(newMap.keys()).forEach((key) => {
-        if (key > messageIndex) {
-          newMap.delete(key);
-        }
+      // Clean metadata inside same closure
+      setMessageResponses((prevMap) => {
+        const newMap = new Map(prevMap);
+        const validIds = truncated.map((m) => m.id);
+
+        newMap.forEach((_, key) => {
+          if (!validIds.includes(key)) {
+            newMap.delete(key);
+          }
+        });
+
+        return newMap;
       });
-      return newMap;
+
+      return truncated;
     });
 
-    // Resend the edited message
-    await handleSendMessage(newContent);
+    await handleSendMessage(newContent, { isEdit: true });
   };
 
   const handleNewChat = () => {
@@ -200,7 +223,12 @@ const AskMeAnything: React.FC = () => {
     setIsSessionLoading(true);
     try {
       const sessionDetail = await chatApiServices.getSessionDetail(sessionId);
-      setMessages(sessionDetail.messages);
+      setMessages(
+        sessionDetail.messages.map((msg) => ({
+          ...msg,
+          id: crypto.randomUUID(),
+        })),
+      );
       setCurrentSessionId(sessionId);
       setMessageResponses(new Map());
     } catch (error) {
@@ -305,13 +333,13 @@ const AskMeAnything: React.FC = () => {
           ) : (
             <div className="max-w-[900px]">
               {messages.map((message, idx) => {
-                const responseData = messageResponses.get(idx);
+                const responseData = messageResponses.get(message.id);
                 const isLatestHumanMessage =
                   message.role === "human" && idx === lastHumanMessageIndex;
 
                 return (
                   <ChatMessage
-                    key={idx}
+                    key={message.id}
                     message={message}
                     reasoning={responseData?.reasoning}
                     reasoningSummary={responseData?.reasoningSummary}
@@ -330,6 +358,7 @@ const AskMeAnything: React.FC = () => {
                     handleReplyTo={(replyTo: null | string) =>
                       setReplyTo(replyTo)
                     }
+                    isThinking={isThinking}
                   />
                 );
               })}
