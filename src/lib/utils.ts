@@ -14,6 +14,8 @@ export function formatDate(date: string | Date): string {
     month: "short",
     day: "numeric",
     year: "numeric",
+    hour: "numeric",
+    minute: "numeric"
   });
 }
 

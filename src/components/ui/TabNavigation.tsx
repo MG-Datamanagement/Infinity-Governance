@@ -20,29 +20,6 @@ export function TabNavigation() {
     { name: "Compliance", href: "/compliance" },
   ];
 
-  const QUICK_ACTIONS: Option[] = [
-    {
-      value: "addDomain",
-      label: "Add Domain",
-      description: "Create a new governance domain",
-    },
-    {
-      value: "createPolicy",
-      label: "Create Policy",
-      description: "Define new compliance policy",
-    },
-    {
-      value: "runComplianceCheck",
-      label: "Run Compliance Check",
-      description: "Scan assets for compliance",
-    },
-    {
-      value: "aiClassifier",
-      label: "AI Classifier",
-      description: "Auto-classify data assets",
-    },
-  ] as const;
-
   return (
     <div className="border-b border-gray-200 px-0 py-1 flex items-center justify-between">
       <nav className="flex gap-5">
@@ -63,7 +40,7 @@ export function TabNavigation() {
         ))}
       </nav>
       <div className="flex items-center gap-2">
-        {dashboardTab === "Compliance" ? (
+        {pathname === "/compliance" ? (
           <>
             <div>
               <Button
@@ -71,7 +48,8 @@ export function TabNavigation() {
                   "flex items-center gap-2 px-3 py-2 rounded-md",
                   "border border-gray-300 bg-primary",
                   "text-gray-800 font-semibold text-base",
-                  "transition-colors", "text-gray-50"
+                  "transition-colors",
+                  "text-gray-50",
                 )}
                 icon={<PlayIcon size={16} />}
               >

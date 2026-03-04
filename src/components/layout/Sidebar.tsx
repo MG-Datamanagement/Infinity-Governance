@@ -68,7 +68,7 @@ export function Sidebar() {
     <aside
       className={cn(
         "bg-white border-r border-gray-200 flex flex-col h-screen transition-all duration-300",
-        sidebarCollapsed ? "w-[52px]" : "w-60",
+        sidebarCollapsed ? "w-[70px]" : "w-60",
       )}
     >
       {/* Logo */}
@@ -89,8 +89,8 @@ export function Sidebar() {
           </div>
         )}
         {sidebarCollapsed && (
-          <div className="w-6 h-6 bg-primary rounded-md flex items-center justify-center mx-auto">
-            <span className="text-white font-bold text-lg">∞</span>
+          <div className="w-8 h-8 text-white bg-gray-950 rounded-lg flex items-center justify-center flex-shrink-0">
+            <BrandLogo />
           </div>
         )}
       </div>
@@ -99,8 +99,8 @@ export function Sidebar() {
       <button
         onClick={toggleSidebar}
         className={cn(
-          "absolute w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 z-20",
-          sidebarCollapsed ? "top-9 left-10" : "top-12 left-[226px]",
+          "absolute w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center hover:bg-gray-50 z-20 transition-all",
+          sidebarCollapsed ? "top-12 left-14" : "top-12 left-[226px]",
         )}
       >
         {sidebarCollapsed ? (

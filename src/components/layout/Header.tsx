@@ -1,11 +1,14 @@
 "use client";
 
-import { Search, Menu } from "lucide-react";
+import { Search, Menu, Database } from "lucide-react";
 import { useState } from "react";
 import { LuSlidersHorizontal } from "react-icons/lu";
 import { RiRobot2Line } from "react-icons/ri";
 import { LuCircleHelp } from "react-icons/lu";
 import { LuBell } from "react-icons/lu";
+import { cn } from "@/lib/utils";
+import { NotificationsModal } from "../ui/NotificationsModal";
+import { useOverviewData } from "@/hooks/useOverviewData";
 
 interface HeaderProps {
   userName: string;
@@ -13,6 +16,17 @@ interface HeaderProps {
 
 export function Header({ userName }: HeaderProps) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [isNotificationsOpen, setIsNotificationsOpen] =
+    useState<boolean>(false);
+  const [markAllAsRead, setMarkAllAsRead] = useState<boolean>(false);
+
+  const { activity } = useOverviewData();
+
+  const {
+    data: notifications,
+    isFetching: isNotificationsLoading,
+    error: isNotificationsError,
+  } = activity;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,11 +84,28 @@ export function Header({ userName }: HeaderProps) {
               </button>
             </div>
             <div>
-              <button className="p-1 rounded-lg transition-colors hidden md:block">
+              <button
+                onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+                className="p-1 rounded-lg transition-colors hidden md:block"
+              >
                 <LuBell size={20} className="text-slate-500" />
               </button>
             </div>
           </div>
+
+          {/* Notifications Tray */}
+          {isNotificationsOpen && (
+            <NotificationsModal
+              isOpen={isNotificationsOpen}
+              notifications={markAllAsRead ? [] : notifications}
+              onClose={() => {
+                setIsNotificationsOpen(!isNotificationsOpen);
+              }}
+              onMarkAsRead={() => setMarkAllAsRead(true)}
+              isLoading={isNotificationsLoading}
+              isError={isNotificationsError}
+            />
+          )}
         </div>
       </div>
     </header>

@@ -67,9 +67,9 @@ export default function QuickActionsDropdown() {
         onClick={() => setOpen(!open)}
         className={cn(
           "flex items-center gap-2 px-3 py-2 rounded-md",
-          "border border-gray-300 bg-gray-50",
+          "border border-gray-300 bg-gray-50/0",
           "text-gray-800 font-semibold text-base",
-          "hover:bg-gray-100 transition-colors",
+          "hover:bg-gray-50 transition-colors",
         )}
       >
         Quick actions

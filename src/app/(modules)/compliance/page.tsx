@@ -50,7 +50,7 @@ function ComplianceContent() {
 export default function CompliancePage() {
   return (
     <ErrorBoundary>
-      <ComplianceContent />;
+      <ComplianceContent />
     </ErrorBoundary>
   );
 }
