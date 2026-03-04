@@ -8,6 +8,7 @@ import {
   DomainAsset,
   PlatformUsage,
   RecentActivity,
+  RecentlyViewed,
 } from "@/types";
 import { DiPostgresql } from "react-icons/di";
 import { FaRegSnowflake } from "react-icons/fa";
@@ -265,7 +266,7 @@ export const MOCK_RECENT_ACTIVITY: RecentActivity[] = [
   },
 ];
 
-export const MOCK_RECENTLY_VIEWED = [
+export const MOCK_RECENTLY_VIEWED:RecentlyViewed[] = [
   {
     id: "1",
     name: "customers",

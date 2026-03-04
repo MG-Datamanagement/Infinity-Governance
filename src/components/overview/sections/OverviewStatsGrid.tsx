@@ -42,7 +42,7 @@ const defaultStats: DashboardStats = {
 
 export function OverviewStatsGrid({ stats = defaultStats }: Props) {
   return (
-    <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+    <div className="grid row-span-1 xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
       <StatCard
         icon={Database}
         iconColor="text-blue-600"

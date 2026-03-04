@@ -36,7 +36,7 @@ function ComplianceContent() {
       <ComplianceHeader />
 
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-        <div className="grid grid-cols-1 gap-2 lg:col-span-8">
+        <div className="grid grid-cols-1 gap-2 col-span-8">
           <ComplianceHealthSection trendsQuery={trends} />
           <ComplianceIssuesSection query={issues} />
         </div>

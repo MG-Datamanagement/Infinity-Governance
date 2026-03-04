@@ -1,4 +1,4 @@
-import { MOCK_RECENTLY_VIEWED } from "@/constants/mockData";
+import { MOCK_RECENTLY_VIEWED } from "@/lib/mockData";
 import { dashboardApiClient } from "@/lib/api-clients/dashboardApiClient";
 import {
   DashboardEntityMetricsResponse,

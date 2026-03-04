@@ -9,7 +9,7 @@ import {
   MOCK_PLATFORM_USAGE,
   MOCK_RECENT_ACTIVITY,
   MOCK_RECENTLY_VIEWED,
-} from '@/constants/mockData';
+} from '@/lib/mockData';
 
 export interface Connector {
   id: string;

@@ -16,19 +16,21 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OverviewData } from "@/hooks/useOverviewData";
 import { IconType } from "react-icons/lib";
 import { ActivityTabType, useAppStore } from "@/store/appStore";
+import { RecentActivity, RecentlyViewed } from "@/types";
 
 type Props = {
   activityQuery: OverviewData["activity"];
   recentlyViewedQuery: OverviewData["recentlyViewed"];
 };
 
-const TABS: { id: ActivityTabType; label: string; icon: React.ElementType }[] = [
-  { id: "recent", label: "Recent Activity", icon: Activity },
-  { id: "viewed", label: "Recently Viewed", icon: Clock },
-];
+const TABS: { id: ActivityTabType; label: string; icon: React.ElementType }[] =
+  [
+    { id: "recent", label: "Recent Activity", icon: Activity },
+    { id: "viewed", label: "Recently Viewed", icon: Clock },
+  ];
 
 const MAX_RECENT_ACTIVITY_VISIBLE_ITEMS = 6;
-const MAX_RECENTLY_VIEWED_VISIBLE_ITEMS = 6;
+const MAX_RECENTLY_VIEWED_VISIBLE_ITEMS = 5;
 
 type ActivityItemProps = {
   name: string;
@@ -184,12 +186,13 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
 
   const activeTab = useAppStore((s) => s.activityTab);
   const setActivityTab = useAppStore((s) => s.setActivityTab);
-
   const isRecent = activeTab === "recent";
   const isLoading = isRecent ? activityLoading : recentlyViewedLoading;
   const hasError = isRecent ? activityError : recentlyViewedError;
   const onRetry = isRecent ? refetchActivity : refetchRecentlyViewed;
-  const items = isRecent ? activity : recentlyViewed;
+  const items: RecentActivity[] | RecentlyViewed[] | undefined = isRecent
+    ? activity
+    : recentlyViewed;
 
   const viewAllLabel = isRecent ? "View All Activity" : "View All Datasets";
 
@@ -253,27 +256,27 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
             />
           )}
 
-          {!isLoading && !hasError && isRecent ? (
+          {!isLoading && !hasError && activeTab === "recent" && (
             <>
-              {activity &&
-                activity.length > 0 &&
-                activity
+              {items &&
+                items.length > 0 &&
+                items
                   .slice(0, MAX_RECENT_ACTIVITY_VISIBLE_ITEMS)
                   .map((item) => (
                     <TimelineActivityItem
                       key={item.id}
                       name={item.name}
                       time={item.time || ""}
-                      // platform={item.platform || ""}
-                      // type={item.type}
                     />
                   ))}
             </>
-          ) : (
+          )}
+
+          {!isLoading && !hasError && activeTab === "viewed" && (
             <>
-              {recentlyViewed &&
-                recentlyViewed.length > 0 &&
-                recentlyViewed
+              {items &&
+                items.length > 0 &&
+                (items as RecentlyViewed[])
                   .slice(0, MAX_RECENTLY_VIEWED_VISIBLE_ITEMS)
                   .map((item) => (
                     <ActivityItemV2
@@ -291,19 +294,13 @@ function ActivityContent({ activityQuery, recentlyViewedQuery }: Props) {
           )}
         </div>
 
+        {/* Footer */}
         <div className="px-6 py-1">
           <button className="text-indigo-600 text-xs hover:text-indigo-600 hover:underline transition-colors">
             {viewAllLabel}
           </button>
         </div>
       </div>
-
-      {/* Footer */}
-      {/* <div className="px-0.5 py-2">
-        <button className="text-primary text-xs hover:underline w-full text-start">
-          {viewAllLabel}
-        </button>
-      </div> */}
     </div>
   );
 }

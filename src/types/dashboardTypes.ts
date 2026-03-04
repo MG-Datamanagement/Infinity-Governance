@@ -1,3 +1,5 @@
+import { IconType } from "react-icons/lib";
+
 export type InlineStateType = "loading" | "empty" | "error";
 
 export type Option = {
@@ -86,10 +88,19 @@ export interface PlatformUsage {
 }
 
 export interface RecentlyViewed {
+  // id: string;
+  // type: "Table" | "View";
+  // name?: string;
+  // platform?: string;
+
   id: string;
-  type: "Table" | "View";
-  name?: string;
-  platform?: string;
+  name: string;
+  platform: string;
+  tag: string;
+  tagColor: string;
+  time: string;
+  icon: IconType;
+  iconColor: string;
 }
 
 export interface RecentActivity {
