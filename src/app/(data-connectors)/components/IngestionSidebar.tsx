@@ -23,12 +23,12 @@ interface IngestionSidebarProps {
 
 const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, isOpen, onClose }) => {
     const [steps, setSteps] = useState<Step[]>([
-        { label: "Establishing Connection", status: 'active' },
+        { label: "Establishing connection", status: 'active' },
         { label: "Schema Discovery", status: 'pending' },
-        { label: "Ingesting: customers_prod", status: 'pending' },
-        { label: "Ingesting: orders_master", status: 'pending' },
-        { label: "Ingesting: transactions_ledger", status: 'pending' },
+        { label: "Ingestion started", status: 'pending' },
+        { label: "Ingestion completed", status: 'pending' },
         { label: "PII Detection Scan", status: 'pending' },
+        { label: "Metadata Execution Summary", status: 'pending' },
     ]);
 
     const [isThinking, setIsThinking] = useState(true);
@@ -39,6 +39,13 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     const [isComplete, setIsComplete] = useState(false);
 
     const eventSourceRef = useRef<EventSource | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [logs]);
 
     useEffect(() => {
         if (isOpen) {
@@ -92,41 +99,33 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     }, [jobId, isOpen]);
 
     const handleNewLog = (log: IngestionLog) => {
+        setLogs(prev => [...prev.slice(-100), log]);
         const msg = log.message;
-        setLogs(prev => [...prev.slice(-20), log]);
 
         if (msg.includes("Job started")) {
-            updateStep("Establishing Connection", 'completed');
+            updateStep("Establishing connection", 'completed');
             updateStep("Schema Discovery", 'active');
             setProgress(2);
         } else if (msg.includes("Found") && msg.includes("total tables")) {
             updateStep("Schema Discovery", 'completed');
             setProgress(3);
-        } else if (msg.includes("Analyzing table")) {
-            const tableName = msg.match(/'([^']+)'/)?.[1];
-            if (tableName) {
-                setSteps(prev => {
-                    const existing = prev.find(s => s.label.includes(tableName));
-                    if (existing) {
-                        return prev.map(s => s.label.includes(tableName) ? { ...s, status: 'active' } : s);
-                    }
-                    // Insert before PII scan
-                    const piiIdx = prev.findIndex(s => s.label === "PII Detection Scan");
-                    const newStep: Step = { label: `Ingesting: ${tableName}`, status: 'active' };
-                    const next = [...prev];
-                    next.splice(piiIdx, 0, newStep);
-                    return next;
-                });
-            }
-        } else if (msg.includes("→ tag=")) {
-             const tableName = msg.match(/'([^']+)'/)?.[1];
-             if (tableName) {
-                updateStep(`Ingesting: ${tableName}`, 'completed');
-                setProgress(p => Math.min(p + 1, totalSteps - 1));
-             }
+        } else if (msg.includes("PostgresSink connected")) {
+            updateStep("Ingestion started", 'active');
+            setProgress(4);
+        } else if (msg.includes("PostgresSink closed")) {
+            setProgress(p => Math.min(p + 1, totalSteps - 2));
         } else if (msg.includes("Metadata ingestion complete")) {
+            updateStep("Ingestion started", 'completed');
+            updateStep("Ingestion completed", 'completed');
             updateStep("PII Detection Scan", 'active');
             setProgress(totalSteps - 1);
+        } else if (msg.includes("Ingestion job completed")) {
+            setIsComplete(true);
+            setIsThinking(false);
+            updateStep("PII Detection Scan", 'completed');
+            updateStep("Metadata Execution Summary", 'completed');
+            setSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
+            setProgress(totalSteps);
         }
     };
 
@@ -139,14 +138,14 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     return (
         <>
             {/* Overlay */}
-            <div 
-                className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[60] transition-opacity duration-300" 
+            <div
+                className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[60] transition-opacity duration-300"
                 onClick={onClose}
             />
 
             {/* Sidebar Container */}
             <div className={`fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl z-[70] transform transition-transform duration-500 ease-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                
+
                 {/* Header */}
                 <div className="bg-indigo-600 p-6 text-white relative flex-shrink-0">
                     <div className="flex items-center justify-between mb-2">
@@ -173,13 +172,13 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     </div>
 
                     <div className="mt-4">
-                         <div className="flex items-center justify-between">
-                            <div className="inline-flex items-center gap-1.5 bg-orange-500/90 border border-orange-400 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
-                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                        <div className="flex items-center justify-between">
+                            <div className={`inline-flex items-center gap-1.5 border text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg ${isThinking ? 'bg-orange-500/90 border-orange-400' : 'bg-green-500 border-green-400'}`}>
+                                <span className={`w-1.5 h-1.5 bg-white rounded-full ${isThinking ? 'animate-pulse' : ''}`} />
                                 {isThinking ? 'Thinking' : 'Completed'}
                             </div>
                             <button className="text-xs font-bold text-white/70 hover:text-white transition-colors underline underline-offset-4">Override</button>
-                         </div>
+                        </div>
                     </div>
                 </div>
 
@@ -189,7 +188,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                         <div className="bg-white border-2 border-indigo-100 rounded-2xl p-4 shadow-xl flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
                             <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
                                 <div className="p-1 rounded bg-indigo-50 border border-indigo-100">
-                                     <Zap className="w-5 h-5 text-indigo-600 fill-indigo-600" />
+                                    <Zap className="w-5 h-5 text-indigo-600 fill-indigo-600" />
                                 </div>
                             </div>
                             <div className="flex-1 min-w-0">
@@ -202,7 +201,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     {/* Summary Info */}
                     <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                             <Zap className="w-12 h-12 text-indigo-600" />
+                            <Zap className="w-12 h-12 text-indigo-600" />
                         </div>
                         <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3">AI Agent Summary</h3>
                         <div className="space-y-2.5">
@@ -213,7 +212,9 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                                 <span className="text-xs font-medium text-gray-700">Connecting to {sourceName}...</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 rounded-full border border-indigo-400 border-t-transparent animate-spin flex-shrink-0" />
+                                <div className={`w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 ${isComplete ? 'bg-green-100' : 'border border-indigo-400 border-t-transparent animate-spin'}`}>
+                                    {isComplete && <Check className="w-2.5 h-2.5 text-green-600 stroke-[3]" />}
+                                </div>
                                 <span className="text-xs font-medium text-gray-700">Fetching dataset info...</span>
                             </div>
                         </div>
@@ -221,15 +222,25 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
 
                     {/* Central Animation Placeholder */}
                     <div className="flex flex-col items-center justify-center py-6">
-                         <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center mb-4 relative">
-                            <div className="absolute inset-x-0 bottom-[-10px] flex justify-center gap-1.5 opacity-40">
-                                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-0" />
-                                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-150" />
-                                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-300" />
-                            </div>
-                            <Zap className="w-10 h-10 text-indigo-600 fill-indigo-100" />
-                         </div>
-                         <h4 className="text-lg font-bold text-gray-800 tracking-tight">Schema Discovery</h4>
+                        <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center mb-4 relative">
+                            {!isComplete && (
+                                <div className="absolute inset-x-0 bottom-[-10px] flex justify-center gap-1.5 opacity-40">
+                                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-0" />
+                                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-150" />
+                                    <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-300" />
+                                </div>
+                            )}
+                            {isComplete ? (
+                                <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center animate-in zoom-in duration-500">
+                                    <Check className="w-7 h-7 text-white stroke-[3]" />
+                                </div>
+                            ) : (
+                                <Zap className="w-10 h-10 text-indigo-600 fill-indigo-100" />
+                            )}
+                        </div>
+                        <h4 className="text-lg font-bold text-gray-800 tracking-tight">
+                            {isComplete ? 'Ingestion Complete' : 'Schema Discovery'}
+                        </h4>
                     </div>
 
                     {/* Pipeline Progress */}
@@ -240,51 +251,54 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                         </div>
                         <div className="p-5">
                             <div className="w-full bg-gray-200 rounded-full h-2 mb-4 overflow-hidden">
-                                <div 
-                                    className="bg-indigo-600 h-full transition-all duration-1000 ease-in-out" 
+                                <div
+                                    className="bg-indigo-600 h-full transition-all duration-1000 ease-in-out"
                                     style={{ width: `${(progress / totalSteps) * 100}%` }}
                                 />
                             </div>
 
                             <div className="flex items-center gap-2 mb-4">
-                                <div className="inline-flex items-center gap-1.5 bg-indigo-100 px-2 py-0.5 rounded text-[10px] font-extrabold text-indigo-700 uppercase">
-                                     <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                                     Ingesting
+                                <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${isComplete ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                                    {isComplete ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+                                    {isComplete ? 'Execution Complete' : 'Live Activity'}
                                 </div>
-                                <span className="text-xs font-bold text-gray-700">Schema Discovery</span>
+                                <span className="text-xs font-bold text-gray-700">
+                                    {isComplete ? 'All processes finished' : 'Streaming raw logs...'}
+                                </span>
                             </div>
 
-                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                {steps.map((step, i) => (
-                                    <div key={i} className="flex items-start gap-4 group">
-                                        <div className="mt-0.5 flex-shrink-0">
-                                            {step.status === 'completed' ? (
-                                                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
-                                                    <Check className="w-3.5 h-3.5 text-green-600 stroke-[3]" />
-                                                </div>
-                                            ) : step.status === 'active' ? (
-                                                <div className="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
-                                            ) : (
-                                                <div className="w-5 h-5 rounded-full border-2 border-gray-100" />
-                                            )}
+                            {/* Raw Log Viewer */}
+                            <div
+                                ref={scrollRef}
+                                className="bg-gray-900 rounded-xl p-4 font-mono text-[10px] leading-relaxed h-[350px] overflow-y-auto custom-scrollbar-dark shadow-inner border border-gray-800"
+                            >
+                                {logs.length === 0 ? (
+                                    <div className="text-gray-500 italic">Waiting for connection...</div>
+                                ) : (
+                                    logs.map((log, i) => (
+                                        <div key={i} className="mb-1.5 flex gap-3 group">
+                                            <span className="text-gray-600 shrink-0 select-none">
+                                                {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                            </span>
+                                            <span className={`shrink-0 font-bold uppercase w-12 ${log.level === 'error' ? 'text-red-400' :
+                                                    log.level === 'warning' ? 'text-orange-400' :
+                                                        'text-green-400'
+                                                }`}>
+                                                [{log.level}]
+                                            </span>
+                                            <span className="text-gray-300 break-all group-hover:text-white transition-colors">
+                                                {log.message}
+                                            </span>
                                         </div>
-                                        <p className={`text-xs font-bold transition-colors ${step.status === 'completed' ? 'text-gray-400' : step.status === 'active' ? 'text-indigo-600' : 'text-gray-300'}`}>
-                                            {step.label}
-                                        </p>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Footer Badge */}
-                <div className="p-6 pt-0 flex justify-center">
-                     <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-widest grayscale opacity-60">
-                        <Zap className="w-3.5 h-3.5" />
-                        Built with Magic Patterns
-                     </div>
-                </div>
+                {/* Footer Placeholder (Removed) */}
+                <div className="p-6 pt-0" />
 
                 {/* Custom styling for scrollbar */}
                 <style jsx>{`
@@ -300,6 +314,19 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     }
                     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
                         background: #cbd5e1;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar {
+                        width: 4px;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar-track {
+                        background: #111827;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar-thumb {
+                        background: #374151;
+                        border-radius: 10px;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+                        background: #4b5563;
                     }
                 `}</style>
             </div>

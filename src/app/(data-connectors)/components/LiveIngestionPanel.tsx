@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Loader2, Check, Zap, X } from 'lucide-react';
 
 interface IngestionLog {
     timestamp: string;
@@ -22,18 +23,21 @@ interface Step {
 
 interface LiveIngestionPanelProps {
     jobId: string;
+    sourceId: string;
     sourceName: string;
     onClose: () => void;
     onNotFound?: () => void;
 }
 
-const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceName, onClose, onNotFound }) => {
+const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceId, sourceName, onClose, onNotFound }) => {
+    const [isScanning, setIsScanning] = useState(false);
     const [steps, setSteps] = useState<Step[]>([
-        { label: "Establishing Connection", status: 'active' },
+        { label: "Establishing connection", status: 'active' },
         { label: "Schema Discovery", status: 'pending' },
-        { label: "Metadata Ingestion", status: 'pending' },
+        { label: "Ingestion started", status: 'pending' },
+        { label: "Ingestion completed", status: 'pending' },
         { label: "PII Detection Scan", status: 'pending' },
-        { label: "Metadata Extraction Summary", status: 'pending' },
+        { label: "Metadata Execution Summary", status: 'pending' },
     ]);
 
     const [datasets, setDatasets] = useState<IngestingDataset[]>([]);
@@ -43,6 +47,13 @@ const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceNa
     const [isComplete, setIsComplete] = useState(false);
 
     const eventSourceRef = useRef<EventSource | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [logs]);
 
     useEffect(() => {
         if (!jobId) return;
@@ -99,44 +110,61 @@ const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceNa
 
         // Parse Step transitions
         if (msg.includes("Job started")) {
-            updateStep("Establishing Connection", 'completed');
+            updateStep("Establishing connection", 'completed');
             updateStep("Schema Discovery", 'active');
         } else if (msg.includes("Found") && msg.includes("total tables")) {
             const match = msg.match(/Found (\d+) total tables/);
             if (match) setTotalTables(parseInt(match[1]));
             updateStep("Schema Discovery", 'completed');
-            updateStep("Metadata Ingestion", 'active');
-        } else if (msg.includes("[Ingestion] Analyzing table")) {
-            const tableName = msg.match(/'([^']+)'/)?.[1];
-            if (tableName) {
-                setDatasets(prev => {
-                    if (prev.find(d => d.name === tableName)) return prev;
-                    return [...prev, { name: tableName, rows: '-', status: 'Ingesting' }];
-                });
-            }
-        } else if (msg.includes("Metadata ingestion complete")) {
-            updateStep("Metadata Ingestion", 'completed');
-            updateStep("PII Detection Scan", 'active');
-        } else if (msg.includes("[AutoPII] Analyzing table")) {
-            const tableName = msg.match(/'([^']+)'/)?.[1];
-            if (tableName) {
-                setDatasets(prev => prev.map(d => d.name === tableName ? { ...d, status: 'Ingesting' } : d));
-            }
-        } else if (msg.includes("→ tag=")) {
-            const match = msg.match(/✓ '([^']+)' → tag='([^']+)'/);
-            if (match) {
-                const [_, tableName, tag] = match;
-                setDatasets(prev => prev.map(d => d.name === tableName ? { ...d, status: 'Ready', piiTag: tag } : d));
+        } else if (msg.includes("PostgresSink connected")) {
+            updateStep("Ingestion started", 'active');
+        } else if (msg.includes("PostgresSink closed")) {
+            const recordsMatch = msg.match(/Total records written: (\d+)/);
+            if (recordsMatch) {
                 setCompletedTables(prev => prev + 1);
             }
-        } else if (msg.includes("detection for source") && msg.includes("human_approval")) {
-            // Started PII detection
+        } else if (msg.includes("Metadata ingestion complete")) {
+            updateStep("Ingestion started", 'completed');
+            updateStep("Ingestion completed", 'completed');
             updateStep("PII Detection Scan", 'active');
+        } else if (msg.includes("Ingestion job completed")) {
+            setIsComplete(true);
+            updateStep("PII Detection Scan", 'completed');
+            updateStep("Metadata Execution Summary", 'completed');
+            setSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
+        } else if (msg.includes("Duplicate key")) {
+            console.warn("Ingestion warning:", msg);
         }
     };
 
     const updateStep = (label: string, status: Step['status']) => {
         setSteps(prev => prev.map(s => s.label === label ? { ...s, status } : s));
+    };
+
+    const handlePiiScan = async () => {
+        setIsScanning(true);
+        try {
+            const response = await fetch('http://172.188.2.173:8005/api/v1/scan/source', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    source_id: sourceId,
+                    save_to_db: true,
+                    assigned_by: "ai-auto",
+                    min_confidence: 0
+                })
+            });
+            if (response.ok) {
+                alert("PII Scan triggered successfully");
+            } else {
+                alert("Failed to trigger PII Scan");
+            }
+        } catch (err) {
+            console.error("PII Scan error:", err);
+            alert("Error connecting to scan service");
+        } finally {
+            setIsScanning(false);
+        }
     };
 
     const progressPercent = useMemo(() => {
@@ -159,7 +187,6 @@ const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceNa
                         {completedTables}/{totalTables || '?'} steps
                     </span>
                 </div>
-                {/* Progress Bar Container */}
                 <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
                     <div
                         className={`${isComplete ? 'bg-green-500' : 'bg-indigo-600'} h-full transition-all duration-500 ease-out`}
@@ -168,164 +195,127 @@ const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceNa
                 </div>
             </div>
 
-            <div className="grid grid-cols-12 gap-6 p-6">
-                {/* Left Panel: Pipeline Steps */}
-                <div className="col-span-4 border-r border-gray-100 pr-6">
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-                            <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                            </svg>
-                        </div>
-                        <div>
-                            <p className="text-sm font-bold text-gray-900">AI Pipeline</p>
-                            <p className={`text-xs font-medium ${isComplete ? 'text-green-500' : 'text-indigo-500'}`}>
-                                {isComplete ? 'Completed' : 'Ingesting...'}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="space-y-4">
-                        {steps.map((step, idx) => (
-                            <div key={idx} className="flex items-start gap-3">
-                                <div className="mt-1">
-                                    {step.status === 'completed' ? (
-                                        <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
-                                            <svg className="w-3.5 h-3.5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                            </svg>
-                                        </div>
-                                    ) : step.status === 'active' ? (
-                                        <div className="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
-                                    ) : (
-                                        <div className="w-5 h-5 rounded-full bg-gray-100 border border-gray-200" />
-                                    )}
-                                </div>
-                                <div>
-                                    <p className={`text-xs font-medium ${step.status === 'completed' ? 'text-gray-900' :
-                                        step.status === 'active' ? 'text-indigo-600' : 'text-gray-400'
-                                        }`}>
-                                        {step.label}
-                                    </p>
-                                    {step.status === 'active' && (
-                                        <p className="text-[10px] text-indigo-400 animate-pulse mt-0.5">In progress...</p>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="mt-8 pt-8 border-t border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-4">Force Complete</p>
-                        <div className="space-y-2">
-                            <button className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white text-xs font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                                Complete with PII scan
-                            </button>
-                            <button className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-600 text-xs font-semibold py-2 px-4 rounded-lg hover:bg-gray-50 transition-colors">
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                                </svg>
-                                Complete, skip PII
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Right Panel: Dataset Table */}
-                <div className="col-span-8 flex flex-col">
-                    <div className="flex items-center justify-between mb-4">
-                        <h4 className="text-sm font-bold text-gray-900">Live Dataset Ingestion</h4>
-                        <div className="flex items-center gap-2 px-2 py-1 bg-green-50 rounded-full border border-green-100">
-                            <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                            <span className="text-[10px] font-bold text-green-600 uppercase">
-                                {completedTables}/{datasets.length || (totalTables || 0)} ready
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="border border-gray-100 rounded-xl overflow-hidden bg-gray-50/30 flex-1">
-                        <table className="w-full border-collapse">
-                            <thead>
-                                <tr className="border-b border-gray-100">
-                                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Dataset</th>
-                                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider text-right">Rows</th>
-                                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider text-right">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {datasets.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={3} className="px-4 py-8 text-center text-xs text-gray-400 italic">
-                                            Waiting for metadata discovery...
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    datasets.map((ds, i) => (
-                                        <tr key={i} className="hover:bg-white transition-colors group">
-                                            <td className="px-4 py-3">
-                                                <div className="flex items-center gap-2">
-                                                    <svg className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-                                                    </svg>
-                                                    <span className="text-sm font-medium text-gray-700">{ds.name}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <span className="text-xs font-mono text-gray-500">{ds.rows}</span>
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <div className="flex items-center justify-end gap-2">
-                                                    {ds.status === 'Ingesting' ? (
-                                                        <>
-                                                            <div className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                                                            <span className="text-xs font-semibold text-indigo-500">Ingesting</span>
-                                                        </>
-                                                    ) : ds.status === 'Ready' ? (
-                                                        <>
-                                                            {ds.piiTag && (
-                                                                <span className="text-[10px] font-bold bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded uppercase">
-                                                                    {ds.piiTag}
-                                                                </span>
-                                                            )}
-                                                            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                                                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                                            </svg>
-                                                            <span className="text-xs font-semibold text-green-600">Ready</span>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-xs font-semibold text-red-500">Error</span>
-                                                    )}
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* PII Detection Banner */}
-                    <div className="mt-4 bg-orange-50/50 border border-orange-100 rounded-xl p-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-                                <svg className="w-4 h-4 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                                </svg>
+            <div className="p-6">
+                <div className="grid grid-cols-12 gap-8">
+                    {/* Left Column: AI Pipeline */}
+                    <div className="col-span-4 border-r border-gray-100 pr-8">
+                        <div className="flex items-center gap-3 mb-6 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                            <div className="w-10 h-10 rounded-lg bg-white shadow-sm flex items-center justify-center">
+                                <Zap className="w-6 h-6 text-indigo-600 fill-indigo-100" />
                             </div>
                             <div>
-                                <p className="text-xs font-bold text-orange-800">Execute PII Detection on datasets</p>
-                                <p className="text-[10px] text-orange-600">Scan for sensitive information automatically</p>
+                                <p className="text-sm font-bold text-gray-900">AI Pipeline: {sourceName}</p>
+                                <p className={`text-[11px] font-medium ${isComplete ? 'text-green-600' : 'text-indigo-600'}`}>
+                                    {isComplete ? 'Ready' : 'Ingesting...'}
+                                </p>
                             </div>
                         </div>
-                        <button className="text-xs font-bold text-orange-600 hover:text-orange-700 transition-colors">
-                            Configure →
-                        </button>
+
+                        <div className="space-y-5">
+                            {steps.map((step, idx) => (
+                                <div key={idx} className="flex items-start gap-3 group">
+                                    <div className="mt-1 flex-shrink-0">
+                                        {step.status === 'completed' ? (
+                                            <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
+                                                <Check className="w-3.5 h-3.5 text-green-600 stroke-[3]" />
+                                            </div>
+                                        ) : step.status === 'active' ? (
+                                            <div className="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
+                                        ) : (
+                                            <div className="w-5 h-5 rounded-full bg-gray-50 border border-gray-200" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className={`text-[12px] font-bold tracking-tight ${step.status === 'completed' ? 'text-gray-500 line-through' :
+                                            step.status === 'active' ? 'text-indigo-600 font-extrabold' : 'text-gray-300'
+                                            }`}>
+                                            {step.label}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-10 pt-6 border-t border-gray-50">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Force Complete</p>
+                            <div className="space-y-2">
+                                <button
+                                    onClick={handlePiiScan}
+                                    disabled={isScanning}
+                                    className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white text-[11px] font-bold py-2.5 px-4 rounded-xl hover:bg-indigo-700 transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isScanning ? (
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    ) : (
+                                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                    )}
+                                    {isScanning ? 'Triggering Scan...' : 'Complete with PII scan'}
+                                </button>
+                                <button className="w-full flex items-center justify-center gap-2 border border-gray-200 text-gray-500 text-[11px] font-bold py-2 px-4 rounded-xl hover:bg-gray-50 transition-all active:scale-95">
+                                    <Zap className="w-3.5 h-3.5" />
+                                    Complete, skip PII
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right Column: Live Ingestion Log */}
+                    <div className="col-span-8">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-bold text-gray-800">Live Execution Log</h3>
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-green-100 text-green-700 text-[10px] font-bold uppercase tracking-tighter">
+                                <div className={`w-1.5 h-1.5 rounded-full bg-green-500 ${isComplete ? '' : 'animate-pulse'}`} />
+                                {completedTables}/{totalTables || 0} ready
+                            </div>
+                        </div>
+
+                        <div
+                            ref={scrollRef}
+                            className="bg-gray-900 rounded-xl p-5 font-mono text-[10px] leading-relaxed h-[420px] overflow-y-auto custom-scrollbar-dark shadow-inner border border-gray-800"
+                        >
+                            {logs.length === 0 ? (
+                                <div className="text-gray-600 flex items-center gap-2 italic">
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                    Waiting for live event stream...
+                                </div>
+                            ) : (
+                                logs.map((log, i) => (
+                                    <div key={i} className="mb-1.5 flex gap-4 group">
+                                        <span className="text-gray-600 shrink-0 select-none w-16">
+                                            {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                        </span>
+                                        <span className={`shrink-0 font-bold uppercase w-12 ${log.level === 'error' ? 'text-red-400' :
+                                            log.level === 'warning' ? 'text-orange-400' :
+                                                'text-green-400'
+                                            }`}>
+                                            [{log.level}]
+                                        </span>
+                                        <span className="text-gray-300 break-all group-hover:text-white transition-colors">
+                                            {log.message}
+                                        </span>
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <style jsx>{`
+                .custom-scrollbar-dark::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .custom-scrollbar-dark::-webkit-scrollbar-track {
+                    background: #111827;
+                }
+                .custom-scrollbar-dark::-webkit-scrollbar-thumb {
+                    background: #374151;
+                    border-radius: 10px;
+                }
+                .custom-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+                    background: #4b5563;
+                }
+            `}</style>
         </div>
     );
 };
