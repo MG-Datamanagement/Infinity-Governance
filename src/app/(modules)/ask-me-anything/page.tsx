@@ -115,13 +115,13 @@ const AskMeAnything: React.FC = () => {
     setIsThinking(true);
 
     const agentNames = "lineage_tracker,schema_scout";
-    // uiState.selectedAgents.length
-    //   ? uiState.selectedAgents?.join(",")
-    //   : CONSTANTS.defaultAgentName;
+    uiState.selectedAgents.length
+      ? uiState.selectedAgents?.join(",")
+      : CONSTANTS.defaultAgentName;
     const datasetNames = "catalogs,api_logs";
-    // uiState.selectedDatasets.length
-    //   ? uiState.selectedDatasets?.join(",")
-    //   : CONSTANTS.defaultDatasetName;
+    uiState.selectedDatasets.length
+      ? uiState.selectedDatasets?.join(",")
+      : CONSTANTS.defaultDatasetName;
 
     const isMemoryEnabled = uiState.memoryEnabled ? "on" : "off";
     const isReasoningEnabled = uiState.reasoningEnabled ? "on" : "off";
@@ -143,15 +143,11 @@ const AskMeAnything: React.FC = () => {
           "The catalogs table schema defines a foreign key constraint catalogs_owner_id_fkey on owner_id referencing owners(id) with ON DELETE SET NULL. This establishes a direct dependency from catalogs to owners.",
         source: ["catalogs"],
       };
-      const response: any = await new Promise((res, rej) => {
-        res(mock)
-      })
-      // chatApiServices.sendMessage(
-      //   payload,
-      //   agentNames,
-      //   datasetNames,
-      // );
-
+      const response: any = await chatApiServices.sendMessage(
+        payload,
+        agentNames,
+        datasetNames,
+      );
 
       const aiMessage: Message = {
         id: crypto.randomUUID(),

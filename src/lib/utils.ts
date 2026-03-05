@@ -15,7 +15,7 @@ export function formatDate(date: string | Date): string {
     day: "numeric",
     year: "numeric",
     hour: "numeric",
-    minute: "numeric"
+    minute: "numeric",
   });
 }
 
@@ -97,3 +97,54 @@ export function getPlatformColor(name: string) {
   const index = Math.abs(hash) % platformColors.length;
   return platformColors[index];
 }
+
+export const downloadCSV = (csv: string, filename: string): void => {
+  if (!csv) {
+    console.error("CSV is empty");
+    return;
+  }
+
+  const blob = new Blob(["\uFEFF" + csv], {
+    type: "text/csv;charset=utf-8;",
+  });
+
+  const url = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+
+  document.body.appendChild(a);
+  a.click();
+
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
+
+export const downloadFileFromResponse = async (response: Response) => {
+  if (!response.ok) {
+    throw new Error("Download failed");
+  }
+
+  const blob = await response.blob();
+
+  // extract filename from header
+  const disposition = response.headers.get("content-disposition");
+  let fileName = "my_db_datasets";
+
+  if (disposition && disposition.includes("filename=")) {
+    fileName = disposition.split("filename=")[1].replace(/"/g, "");
+  }
+
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+};

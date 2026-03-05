@@ -427,12 +427,51 @@ export interface ApiCatalogDetail {
   columns: any[];
 }
 
-export const dataSourcesService = {
-  async fetchDataSources(params: { source_type?: string; status?: string; limit?: number }) {
-    const url = new URL("http://172.188.2.173:8005/api/v1/sources-list");
+export type ClassificationTag = "PII" | "Non-PII" | "Error";
 
-    if (params.source_type) url.searchParams.append("source_type", params.source_type);
-    if (params.status && params.status !== 'All') url.searchParams.append("status", params.status.toLowerCase());
+export interface PiiClassificationRequest {
+  source_id: string;
+  Require_human_approval: boolean;
+  assigned_by: string;
+  min_confidence: number;
+}
+
+export interface TableClassificationResult {
+  catalog_id: string;
+  table_name: string;
+  full_name: string;
+
+  suggested_tag: ClassificationTag;
+  tag_id: string | null;
+
+  confidence_score: number;
+  reasoning: string;
+
+  saved: boolean;
+}
+
+export interface ClassificationResponse {
+  source_id: string;
+  total_catalogs: number;
+  classified: number;
+  saved: number;
+  results: TableClassificationResult[];
+}
+
+const BASE_DEV_API_URL = process.env.NEXT_PUBLIC_DEV_API_URL
+
+export const dataSourcesService = {
+  async fetchDataSources(params: {
+    source_type?: string;
+    status?: string;
+    limit?: number;
+  }) {
+    const url = new URL(`${BASE_DEV_API_URL}/api/v1/sources-list`);
+
+    if (params.source_type)
+      url.searchParams.append("source_type", params.source_type);
+    if (params.status && params.status !== "All")
+      url.searchParams.append("status", params.status.toLowerCase());
     if (params.limit) url.searchParams.append("limit", params.limit.toString());
 
     try {
@@ -448,22 +487,28 @@ export const dataSourcesService = {
     }
   },
 
-  async createDataSource(type: 'postgres' | 'mongodb' | 'postgresql', data: any) {
-    const endpoint = (type === 'postgres' || type === 'postgresql') ? 'postgres' : 'mongodb';
-    const url = `http://172.188.2.173:8005/api/v1/sources/${endpoint}`;
+  async createDataSource(
+    type: "postgres" | "mongodb" | "postgresql",
+    data: any,
+  ) {
+    const endpoint =
+      type === "postgres" || type === "postgresql" ? "postgres" : "mongodb";
+    const url = `${BASE_DEV_API_URL}/api/v1/sources/${endpoint}`;
 
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `API error: ${response.statusText}`);
+        throw new Error(
+          errorData.message || `API error: ${response.statusText}`,
+        );
       }
 
       return await response.json();
@@ -473,8 +518,9 @@ export const dataSourcesService = {
     }
   },
 
-  async fetchSourceStats(id: string, typeFilter:string, statusFiter:string) {
-    const url = `http://172.188.2.173:8005/api/v1/sources/${id}/stats?type=${typeFilter}&status=${statusFiter}`;
+  async fetchSourceStats(id: string, typeFilter?: string, statusFiter?: string) {
+    // const url = `${BASE_DEV_API_URL}/api/v1/sources/${id}/stats?type=${typeFilter}&status=${statusFiter}`;
+    const url = `${BASE_DEV_API_URL}/api/v1/sources/${id}/stats`;
     try {
       const response = await fetch(url);
       if (!response.ok) {
@@ -488,13 +534,20 @@ export const dataSourcesService = {
     }
   },
 
-  async ingestSource(sourceId: string): Promise<{ job_id: string; source_id: string; status: string; message: string }> {
-    const url = `http://172.188.2.173:8005/api/v1/ingest-source`;
+  async ingestSource(
+    sourceId: string,
+  ): Promise<{
+    job_id: string;
+    source_id: string;
+    status: string;
+    message: string;
+  }> {
+    const url = `${BASE_DEV_API_URL}/api/v1/ingest-source`;
     try {
       const response = await fetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ source_id: sourceId }),
       });
@@ -504,13 +557,16 @@ export const dataSourcesService = {
       }
       return await response.json();
     } catch (error) {
-      console.error(`Failed to trigger ingestion for source ${sourceId}:`, error);
+      console.error(
+        `Failed to trigger ingestion for source ${sourceId}:`,
+        error,
+      );
       throw error;
     }
   },
 
   async fetchOwnersList(limit: number = 100) {
-    const url = `http://172.188.2.173:8005/api/v1/owners-list?limit=${limit}`;
+    const url = `${BASE_DEV_API_URL}/api/v1/owners-list?limit=${limit}`;
     try {
       const response = await fetch(url);
       if (!response.ok) {
@@ -525,7 +581,7 @@ export const dataSourcesService = {
   },
 
   async fetchCatalogDetail(catalogId: string) {
-    const url = `http://172.188.2.173:8005/api/v1/catalogs/minimal-detail/${catalogId}`;
+    const url = `${BASE_DEV_API_URL}/api/v1/catalogs/minimal-detail/${catalogId}`;
     try {
       const response = await fetch(url);
       if (!response.ok) {
@@ -537,7 +593,56 @@ export const dataSourcesService = {
       console.error(`Failed to fetch catalog detail for ${catalogId}:`, error);
       throw error;
     }
-  }
+  },
+
+  async downloadSourceStats(
+    id: string,
+    typeFilter?: string,
+    statusFiter?: string,
+  ) {
+    // const url = `${BASE_DEV_API_URL}/api/v1/sources/${id}/stats/download?type=${typeFilter}&status=${statusFiter}`;
+    const url = `${process.env.NEXT_PUBLIC_DEV_TUNNEL_API_URL}/api/v1/sources/${id}/stats/export`;
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      return response
+
+    } catch (error) {
+      console.error(`Failed to fetch stats for source ${id}:`, error);
+      throw error;
+    }
+  },
+
+  async initPiiClassification(
+    piiClassifyPayload: PiiClassificationRequest,
+  ): Promise<ClassificationResponse> {
+    const url = `${BASE_DEV_API_URL}/tables/classify-table/source`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(piiClassifyPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Initiate PII Classification API error: ${response.statusText}`,
+        );
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(
+        `Failed to trigger PII Classification for source ${piiClassifyPayload?.source_id}:`,
+        error,
+      );
+      throw error;
+    }
+  },
 };
 
 

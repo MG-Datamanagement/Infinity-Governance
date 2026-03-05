@@ -40,7 +40,10 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
     // Resolve detail — map API data to UI structure
     const detail = useMemo(() => {
         if (!catalogData) return null;
-
+        const ownerName =
+            typeof catalogData.owner === "string"
+                ? catalogData.owner
+                : catalogData?.owner?.name || "Unknown";
         return {
             id: catalogData.id,
             sourceId: sourceId,
@@ -53,8 +56,10 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
             volume: catalogData.row_count !== null ? catalogData.row_count.toLocaleString() : "—",
             qualityScore: "95%",
             columnCount: catalogData.column_count || 0,
-            owner: catalogData.owner || "Unknown",
-            ownerInitials: catalogData.owner ? catalogData.owner.substring(0, 2).toUpperCase() : "UK",
+            // owner: catalogData.owner || "Unknown",
+            // ownerInitials: catalogData.owner ? catalogData.owner.substring(0, 2).toUpperCase() : "UK",
+            owner: ownerName,
+            ownerInitials: ownerName.slice(0, 2).toUpperCase(),
             tags: catalogData.tags || [],
             lineageWarning: undefined,
         };
@@ -336,9 +341,12 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
                                     Tags
                                 </div>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {detail.tags.map((tag) => (
-                                        <span key={tag} className="inline-block text-[11px] font-medium text-gray-600 bg-gray-100 rounded px-2 py-0.5">
-                                            {tag}
+                                    {detail.tags.map((tag: any) => (
+                                        <span
+                                            key={tag.id}
+                                            className="inline-block text-[11px] font-medium text-gray-600 bg-gray-100 rounded px-2 py-0.5"
+                                        >
+                                            {tag.name}
                                         </span>
                                     ))}
                                 </div>
