@@ -60,7 +60,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
             setIsLoading(true);
             try {
                 const { dataSourcesService } = await import("@/services/mock");
-                const stats = await dataSourcesService.fetchSourceStats(sourceId);
+                const stats = await dataSourcesService.fetchSourceStats(sourceId, typeFilter?.toLowerCase(), statusFilter?.toLowerCase());
                 if (stats) {
                     if (stats.source_name) setSourceName(stats.source_name);
                     if (stats.catalogs) {
@@ -68,12 +68,12 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                             id: cat.catalog_id,
                             name: cat.table_name || cat.full_name,
                             hasPII: false,
-                            type: 'Table',
+                            type: "Table",
                             rows: cat.row_count ? cat.row_count.toString() : null,
                             columns: cat.column_count || 0,
                             size: null,
                             lastSync: 'Just now',
-                            status: 'Healthy'
+                            status: "Healthy"
                         }));
                         setAllDatasets(mapped);
                     }
@@ -85,7 +85,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
             }
         };
         loadDatasets();
-    }, [sourceId]);
+    }, [sourceId, typeFilter, statusFilter]);
 
     const filtered = useMemo(() => {
         let list = allDatasets;
@@ -176,10 +176,10 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                                 onChange={(e) => setTypeFilter(e.target.value)}
                                 className="appearance-none pl-8 pr-7 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
                             >
-                                <option value="All">Type</option>
+                                <option value="All">All</option>
                                 <option value="Table">Table</option>
                                 <option value="View">View</option>
-                                <option value="Materialized View">Materialized View</option>
+                                {/* <option value="Materialized View">Materialized View</option> */}
                             </select>
                             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
                         </div>
@@ -191,10 +191,10 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                                 onChange={(e) => setStatusFilter(e.target.value)}
                                 className="appearance-none pl-8 pr-7 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
                             >
-                                <option value="All">Status</option>
+                                <option value="All">All</option>
                                 <option value="Healthy">Healthy</option>
                                 <option value="Warning">Warning</option>
-                                <option value="Error">Error</option>
+                                <option value="Risk">Risk</option>
                             </select>
                             <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" /></svg>
                         </div>

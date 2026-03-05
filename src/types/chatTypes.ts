@@ -37,8 +37,8 @@ export interface SessionDetailResponse {
 export interface ChatRequest {
   message: string;
   session_id: string | null;
-  memory: boolean;
-  reasoning: boolean;
+  memory: string;
+  reasoning: string;
   reply_to?: string | null;
 }
 

@@ -17,8 +17,13 @@ export const useSessionDetail = (sessionId: string) => {
   });
 };
 
-export const useSendMessage = () => {
+export const useSendMessage = (
+  request: ChatRequest,
+  agentNames: string,
+  datasetNames: string,
+) => {
   return useMutation({
-    mutationFn: (request: ChatRequest) => chatApiServices.sendMessage(request),
+    mutationFn: () =>
+      chatApiServices.sendMessage(request, agentNames, datasetNames),
   });
 };
