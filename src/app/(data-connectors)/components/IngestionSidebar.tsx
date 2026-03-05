@@ -23,10 +23,12 @@ interface IngestionSidebarProps {
 
 const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, isOpen, onClose }) => {
     const [steps, setSteps] = useState<Step[]>([
-        { label: "Establishing Connection", status: 'active' },
+        { label: "Establishing connection", status: 'active' },
         { label: "Schema Discovery", status: 'pending' },
-        { label: "Ingesting Resources", status: 'pending' },
+        { label: "Ingestion started", status: 'pending' },
+        { label: "Ingestion completed", status: 'pending' },
         { label: "PII Detection Scan", status: 'pending' },
+        { label: "Metadata Execution Summary", status: 'pending' },
     ]);
 
     const [isThinking, setIsThinking] = useState(true);
@@ -37,6 +39,13 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     const [isComplete, setIsComplete] = useState(false);
 
     const eventSourceRef = useRef<EventSource | null>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }
+    }, [logs]);
 
     useEffect(() => {
         if (isOpen) {
@@ -90,29 +99,31 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     }, [jobId, isOpen]);
 
     const handleNewLog = (log: IngestionLog) => {
+        setLogs(prev => [...prev.slice(-100), log]);
         const msg = log.message;
-        setLogs(prev => [...prev.slice(-20), log]);
 
         if (msg.includes("Job started")) {
-            updateStep("Establishing Connection", 'completed');
+            updateStep("Establishing connection", 'completed');
             updateStep("Schema Discovery", 'active');
             setProgress(2);
         } else if (msg.includes("Found") && msg.includes("total tables")) {
             updateStep("Schema Discovery", 'completed');
             setProgress(3);
         } else if (msg.includes("PostgresSink connected")) {
-            updateStep("Ingesting Resources", 'active');
+            updateStep("Ingestion started", 'active');
             setProgress(4);
         } else if (msg.includes("PostgresSink closed")) {
-            // Increment progress for each table closed
             setProgress(p => Math.min(p + 1, totalSteps - 2));
         } else if (msg.includes("Metadata ingestion complete")) {
-            updateStep("Ingesting Resources", 'completed');
+            updateStep("Ingestion started", 'completed');
+            updateStep("Ingestion completed", 'completed');
             updateStep("PII Detection Scan", 'active');
             setProgress(totalSteps - 1);
         } else if (msg.includes("Ingestion job completed")) {
             setIsComplete(true);
             setIsThinking(false);
+            updateStep("PII Detection Scan", 'completed');
+            updateStep("Metadata Execution Summary", 'completed');
             setSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
             setProgress(totalSteps);
         }
@@ -249,32 +260,38 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             <div className="flex items-center gap-2 mb-4">
                                 <div className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${isComplete ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>
                                     {isComplete ? <Check className="w-2.5 h-2.5 stroke-[3]" /> : <Loader2 className="w-2.5 h-2.5 animate-spin" />}
-                                    {isComplete ? 'Completed' : 'Ingesting'}
+                                    {isComplete ? 'Execution Complete' : 'Live Activity'}
                                 </div>
                                 <span className="text-xs font-bold text-gray-700">
-                                    {isComplete ? 'All datasets processed' : 'Schema Discovery'}
+                                    {isComplete ? 'All processes finished' : 'Streaming raw logs...'}
                                 </span>
                             </div>
 
-                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                {steps.map((step, i) => (
-                                    <div key={i} className="flex items-start gap-4 group">
-                                        <div className="mt-0.5 flex-shrink-0">
-                                            {step.status === 'completed' ? (
-                                                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
-                                                    <Check className="w-3.5 h-3.5 text-green-600 stroke-[3]" />
-                                                </div>
-                                            ) : step.status === 'active' ? (
-                                                <div className="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
-                                            ) : (
-                                                <div className="w-5 h-5 rounded-full border-2 border-gray-100" />
-                                            )}
+                            {/* Raw Log Viewer */}
+                            <div
+                                ref={scrollRef}
+                                className="bg-gray-900 rounded-xl p-4 font-mono text-[10px] leading-relaxed h-[350px] overflow-y-auto custom-scrollbar-dark shadow-inner border border-gray-800"
+                            >
+                                {logs.length === 0 ? (
+                                    <div className="text-gray-500 italic">Waiting for connection...</div>
+                                ) : (
+                                    logs.map((log, i) => (
+                                        <div key={i} className="mb-1.5 flex gap-3 group">
+                                            <span className="text-gray-600 shrink-0 select-none">
+                                                {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                            </span>
+                                            <span className={`shrink-0 font-bold uppercase w-12 ${log.level === 'error' ? 'text-red-400' :
+                                                    log.level === 'warning' ? 'text-orange-400' :
+                                                        'text-green-400'
+                                                }`}>
+                                                [{log.level}]
+                                            </span>
+                                            <span className="text-gray-300 break-all group-hover:text-white transition-colors">
+                                                {log.message}
+                                            </span>
                                         </div>
-                                        <p className={`text-xs font-bold transition-colors ${step.status === 'completed' ? 'text-gray-400' : step.status === 'active' ? 'text-indigo-600' : 'text-gray-300'}`}>
-                                            {step.label}
-                                        </p>
-                                    </div>
-                                ))}
+                                    ))
+                                )}
                             </div>
                         </div>
                     </div>
@@ -297,6 +314,19 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     }
                     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
                         background: #cbd5e1;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar {
+                        width: 4px;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar-track {
+                        background: #111827;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar-thumb {
+                        background: #374151;
+                        border-radius: 10px;
+                    }
+                    .custom-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+                        background: #4b5563;
                     }
                 `}</style>
             </div>

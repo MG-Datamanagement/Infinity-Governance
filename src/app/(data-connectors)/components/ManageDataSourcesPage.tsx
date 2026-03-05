@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 
 import { useRouter } from "next/navigation";
-import { dataSources, DataSource, dataSourcesService, ApiDataSource, ApiRunHistory } from "@/services/mock";
+import { dataSources, DataSource, dataSourcesService, ApiDataSource, ApiRunHistory, ApiSourceLog } from "@/services/mock";
 
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 import AddDataSourceModal from "@/app/(data-connectors)/components/AddDataSourceModal";
@@ -44,7 +44,7 @@ const StatusBadge: React.FC<{ status: DataSource["status"] }> = ({ status }) => 
 };
 
 // ─── Log status icon ─────────────────────────────────────────────────────────
-const LogIcon: React.FC<{ status: "success" | "error" | "info" }> = ({ status }) => {
+const LogIcon: React.FC<{ status: "success" | "error" | "info" | "warning" }> = ({ status }) => {
     if (status === "success")
         return (
             <svg className="w-4 h-4 text-green-500 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
@@ -54,6 +54,12 @@ const LogIcon: React.FC<{ status: "success" | "error" | "info" }> = ({ status })
     if (status === "error")
         return (
             <svg className="w-4 h-4 text-red-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
+            </svg>
+        );
+    if (status === "warning")
+        return (
+            <svg className="w-4 h-4 text-orange-400 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clipRule="evenodd" />
             </svg>
         );
@@ -72,7 +78,9 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
         totalColumns: number;
         totalRows: number;
     } | null>(null);
+    const [rowLogs, setRowLogs] = useState<ApiSourceLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isLogsLoading, setIsLogsLoading] = useState(true);
 
     useEffect(() => {
         const getStats = async () => {
@@ -90,7 +98,21 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
                 setIsLoading(false);
             }
         };
+
+        const getLogs = async () => {
+            setIsLogsLoading(true);
+            try {
+                const response = await dataSourcesService.fetchSourceLogs(source.id, { limit: 5 });
+                setRowLogs(response.logs);
+            } catch (err) {
+                console.error("Failed to fetch logs for expanded row", err);
+            } finally {
+                setIsLogsLoading(false);
+            }
+        };
+
         getStats();
+        getLogs();
     }, [source.id]);
 
     const formatNumber = (num: number) => {
@@ -105,6 +127,7 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
                 <td colSpan={7} className="bg-gray-50 px-6 pb-4 pt-4">
                     <LiveIngestionPanel
                         jobId={activeJobId || "running"}
+                        sourceId={source.id}
                         sourceName={source.name}
                         onClose={() => { }}
                         onNotFound={() => onLiveError?.(source.id)}
@@ -157,16 +180,22 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
                                 </h4>
                                 <span className="text-xs text-gray-400">Last 24h</span>
                             </div>
-                            <div className="space-y-2">
-                                {source.ingestionLogs.map((log, i) => (
-                                    <div key={i} className="flex items-center gap-3">
-                                        <span className="text-xs text-gray-400 w-20 flex-shrink-0">
-                                            {log.time}
-                                        </span>
-                                        <span className="text-xs text-gray-600 flex-1">{log.message}</span>
-                                        <LogIcon status={log.status} />
-                                    </div>
-                                ))}
+                            <div className="space-y-2 max-h-[160px] overflow-y-auto custom-scrollbar pr-1">
+                                {isLogsLoading ? (
+                                    <div className="py-4 text-center text-xs text-gray-400">Loading logs...</div>
+                                ) : rowLogs.length > 0 ? (
+                                    rowLogs.map((log, i) => (
+                                        <div key={log.id || i} className="flex items-start gap-3">
+                                            <span className="text-[10px] text-gray-400 w-24 flex-shrink-0 mt-0.5">
+                                                {new Date(log.logged_at).toLocaleString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+                                            </span>
+                                            <span className="text-xs text-gray-600 flex-1 leading-relaxed">{log.message}</span>
+                                            <LogIcon status={log.level} />
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="py-4 text-center text-xs text-gray-400">No logs found for this source</div>
+                                )}
                             </div>
                         </div>
                     </div>

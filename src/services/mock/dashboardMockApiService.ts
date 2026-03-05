@@ -447,6 +447,22 @@ export interface ApiRunHistory {
   }>;
 }
 
+export interface ApiSourceLog {
+  id: string;
+  job_id: string;
+  source_id: string;
+  level: 'error' | 'warning' | 'success';
+  message: string;
+  logged_at: string;
+}
+
+export interface ApiSourceLogs {
+  source_id: string;
+  total: number;
+  filters: any;
+  logs: ApiSourceLog[];
+}
+
 export const dataSourcesService = {
   async fetchDataSources(params: { source_type?: string; status?: string; limit?: number }) {
     const url = new URL("http://172.188.2.173:8005/api/v1/sources-list");
@@ -576,6 +592,24 @@ export const dataSourcesService = {
       return await response.json() as ApiRunHistory;
     } catch (error) {
       console.error("Failed to fetch run history:", error);
+      throw error;
+    }
+  },
+
+  async fetchSourceLogs(sourceId: string, params: { last_run?: boolean; level?: string; limit?: number } = {}) {
+    const url = new URL(`http://172.188.2.173:8005/api/v1/sources/${sourceId}/logs`);
+    if (params.last_run) url.searchParams.append("last_run", "true");
+    if (params.level && params.level !== 'All') url.searchParams.append("level", params.level.toLowerCase());
+    if (params.limit) url.searchParams.append("limit", params.limit.toString());
+
+    try {
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      return await response.json() as ApiSourceLogs;
+    } catch (error) {
+      console.error(`Failed to fetch logs for source ${sourceId}:`, error);
       throw error;
     }
   }
