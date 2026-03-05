@@ -427,6 +427,26 @@ export interface ApiCatalogDetail {
   columns: any[];
 }
 
+export interface ApiRunHistory {
+  total: number;
+  limit: number;
+  offset: number;
+  results: Array<{
+    job_id: string;
+    source_id: string;
+    source_name: string;
+    source_type: string;
+    schedule: string;
+    owner_name: string;
+    status: 'success' | 'failed' | 'running';
+    started_at: string;
+    completed_at: string | null;
+    duration_seconds: number | null;
+    records_ingested: number;
+    error_message: string | null;
+  }>;
+}
+
 export const dataSourcesService = {
   async fetchDataSources(params: { source_type?: string; status?: string; limit?: number }) {
     const url = new URL("http://172.188.2.173:8005/api/v1/sources-list");
@@ -473,10 +493,13 @@ export const dataSourcesService = {
     }
   },
 
-  async fetchSourceStats(id: string, typeFilter:string, statusFiter:string) {
-    const url = `http://172.188.2.173:8005/api/v1/sources/${id}/stats?type=${typeFilter}&status=${statusFiter}`;
+  async fetchSourceStats(id: string, typeFilter?: string, statusFilter?: string) {
+    const url = new URL(`http://172.188.2.173:8005/api/v1/sources/${id}/stats`);
+    if (typeFilter && typeFilter !== 'all') url.searchParams.append('type', typeFilter);
+    if (statusFilter && statusFilter !== 'all') url.searchParams.append('status', statusFilter);
+
     try {
-      const response = await fetch(url);
+      const response = await fetch(url.toString());
       if (!response.ok) {
         throw new Error(`API error: ${response.statusText}`);
       }
@@ -535,6 +558,24 @@ export const dataSourcesService = {
       return data as ApiCatalogDetail;
     } catch (error) {
       console.error(`Failed to fetch catalog detail for ${catalogId}:`, error);
+      throw error;
+    }
+  },
+
+  async fetchRunHistory(limit: number = 50, offset: number = 0, status?: string) {
+    const url = new URL("http://172.188.2.173:8005/api/v1/run-history");
+    url.searchParams.append("limit", limit.toString());
+    url.searchParams.append("offset", offset.toString());
+    if (status && status !== 'All') url.searchParams.append("status", status.toLowerCase());
+
+    try {
+      const response = await fetch(url.toString());
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+      return await response.json() as ApiRunHistory;
+    } catch (error) {
+      console.error("Failed to fetch run history:", error);
       throw error;
     }
   }

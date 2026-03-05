@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 
 import { useRouter } from "next/navigation";
-import { dataSources, DataSource, dataSourcesService, ApiDataSource } from "@/services/mock";
+import { dataSources, DataSource, dataSourcesService, ApiDataSource, ApiRunHistory } from "@/services/mock";
 
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 import AddDataSourceModal from "@/app/(data-connectors)/components/AddDataSourceModal";
@@ -103,10 +103,10 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
         return (
             <tr>
                 <td colSpan={7} className="bg-gray-50 px-6 pb-4 pt-4">
-                    <LiveIngestionPanel 
-                        jobId={activeJobId || "running"} 
-                        sourceName={source.name} 
-                        onClose={() => {}} 
+                    <LiveIngestionPanel
+                        jobId={activeJobId || "running"}
+                        sourceName={source.name}
+                        onClose={() => { }}
                         onNotFound={() => onLiveError?.(source.id)}
                     />
                 </td>
@@ -279,7 +279,7 @@ const SourceRow: React.FC<{
                 <td className="py-3 pr-4">
                     <div className="flex items-center gap-1">
                         {/* Play button */}
-                        <button 
+                        <button
                             onClick={() => onIngest(source.id)}
                             className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                         >
@@ -319,6 +319,11 @@ const ManageDataSourcesPage: React.FC = () => {
     const [sidebarSourceName, setSidebarSourceName] = useState("");
     const [showSidebar, setShowSidebar] = useState(false);
     const [activeJobs, setActiveJobs] = useState<Record<string, string>>({});
+    const [runHistory, setRunHistory] = useState<ApiRunHistory | null>(null);
+    const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+    const [historyStatus, setHistoryStatus] = useState("All");
+    const [historyOffset, setHistoryOffset] = useState(0);
+    const HISTORY_LIMIT = 10;
 
     const [sources, setSources] = useState<DataSource[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -338,7 +343,7 @@ const ManageDataSourcesPage: React.FC = () => {
                 // Find original source to preserve detailed stats/logs for UI consistency if they exist in mocks
                 const sourceId = apiDs.source_id || apiDs.id || "";
                 const ownerName = apiDs.owner_name || apiDs.owner_id || "Unknown";
-                
+
                 // Find original source to preserve detailed stats/logs for UI consistency if they exist in mocks
                 const original = dataSources.find(ds => ds.id === sourceId);
 
@@ -387,9 +392,25 @@ const ManageDataSourcesPage: React.FC = () => {
         }
     };
 
+    const fetchHistory = async () => {
+        setIsHistoryLoading(true);
+        try {
+            const data = await dataSourcesService.fetchRunHistory(HISTORY_LIMIT, historyOffset, historyStatus);
+            setRunHistory(data);
+        } catch (err) {
+            console.error("Failed to fetch run history", err);
+        } finally {
+            setIsHistoryLoading(false);
+        }
+    };
+
     useEffect(() => {
-        fetchData();
-    }, [filter, search]);
+        if (activeTab === "Sources") {
+            fetchData();
+        } else if (activeTab === "Run History") {
+            fetchHistory();
+        }
+    }, [filter, search, activeTab, historyStatus, historyOffset]);
 
     const toggleAll = () => {
         if (allChecked) {
@@ -426,8 +447,8 @@ const ManageDataSourcesPage: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
             {showAddModal && (
-                <AddDataSourceModal 
-                    onClose={() => setShowAddModal(false)} 
+                <AddDataSourceModal
+                    onClose={() => setShowAddModal(false)}
                     onSuccess={(jobId, sourceName) => {
                         setShowAddModal(false);
                         setSidebarJobId(jobId);
@@ -440,9 +461,9 @@ const ManageDataSourcesPage: React.FC = () => {
             )}
 
             {sidebarJobId && (
-                <IngestionSidebar 
-                    isOpen={showSidebar} 
-                    jobId={sidebarJobId} 
+                <IngestionSidebar
+                    isOpen={showSidebar}
+                    jobId={sidebarJobId}
                     sourceName={sidebarSourceName}
                     onClose={() => setShowSidebar(false)}
                 />
@@ -512,28 +533,52 @@ const ManageDataSourcesPage: React.FC = () => {
                             />
                         </div>
 
-                        {/* Filter dropdown */}
-                        <div className="relative">
-                            <select
-                                value={filter}
-                                onChange={(e) => setFilter(e.target.value)}
-                                className="appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
-                            >
-                                <option>All</option>
-                                <option>Success</option>
-                                <option>Failed</option>
-                                <option>Running</option>
-                            </select>
-                            <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </div>
+                        {/* Filter dropdown for Sources */}
+                        {activeTab === "Sources" && (
+                            <div className="relative">
+                                <select
+                                    value={filter}
+                                    onChange={(e) => setFilter(e.target.value)}
+                                    className="appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                                >
+                                    <option>All</option>
+                                    <option>Success</option>
+                                    <option>Failed</option>
+                                    <option>Running</option>
+                                </select>
+                                <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        )}
+
+                        {/* Filter dropdown for History */}
+                        {activeTab === "Run History" && (
+                            <div className="relative">
+                                <select
+                                    value={historyStatus}
+                                    onChange={(e) => {
+                                        setHistoryStatus(e.target.value);
+                                        setHistoryOffset(0); // reset page on filter change
+                                    }}
+                                    className="appearance-none pl-3 pr-8 py-2 border border-gray-200 rounded-lg text-sm bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                                >
+                                    <option value="All">All Statuses</option>
+                                    <option value="Success">Success</option>
+                                    <option value="Failed">Failed</option>
+                                    <option value="Running">Running</option>
+                                </select>
+                                <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </div>
+                        )}
                     </div>
 
                     {/* Refresh */}
                     <button
-                        onClick={() => fetchData()}
-                        disabled={isLoading}
+                        onClick={() => activeTab === "Sources" ? fetchData() : fetchHistory()}
+                        disabled={isLoading || isHistoryLoading}
                         className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors disabled:opacity-50"
                     >
                         <svg className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -557,60 +602,142 @@ const ManageDataSourcesPage: React.FC = () => {
                                     />
                                 </th>
                                 <th className="py-3 pr-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                    Name
+                                    {activeTab === "Sources" ? "Name" : "Source"}
                                 </th>
                                 <th className="py-3 pr-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                    Schedule
+                                    {activeTab === "Sources" ? "Schedule" : "Started"}
                                 </th>
                                 <th className="py-3 pr-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                    Owner
+                                    {activeTab === "Sources" ? "Owner" : "Owner"}
                                 </th>
                                 <th className="py-3 pr-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                    Last Run
+                                    {activeTab === "Sources" ? "Last Run" : "Duration"}
                                 </th>
                                 <th className="py-3 pr-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                    Status
+                                    {activeTab === "Sources" ? "Status" : "Status"}
                                 </th>
-                                <th className="py-3 pr-4 w-20" />
+                                <th className="py-3 pr-4 w-20 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                    {activeTab === "Sources" ? "" : "Details"}
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
-                            {isLoading ? (
-                                Array.from({ length: 5 }).map((_, i) => (
-                                    <tr key={i} className="border-b border-gray-100 animate-pulse">
-                                        <td className="p-4" colSpan={7}>
-                                            <div className="h-5 bg-gray-100 rounded w-full"></div>
+                            {activeTab === "Sources" ? (
+                                isLoading ? (
+                                    Array.from({ length: 5 }).map((_, i) => (
+                                        <tr key={i} className="border-b border-gray-100 animate-pulse">
+                                            <td className="p-4" colSpan={7}>
+                                                <div className="h-5 bg-gray-100 rounded w-full"></div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : sources.length > 0 ? (
+                                    sources.map((source) => (
+                                        <SourceRow
+                                            key={source.id}
+                                            source={source}
+                                            checked={checkedIds.has(source.id)}
+                                            activeJobId={activeJobs[source.id]}
+                                            onCheck={toggleOne}
+                                            onIngest={handleIngest}
+                                            onLiveError={(id) => {
+                                                setActiveJobs(prev => {
+                                                    const next = { ...prev };
+                                                    delete next[id];
+                                                    return next;
+                                                });
+                                            }}
+                                        />
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={7} className="py-16 text-center text-sm text-gray-400">
+                                            {error || "No data sources found"}
                                         </td>
                                     </tr>
-                                ))
-                            ) : sources.length > 0 ? (
-                                sources.map((source) => (
-                                    <SourceRow
-                                        key={source.id}
-                                        source={source}
-                                        checked={checkedIds.has(source.id)}
-                                        activeJobId={activeJobs[source.id]}
-                                        onCheck={toggleOne}
-                                        onIngest={handleIngest}
-                                        onLiveError={(id) => {
-                                            setActiveJobs(prev => {
-                                                const next = { ...prev };
-                                                delete next[id];
-                                                return next;
-                                            });
-                                        }}
-                                    />
-                                ))
+                                )
+                            ) : activeTab === "Run History" ? (
+                                isHistoryLoading ? (
+                                    Array.from({ length: 5 }).map((_, i) => (
+                                        <tr key={i} className="border-b border-gray-100 animate-pulse">
+                                            <td className="p-4" colSpan={7}>
+                                                <div className="h-5 bg-gray-100 rounded w-full"></div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : runHistory?.results && runHistory.results.length > 0 ? (
+                                    runHistory.results.map((run) => (
+                                        <tr key={run.job_id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                            <td className="pl-4 pr-2 py-3 w-10">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                                            </td>
+                                            <td className="py-3 pr-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-medium text-gray-800">{run.source_name}</span>
+                                                    <span className="text-[10px] text-gray-400 font-mono">{run.job_id.substring(0, 8)}...</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 pr-4 text-sm text-gray-500">
+                                                {new Date(run.started_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                                            </td>
+                                            <td className="py-3 pr-4">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-sm text-gray-600">{run.owner_name}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 pr-4 text-sm text-gray-500">
+                                                {run.duration_seconds ? `${run.duration_seconds}s` : '--'}
+                                            </td>
+                                            <td className="py-3 pr-4">
+                                                <StatusBadge status={run.status} />
+                                            </td>
+                                            <td className="py-3 pr-4 text-xs text-gray-400">
+                                                {run.records_ingested} records
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={7} className="py-16 text-center text-sm text-gray-400">
+                                            No run history found
+                                        </td>
+                                    </tr>
+                                )
                             ) : (
                                 <tr>
                                     <td colSpan={7} className="py-16 text-center text-sm text-gray-400">
-                                        {error || "No data sources found"}
+                                        Coming Soon...
                                     </td>
                                 </tr>
                             )}
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination for History */}
+                {activeTab === "Run History" && runHistory && runHistory.total > HISTORY_LIMIT && (
+                    <div className="mt-4 flex items-center justify-between px-2">
+                        <div className="text-sm text-gray-500">
+                            Showing <span className="font-semibold text-gray-900">{historyOffset + 1}</span> to <span className="font-semibold text-gray-900">{Math.min(historyOffset + HISTORY_LIMIT, runHistory.total)}</span> of <span className="font-semibold text-gray-900">{runHistory.total}</span> runs
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setHistoryOffset(prev => Math.max(0, prev - HISTORY_LIMIT))}
+                                disabled={historyOffset === 0}
+                                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Previous
+                            </button>
+                            <button
+                                onClick={() => setHistoryOffset(prev => prev + HISTORY_LIMIT)}
+                                disabled={historyOffset + HISTORY_LIMIT >= runHistory.total}
+                                className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm bg-white hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );
