@@ -7,6 +7,8 @@ import { dataSources, DataSource, dataSourcesService, ApiDataSource } from "@/se
 
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 import AddDataSourceModal from "@/app/(data-connectors)/components/AddDataSourceModal";
+import LiveIngestionPanel from "@/app/(data-connectors)/components/LiveIngestionPanel";
+import IngestionSidebar from "@/app/(data-connectors)/components/IngestionSidebar";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge: React.FC<{ status: DataSource["status"] }> = ({ status }) => {
@@ -63,7 +65,7 @@ const LogIcon: React.FC<{ status: "success" | "error" | "info" }> = ({ status })
 };
 
 // ─── Expanded Row ─────────────────────────────────────────────────────────────
-const ExpandedRow: React.FC<{ source: DataSource }> = ({ source }) => {
+const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveError?: (id: string) => void }> = ({ source, activeJobId, onLiveError }) => {
     const router = useRouter();
     const [stats, setStats] = useState<{
         totalTables: number;
@@ -96,6 +98,21 @@ const ExpandedRow: React.FC<{ source: DataSource }> = ({ source }) => {
         if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
         return num.toString();
     };
+
+    if (activeJobId || source.status === 'running') {
+        return (
+            <tr>
+                <td colSpan={7} className="bg-gray-50 px-6 pb-4 pt-4">
+                    <LiveIngestionPanel 
+                        jobId={activeJobId || "running"} 
+                        sourceName={source.name} 
+                        onClose={() => {}} 
+                        onNotFound={() => onLiveError?.(source.id)}
+                    />
+                </td>
+            </tr>
+        );
+    }
 
     return (
         <tr>
@@ -187,9 +204,11 @@ const ExpandedRow: React.FC<{ source: DataSource }> = ({ source }) => {
 const SourceRow: React.FC<{
     source: DataSource;
     checked: boolean;
+    activeJobId?: string;
     onCheck: (id: string) => void;
     onIngest: (id: string) => void;
-}> = ({ source, checked, onCheck, onIngest }) => {
+    onLiveError: (id: string) => void;
+}> = ({ source, checked, activeJobId, onCheck, onIngest, onLiveError }) => {
     const [expanded, setExpanded] = useState(false);
 
     return (
@@ -280,7 +299,7 @@ const SourceRow: React.FC<{
                 </td>
             </tr>
 
-            {expanded && <ExpandedRow source={source} />}
+            {expanded && <ExpandedRow source={source} activeJobId={activeJobId} onLiveError={onLiveError} />}
         </>
     );
 };
@@ -296,6 +315,10 @@ const ManageDataSourcesPage: React.FC = () => {
     const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
     const [allChecked, setAllChecked] = useState(false);
     const [showAddModal, setShowAddModal] = useState(false);
+    const [sidebarJobId, setSidebarJobId] = useState<string | null>(null);
+    const [sidebarSourceName, setSidebarSourceName] = useState("");
+    const [showSidebar, setShowSidebar] = useState(false);
+    const [activeJobs, setActiveJobs] = useState<Record<string, string>>({});
 
     const [sources, setSources] = useState<DataSource[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -388,8 +411,11 @@ const ManageDataSourcesPage: React.FC = () => {
 
     const handleIngest = async (id: string) => {
         try {
-            await dataSourcesService.ingestSource(id);
-            // Optional: Refresh data to show "running" status if the API updates it
+            const response = await dataSourcesService.ingestSource(id);
+            if (response.job_id) {
+                setActiveJobs(prev => ({ ...prev, [id]: response.job_id }));
+            }
+            // Refresh data to show "running" status if the API updates it
             fetchData();
         } catch (err) {
             console.error("Failed to trigger ingestion", err);
@@ -400,7 +426,26 @@ const ManageDataSourcesPage: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
             {showAddModal && (
-                <AddDataSourceModal onClose={() => setShowAddModal(false)} />
+                <AddDataSourceModal 
+                    onClose={() => setShowAddModal(false)} 
+                    onSuccess={(jobId, sourceName) => {
+                        setShowAddModal(false);
+                        setSidebarJobId(jobId);
+                        setSidebarSourceName(sourceName);
+                        setShowSidebar(true);
+                        // Trigger a slight delay refresh or just rely on the sidebar
+                        fetchData();
+                    }}
+                />
+            )}
+
+            {sidebarJobId && (
+                <IngestionSidebar 
+                    isOpen={showSidebar} 
+                    jobId={sidebarJobId} 
+                    sourceName={sidebarSourceName}
+                    onClose={() => setShowSidebar(false)}
+                />
             )}
             <main className="max-w-7xl mx-auto px-8 py-8">
 
@@ -544,8 +589,16 @@ const ManageDataSourcesPage: React.FC = () => {
                                         key={source.id}
                                         source={source}
                                         checked={checkedIds.has(source.id)}
+                                        activeJobId={activeJobs[source.id]}
                                         onCheck={toggleOne}
                                         onIngest={handleIngest}
+                                        onLiveError={(id) => {
+                                            setActiveJobs(prev => {
+                                                const next = { ...prev };
+                                                delete next[id];
+                                                return next;
+                                            });
+                                        }}
                                     />
                                 ))
                             ) : (

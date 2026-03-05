@@ -1,0 +1,310 @@
+"use client";
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { X, Bell, History, Check, Loader2, Database, Shield, Zap, Search, AlertCircle } from 'lucide-react';
+
+interface IngestionLog {
+    timestamp: string;
+    level: string;
+    message: string;
+}
+
+interface Step {
+    label: string;
+    status: 'pending' | 'active' | 'completed';
+}
+
+interface IngestionSidebarProps {
+    jobId: string;
+    sourceName: string;
+    isOpen: boolean;
+    onClose: () => void;
+}
+
+const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, isOpen, onClose }) => {
+    const [steps, setSteps] = useState<Step[]>([
+        { label: "Establishing Connection", status: 'active' },
+        { label: "Schema Discovery", status: 'pending' },
+        { label: "Ingesting: customers_prod", status: 'pending' },
+        { label: "Ingesting: orders_master", status: 'pending' },
+        { label: "Ingesting: transactions_ledger", status: 'pending' },
+        { label: "PII Detection Scan", status: 'pending' },
+    ]);
+
+    const [isThinking, setIsThinking] = useState(true);
+    const [progress, setProgress] = useState(1);
+    const [totalSteps] = useState(12);
+    const [showNotification, setShowNotification] = useState(true);
+    const [logs, setLogs] = useState<IngestionLog[]>([]);
+    const [isComplete, setIsComplete] = useState(false);
+
+    const eventSourceRef = useRef<EventSource | null>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            const timer = setTimeout(() => setShowNotification(false), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!jobId || !isOpen) return;
+
+        console.log(`Sidebar connecting to SSE for job: ${jobId}`);
+        const url = `http://172.188.2.173:8005/api/v1/jobs/${jobId}/logs/stream`;
+        const es = new EventSource(url);
+        eventSourceRef.current = es;
+
+        es.onmessage = (event) => {
+            try {
+                const log: IngestionLog = JSON.parse(event.data);
+                handleNewLog(log);
+            } catch (err) {
+                console.error("Sidebar failed to parse log", err);
+            }
+        };
+
+        es.addEventListener('log', (event: any) => {
+            try {
+                const log: IngestionLog = JSON.parse(event.data);
+                handleNewLog(log);
+            } catch (err) {
+                console.error("Sidebar failed to parse log event", err);
+            }
+        });
+
+        es.addEventListener('done', () => {
+            setIsComplete(true);
+            setIsThinking(false);
+            setSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
+            setProgress(totalSteps);
+            es.close();
+        });
+
+        es.onerror = (err) => {
+            console.error("Sidebar SSE Error:", err);
+        };
+
+        return () => {
+            es.close();
+            eventSourceRef.current = null;
+        };
+    }, [jobId, isOpen]);
+
+    const handleNewLog = (log: IngestionLog) => {
+        const msg = log.message;
+        setLogs(prev => [...prev.slice(-20), log]);
+
+        if (msg.includes("Job started")) {
+            updateStep("Establishing Connection", 'completed');
+            updateStep("Schema Discovery", 'active');
+            setProgress(2);
+        } else if (msg.includes("Found") && msg.includes("total tables")) {
+            updateStep("Schema Discovery", 'completed');
+            setProgress(3);
+        } else if (msg.includes("Analyzing table")) {
+            const tableName = msg.match(/'([^']+)'/)?.[1];
+            if (tableName) {
+                setSteps(prev => {
+                    const existing = prev.find(s => s.label.includes(tableName));
+                    if (existing) {
+                        return prev.map(s => s.label.includes(tableName) ? { ...s, status: 'active' } : s);
+                    }
+                    // Insert before PII scan
+                    const piiIdx = prev.findIndex(s => s.label === "PII Detection Scan");
+                    const newStep: Step = { label: `Ingesting: ${tableName}`, status: 'active' };
+                    const next = [...prev];
+                    next.splice(piiIdx, 0, newStep);
+                    return next;
+                });
+            }
+        } else if (msg.includes("→ tag=")) {
+             const tableName = msg.match(/'([^']+)'/)?.[1];
+             if (tableName) {
+                updateStep(`Ingesting: ${tableName}`, 'completed');
+                setProgress(p => Math.min(p + 1, totalSteps - 1));
+             }
+        } else if (msg.includes("Metadata ingestion complete")) {
+            updateStep("PII Detection Scan", 'active');
+            setProgress(totalSteps - 1);
+        }
+    };
+
+    const updateStep = (label: string, status: Step['status']) => {
+        setSteps(prev => prev.map(s => s.label === label ? { ...s, status } : s));
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <>
+            {/* Overlay */}
+            <div 
+                className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[60] transition-opacity duration-300" 
+                onClick={onClose}
+            />
+
+            {/* Sidebar Container */}
+            <div className={`fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl z-[70] transform transition-transform duration-500 ease-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                
+                {/* Header */}
+                <div className="bg-indigo-600 p-6 text-white relative flex-shrink-0">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+                                <Zap className="w-7 h-7 text-white fill-white" />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold font-sans">AI Ingestion Agent</h2>
+                                <p className="text-xs text-indigo-100 font-medium opacity-80 uppercase tracking-widest">Data pipeline overview</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors cursor-pointer">
+                                <Bell className="w-5 h-5" />
+                            </div>
+                            <div className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors cursor-pointer">
+                                <History className="w-5 h-5" />
+                            </div>
+                            <div onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors cursor-pointer">
+                                <X className="w-5 h-5" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mt-4">
+                         <div className="flex items-center justify-between">
+                            <div className="inline-flex items-center gap-1.5 bg-orange-500/90 border border-orange-400 text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg">
+                                <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                                {isThinking ? 'Thinking' : 'Completed'}
+                            </div>
+                            <button className="text-xs font-bold text-white/70 hover:text-white transition-colors underline underline-offset-4">Override</button>
+                         </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                    {/* Notification Toast (Inside Sidebar top) */}
+                    {showNotification && (
+                        <div className="bg-white border-2 border-indigo-100 rounded-2xl p-4 shadow-xl flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
+                            <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100">
+                                <div className="p-1 rounded bg-indigo-50 border border-indigo-100">
+                                     <Zap className="w-5 h-5 text-indigo-600 fill-indigo-600" />
+                                </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-gray-900">Ingestion started</p>
+                                <p className="text-xs text-gray-500 truncate">"{sourceName}" · {steps.length} steps identified</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Summary Info */}
+                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                             <Zap className="w-12 h-12 text-indigo-600" />
+                        </div>
+                        <h3 className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-3">AI Agent Summary</h3>
+                        <div className="space-y-2.5">
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                                    <Check className="w-2.5 h-2.5 text-green-600 stroke-[3]" />
+                                </div>
+                                <span className="text-xs font-medium text-gray-700">Connecting to {sourceName}...</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 rounded-full border border-indigo-400 border-t-transparent animate-spin flex-shrink-0" />
+                                <span className="text-xs font-medium text-gray-700">Fetching dataset info...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Central Animation Placeholder */}
+                    <div className="flex flex-col items-center justify-center py-6">
+                         <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center mb-4 relative">
+                            <div className="absolute inset-x-0 bottom-[-10px] flex justify-center gap-1.5 opacity-40">
+                                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-0" />
+                                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-150" />
+                                <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-300" />
+                            </div>
+                            <Zap className="w-10 h-10 text-indigo-600 fill-indigo-100" />
+                         </div>
+                         <h4 className="text-lg font-bold text-gray-800 tracking-tight">Schema Discovery</h4>
+                    </div>
+
+                    {/* Pipeline Progress */}
+                    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm overflow-hidden">
+                        <div className="p-4 bg-gray-50/50 border-b border-gray-100 flex items-center justify-between">
+                            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Pipeline Progress</h3>
+                            <span className="text-[10px] font-bold text-indigo-600">{progress}/{totalSteps} steps</span>
+                        </div>
+                        <div className="p-5">
+                            <div className="w-full bg-gray-200 rounded-full h-2 mb-4 overflow-hidden">
+                                <div 
+                                    className="bg-indigo-600 h-full transition-all duration-1000 ease-in-out" 
+                                    style={{ width: `${(progress / totalSteps) * 100}%` }}
+                                />
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="inline-flex items-center gap-1.5 bg-indigo-100 px-2 py-0.5 rounded text-[10px] font-extrabold text-indigo-700 uppercase">
+                                     <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                     Ingesting
+                                </div>
+                                <span className="text-xs font-bold text-gray-700">Schema Discovery</span>
+                            </div>
+
+                            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                {steps.map((step, i) => (
+                                    <div key={i} className="flex items-start gap-4 group">
+                                        <div className="mt-0.5 flex-shrink-0">
+                                            {step.status === 'completed' ? (
+                                                <div className="w-5 h-5 rounded-full bg-green-100 flex items-center justify-center">
+                                                    <Check className="w-3.5 h-3.5 text-green-600 stroke-[3]" />
+                                                </div>
+                                            ) : step.status === 'active' ? (
+                                                <div className="w-5 h-5 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
+                                            ) : (
+                                                <div className="w-5 h-5 rounded-full border-2 border-gray-100" />
+                                            )}
+                                        </div>
+                                        <p className={`text-xs font-bold transition-colors ${step.status === 'completed' ? 'text-gray-400' : step.status === 'active' ? 'text-indigo-600' : 'text-gray-300'}`}>
+                                            {step.label}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer Badge */}
+                <div className="p-6 pt-0 flex justify-center">
+                     <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-50 border border-gray-100 rounded-full text-[10px] font-bold text-gray-400 uppercase tracking-widest grayscale opacity-60">
+                        <Zap className="w-3.5 h-3.5" />
+                        Built with Magic Patterns
+                     </div>
+                </div>
+
+                {/* Custom styling for scrollbar */}
+                <style jsx>{`
+                    .custom-scrollbar::-webkit-scrollbar {
+                        width: 4px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb {
+                        background: #e2e8f0;
+                        border-radius: 10px;
+                    }
+                    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                        background: #cbd5e1;
+                    }
+                `}</style>
+            </div>
+        </>
+    );
+};
+
+export default IngestionSidebar;
