@@ -488,7 +488,7 @@ export const dataSourcesService = {
     }
   },
 
-  async ingestSource(sourceId: string) {
+  async ingestSource(sourceId: string): Promise<{ job_id: string; source_id: string; status: string; message: string }> {
     const url = `http://172.188.2.173:8005/api/v1/ingest-source`;
     try {
       const response = await fetch(url, {

@@ -557,9 +557,10 @@ const Step4: React.FC<{
 // ─── Main Modal ───────────────────────────────────────────────────────────────
 interface AddDataSourceModalProps {
   onClose: () => void;
+  onSuccess?: (jobId: string, sourceName: string) => void;
 }
 
-const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose }) => {
+const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSuccess }) => {
   const [step, setStep] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [config, setConfig] = useState({
@@ -661,13 +662,17 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose }) => {
       const createdSource = await dataSourcesService.createDataSource(selectedId as 'postgres' | 'mongodb' | 'postgresql', payload);
 
       // Trigger ingestion after creation
+      let jobId = "";
       if (createdSource && (createdSource.id || createdSource.source_id)) {
-        await dataSourcesService.ingestSource(createdSource.id || createdSource.source_id);
+        const ingestRes = await dataSourcesService.ingestSource(createdSource.id || createdSource.source_id);
+        jobId = ingestRes.job_id;
       }
 
-      onClose();
-      // Optional: Refresh parent page
-      window.location.reload();
+      if (onSuccess && jobId) {
+        onSuccess(jobId, finish.name || connector.defaultName);
+      } else {
+        onClose();
+      }
     } catch (err: any) {
       setSubmitError(err.message || "Failed to create data source");
     } finally {
