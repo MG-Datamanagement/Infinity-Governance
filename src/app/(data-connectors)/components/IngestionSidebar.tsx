@@ -25,9 +25,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     const [steps, setSteps] = useState<Step[]>([
         { label: "Establishing Connection", status: 'active' },
         { label: "Schema Discovery", status: 'pending' },
-        { label: "Ingesting: customers_prod", status: 'pending' },
-        { label: "Ingesting: orders_master", status: 'pending' },
-        { label: "Ingesting: transactions_ledger", status: 'pending' },
+        { label: "Ingesting Resources", status: 'pending' },
         { label: "PII Detection Scan", status: 'pending' },
     ]);
 
@@ -102,31 +100,21 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         } else if (msg.includes("Found") && msg.includes("total tables")) {
             updateStep("Schema Discovery", 'completed');
             setProgress(3);
-        } else if (msg.includes("Analyzing table")) {
-            const tableName = msg.match(/'([^']+)'/)?.[1];
-            if (tableName) {
-                setSteps(prev => {
-                    const existing = prev.find(s => s.label.includes(tableName));
-                    if (existing) {
-                        return prev.map(s => s.label.includes(tableName) ? { ...s, status: 'active' } : s);
-                    }
-                    // Insert before PII scan
-                    const piiIdx = prev.findIndex(s => s.label === "PII Detection Scan");
-                    const newStep: Step = { label: `Ingesting: ${tableName}`, status: 'active' };
-                    const next = [...prev];
-                    next.splice(piiIdx, 0, newStep);
-                    return next;
-                });
-            }
-        } else if (msg.includes("→ tag=")) {
-            const tableName = msg.match(/'([^']+)'/)?.[1];
-            if (tableName) {
-                updateStep(`Ingesting: ${tableName}`, 'completed');
-                setProgress(p => Math.min(p + 1, totalSteps - 1));
-            }
+        } else if (msg.includes("PostgresSink connected")) {
+            updateStep("Ingesting Resources", 'active');
+            setProgress(4);
+        } else if (msg.includes("PostgresSink closed")) {
+            // Increment progress for each table closed
+            setProgress(p => Math.min(p + 1, totalSteps - 2));
         } else if (msg.includes("Metadata ingestion complete")) {
+            updateStep("Ingesting Resources", 'completed');
             updateStep("PII Detection Scan", 'active');
             setProgress(totalSteps - 1);
+        } else if (msg.includes("Ingestion job completed")) {
+            setIsComplete(true);
+            setIsThinking(false);
+            setSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
+            setProgress(totalSteps);
         }
     };
 
