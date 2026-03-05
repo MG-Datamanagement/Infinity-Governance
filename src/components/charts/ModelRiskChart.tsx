@@ -9,7 +9,7 @@ interface ModelRiskChartProps {
 
 export function ModelRiskChart({ data }: ModelRiskChartProps) {
   return (
-    <ResponsiveContainer width="100%" height={180}>
+    <ResponsiveContainer width="100%" height={250}>
       <AreaChart data={data}>
         <defs>
           <linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1">
@@ -24,13 +24,13 @@ export function ModelRiskChart({ data }: ModelRiskChartProps) {
           tickLine={false}
           axisLine={false}
         />
-        <YAxis
+        {/* <YAxis
           domain={[0, 1]}
           ticks={[0, 0.25, 0.5, 0.75, 1]}
           tick={{ fill: '#9ca3af', fontSize: 11 }}
           tickLine={false}
           axisLine={false}
-        />
+        /> */}
         <Tooltip
           contentStyle={{
             backgroundColor: 'white',

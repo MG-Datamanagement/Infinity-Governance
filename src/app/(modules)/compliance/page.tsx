@@ -31,12 +31,12 @@ function ComplianceContent() {
     );
 
   return (
-    <div className="p-4 md:p-3 space-y-2">
+    <div className="p-4 md:p-6 space-y-5">
       <TabNavigation />
       <ComplianceHeader />
 
-      <div className="grid grid-cols-1 md:grid-cols-[6fr_2fr] gap-2">
-        <div className="grid grid-cols-1 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+        <div className="grid grid-cols-1 gap-2 col-span-8">
           <ComplianceHealthSection trendsQuery={trends} />
           <ComplianceIssuesSection query={issues} />
         </div>
@@ -50,7 +50,7 @@ function ComplianceContent() {
 export default function CompliancePage() {
   return (
     <ErrorBoundary>
-      <ComplianceContent />;
+      <ComplianceContent />
     </ErrorBoundary>
   );
 }

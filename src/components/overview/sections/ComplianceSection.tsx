@@ -7,7 +7,7 @@
  * from fetching but still independently retryable.
  */
 
-import { Shield } from "lucide-react";
+import { ShieldCheckIcon, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InlineState } from "@/components/ui/InlineState";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -21,12 +21,14 @@ function ComplianceContent({ query }: Props) {
   const { data: frameworks, isLoading, error, refetch } = query;
 
   return (
-    <div className="card p-4">
-      <div className="flex items-center gap-2 mb-2">
+    <div className="card p-6 space-y-4 lg:col-span-4">
+      <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-gray-900">
           Compliance Overview
         </h3>
-        <Shield className="text-green-600" size={16} />
+        <div>
+          <ShieldCheckIcon className="text-green-600" size={16} />
+        </div>
       </div>
 
       {isLoading && (
@@ -52,9 +54,9 @@ function ComplianceContent({ query }: Props) {
       )}
 
       {!isLoading && !error && frameworks && frameworks.length > 0 && (
-        <div className="space-y-4">
-          <div className="p-1.5 bg-green-100/40 rounded-lg">
-            <p className="text-xs text-gray-600 leading-normal">
+        <div className="space-y-5">
+          <div className="p-3 bg-green-50 rounded-lg">
+            <p className="text-xs  text-green-800 leading-relaxed">
               Your governance is in excellent shape! All critical compliance
               frameworks are above 90%, with GDPR and SOC 2 leading at 96% and
               98%. HIPAA needs attention at 79% - consider reviewing data
@@ -62,15 +64,17 @@ function ComplianceContent({ query }: Props) {
             </p>
           </div>
 
-          <div className="max-h-44 overflow-y-auto pr-1">
+          <div className="pr-1 space-y-6">
             {frameworks.map((framework) => (
               <div
                 key={framework.id}
-                className="flex-col items-center justify-between space-y-2"
+                className="flex-col items-center justify-between"
               >
                 <div className="flex justify-between items-center">
-                  <div className="text-xs text-gray-700">{framework.name}</div>
-                  <div className="text-sm font-medium text-gray-900 text-right">
+                  <div className="text-xs font-medium text-gray-700">
+                    {framework.name}
+                  </div>
+                  <div className="text-sm font-semibold text-gray-900 text-right">
                     {framework.score}%
                   </div>
                 </div>
@@ -92,15 +96,13 @@ function ComplianceContent({ query }: Props) {
               </div>
             ))}
           </div>
-
-          <button
-            disabled
-            className="w-full p-1 text-sm text-center rounded-md bg-gray-100 text-gray-800 font-medium hover:bg-gray-200 hover:text-primary disabled:cursor-not-allowed"
-          >
-            Details →
-          </button>
         </div>
       )}
+      <div>
+        <button className="w-full mt-10 flex items-center justify-center gap-2 p-2 text-xs text-center rounded-md border border-gray-200 hover:bg-gray-100 text-gray-800 font-medium">
+          Details <ArrowRight size={14} />
+        </button>
+      </div>
     </div>
   );
 }

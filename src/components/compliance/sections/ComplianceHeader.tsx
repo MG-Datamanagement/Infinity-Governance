@@ -7,11 +7,6 @@ export function ComplianceHeader() {
       <p className="text-sm text-gray-600 font-medium">
         Monitor your data governance health and activities
       </p>
-
-      <div className="flex items-center gap-2">
-        <Button icon={<PlayIcon size={16} />}>Run Full Scan</Button>
-        <Button icon={<File size={16} />} variant="outline">Export Report</Button>
-      </div>
     </div>
   );
 }

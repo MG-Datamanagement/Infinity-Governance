@@ -8,7 +8,8 @@ import {
   MOCK_DOMAIN_ASSETS,
   MOCK_PLATFORM_USAGE,
   MOCK_RECENT_ACTIVITY,
-} from '@/constants/mockData';
+  MOCK_RECENTLY_VIEWED,
+} from '@/lib/mockData';
 
 export interface Connector {
   id: string;
@@ -67,6 +68,11 @@ export const dashboardMockApiService = {
     await delay(250);
     return MOCK_RECENT_ACTIVITY;
   },
+
+  async getRecentlyViewed() {
+    await delay(250);
+    return MOCK_RECENTLY_VIEWED
+  }
 };
 
 

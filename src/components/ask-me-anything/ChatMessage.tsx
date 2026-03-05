@@ -155,7 +155,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({
                     </div>
                   )}
                 </div>
-                {isLatestHumanMessage && onEditMessage && !isThinking && (
+                {isLatestHumanMessage && onEditMessage  && (
                   <button
                     onClick={handleEdit}
                     className="absolute -bottom-6 right-0 text-sm text-gray-500 hover:text-indigo-600 transition-all flex items-center gap-1"

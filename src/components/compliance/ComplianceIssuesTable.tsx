@@ -20,7 +20,7 @@ export function ComplianceIssuesTable({ issues }: ComplianceIssuesTableProps) {
   );
 
   return (
-    <div className="card">
+    <div className="card p-2 lg:p-6">
       {/* Header */}
       <div className="p-2 md:p-3 border-b border-gray-200">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-2">

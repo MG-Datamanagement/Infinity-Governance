@@ -5,7 +5,7 @@
  * Uses SectionCard for the consistent header pattern.
  */
 
-import { TrendingUp } from "lucide-react";
+import { TrendingUp, ArrowUpRight } from "lucide-react";
 import { InlineState } from "@/components/ui/InlineState";
 import { OverviewData } from "@/hooks/useOverviewData";
 import { SectionCard } from "../cards/SectionCard";
@@ -20,7 +20,7 @@ export function DomainsSection({ query }: Props) {
   return (
     <SectionCard
       title="Top Domains"
-      icon={<TrendingUp size={16} className="text-green-600" />}
+      icon={<ArrowUpRight size={16} className="text-green-600" />}
       isLoading={isLoading}
     >
       {isLoading && (
@@ -40,7 +40,7 @@ export function DomainsSection({ query }: Props) {
       )}
 
       {!isLoading && !error && domains && domains.length > 0 && (
-        <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+        <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
           {domains.map((domain, idx) => (
             <div
               key={idx}

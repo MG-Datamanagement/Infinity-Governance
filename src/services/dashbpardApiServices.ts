@@ -1,3 +1,4 @@
+import { MOCK_RECENTLY_VIEWED } from "@/lib/mockData";
 import { dashboardApiClient } from "@/lib/api-clients/dashboardApiClient";
 import {
   DashboardEntityMetricsResponse,
@@ -102,20 +103,22 @@ export const dashbpardApiServices = {
   },
 
   async getRecentlyViewed(userUrn: string) {
-    const response: RecentlyViewedDatasetsResponse = await dashboardApiClient.get(
-      `/dashboard/recent?user_urn=${userUrn}`,
-    );
-    const RecentlyViewedDatasets: RecentlyViewed[] =
-      response?.recently_viewed_datasets?.map(
-        (recentDataset: RecentlyViewedDataset) => ({
-          id: recentDataset?.urn,
-          name: recentDataset?.name,
-          platform: recentDataset?.platform,
-          type: "Table",
-        }),
-      );
+    // const response: RecentlyViewedDatasetsResponse = await dashboardApiClient.get(
+    //   `/dashboard/recent?user_urn=${userUrn}`,
+    // );
+    // const RecentlyViewedDatasets: RecentlyViewed[] =
+    //   response?.recently_viewed_datasets?.map(
+    //     (recentDataset: RecentlyViewedDataset) => ({
+    //       id: recentDataset?.urn,
+    //       name: recentDataset?.name,
+    //       platform: recentDataset?.platform,
+    //       type: "Table",
+    //     }),
+    //   );
 
-    return RecentlyViewedDatasets;
+    // return [];
+    return MOCK_RECENTLY_VIEWED
+    // return RecentlyViewedDatasets;
   },
 
   async getRecentActivity(userUrn: string) {
@@ -133,6 +136,7 @@ export const dashbpardApiServices = {
         name: activity.msg || "",
         type: "",
         platform: "",
+        time: activity.t
       }),
     );
 
