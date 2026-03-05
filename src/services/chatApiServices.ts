@@ -11,11 +11,17 @@ import {
   SessionDetailResponse,
 } from "@/types";
 
-const USE_MOCK_DATA = false;
-
 export const chatApiServices = {
-  async sendMessage(request: ChatRequest): Promise<ChatResponse> {
-    return chatApiClient.post<ChatResponse>("/chat", request);
+  async sendMessage(
+    request: ChatRequest,
+    agentNames: string,
+    datasetNames: string,
+  ): Promise<ChatResponse> {
+    console.log(request, agentNames, datasetNames)
+    return chatApiClient.post<ChatResponse>(
+      `/chat/${agentNames}/${datasetNames}`,
+      request,
+    );
   },
 
   async getHistory(): Promise<HistoryResponse> {

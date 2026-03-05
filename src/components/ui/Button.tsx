@@ -1,7 +1,7 @@
 import { type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "outline";
+type Variant = "primary" | "outline" | "transparent";
 
 type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: Variant;
@@ -11,6 +11,7 @@ type Props = ButtonHTMLAttributes<HTMLButtonElement> & {
 const variants: Record<Variant, string> = {
   primary: "bg-primary text-white hover:bg-primary-dark",
   outline: "text-gray-800 border-2 border-gray-200 bg-white hover:bg-gray-200",
+  transparent: "text-gray-800 bg-white hover:bg-gray-200",
 };
 
 export function Button({

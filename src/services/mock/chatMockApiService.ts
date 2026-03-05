@@ -96,13 +96,6 @@ export const MOCK_DATASETS: Dataset[] = [
     columns: 12,
     rows: 850,
   },
-  // {
-  //   id: "audit_trail",
-  //   name: "audit_trail",
-  //   type: "PostgreSQl",
-  //   columns: 14,
-  //   rows: 8900,
-  // },
 ];
 
 export const SUGGESTED_PROMPTS = [

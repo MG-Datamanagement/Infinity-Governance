@@ -23,6 +23,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingFallback } from "@/components/Fallbacks";
 import { chatApiServices } from "@/services/chatApiServices";
 import { MOCK_AGENTS, MOCK_DATASETS } from "@/services/mock/chatMockApiService";
+import { CONSTANTS } from "@/lib/constants";
 
 const AskMeAnything: React.FC = () => {
   // UI State
@@ -113,19 +114,50 @@ const AskMeAnything: React.FC = () => {
 
     setIsThinking(true);
 
+    const agentNames = "lineage_tracker,schema_scout";
+    // uiState.selectedAgents.length
+    //   ? uiState.selectedAgents?.join(",")
+    //   : CONSTANTS.defaultAgentName;
+    const datasetNames = "catalogs,api_logs";
+    // uiState.selectedDatasets.length
+    //   ? uiState.selectedDatasets?.join(",")
+    //   : CONSTANTS.defaultDatasetName;
+
+    const isMemoryEnabled = uiState.memoryEnabled ? "on" : "off";
+    const isReasoningEnabled = uiState.reasoningEnabled ? "on" : "off";
+
+    const payload = {
+      message: content,
+      session_id: currentSessionId,
+      memory: isMemoryEnabled,
+      reasoning: isReasoningEnabled,
+    };
+
     try {
-      const response = await chatApiServices.sendMessage({
-        message: content,
-        session_id: currentSessionId,
-        memory: uiState.memoryEnabled,
-        reasoning: uiState.reasoningEnabled,
-      });
+      const mock: any = {
+        agent_used: "Lineage Tracker",
+        intent_detected: "lineage_mapping",
+        response:
+          "The catalogs table is related to the owners table through the owner_id column. The owner_id in catalogs is a foreign key that references the id column in the owners table. This relationship means each catalog entry can be associated with an owner, and if the owner is deleted, the owner_id in catalogs is set to NULL.",
+        reasoning:
+          "The catalogs table schema defines a foreign key constraint catalogs_owner_id_fkey on owner_id referencing owners(id) with ON DELETE SET NULL. This establishes a direct dependency from catalogs to owners.",
+        source: ["catalogs"],
+      };
+      const response: any = await new Promise((res, rej) => {
+        res(mock)
+      })
+      // chatApiServices.sendMessage(
+      //   payload,
+      //   agentNames,
+      //   datasetNames,
+      // );
+
 
       const aiMessage: Message = {
         id: crypto.randomUUID(),
         role: "ai",
-        content: response.answer,
-        created_at: response.timestamp,
+        content: response?.response,
+        created_at: response?.timestamp,
         error: false,
       };
 
@@ -136,7 +168,7 @@ const AskMeAnything: React.FC = () => {
         setMessageResponses((prevMap) => {
           const newMap = new Map(prevMap);
           newMap.set(aiMessage.id, {
-            reasoning: response.reasoning,
+            reasoning: response?.reasoning,
             reasoningSummary: response.reasoning_summary,
             reasoningTools: response.reasoning_tools,
             sources: response.sources,

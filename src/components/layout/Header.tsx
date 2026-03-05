@@ -9,6 +9,8 @@ import { LuBell } from "react-icons/lu";
 import { cn } from "@/lib/utils";
 import { NotificationsModal } from "../ui/NotificationsModal";
 import { useOverviewData } from "@/hooks/useOverviewData";
+import { Button } from "../ui/Button";
+import { useRouter } from "next/navigation";
 
 interface HeaderProps {
   userName: string;
@@ -20,6 +22,7 @@ export function Header({ userName }: HeaderProps) {
     useState<boolean>(false);
   const [markAllAsRead, setMarkAllAsRead] = useState<boolean>(false);
 
+  const router = useRouter();
   const { activity } = useOverviewData();
 
   const {
@@ -67,29 +70,31 @@ export function Header({ userName }: HeaderProps) {
 
           {/* Quick Actions */}
           <div className="border-l border-gray-200 pl-4 flex gap-4">
-            {/* <div>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors px-2 py-1 text-xs bg-gray-50 border border-gray-300">
-            <LuSlidersHorizontal size={20} className="text-gray-600" />
-            </button>
-            </div> */}
-
             <div className="">
-              <button className="p-1 rounded-lg transition-colors hidden md:block">
+              <Button
+                variant="transparent"
+                className="p-1 transition-colors hidden md:block"
+                onClick={() => router.push("/ask-me-anything")}
+              >
                 <RiRobot2Line size={20} className="text-slate-500" />
-              </button>
+              </Button>
             </div>
             <div>
-              <button className="p-1 rounded-lg transition-colors hidden md:block">
+              <Button
+                variant="transparent"
+                className="p-1 transition-colors hidden md:block"
+              >
                 <LuCircleHelp size={20} className="text-slate-500" />
-              </button>
+              </Button>
             </div>
             <div>
-              <button
+              <Button
+                variant="transparent"
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                className="p-1 rounded-lg transition-colors hidden md:block"
+                className="p-1 transition-colors hidden md:block hover:bg-gray-200"
               >
                 <LuBell size={20} className="text-slate-500" />
-              </button>
+              </Button>
             </div>
           </div>
 

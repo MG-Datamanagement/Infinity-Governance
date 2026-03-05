@@ -387,6 +387,8 @@ export interface ApiSourceStats {
   total_tables_ingested: number;
   total_row_count: number;
   total_column_count: number;
+  type: string;
+  status: string;
   catalogs?: Array<{
     catalog_id: string;
     full_name: string;
@@ -471,8 +473,8 @@ export const dataSourcesService = {
     }
   },
 
-  async fetchSourceStats(id: string) {
-    const url = `http://172.188.2.173:8005/api/v1/sources/${id}/stats`;
+  async fetchSourceStats(id: string, typeFilter:string, statusFiter:string) {
+    const url = `http://172.188.2.173:8005/api/v1/sources/${id}/stats?type=${typeFilter}&status=${statusFiter}`;
     try {
       const response = await fetch(url);
       if (!response.ok) {
