@@ -4,7 +4,7 @@ import { userDb } from '@/lib/auth/userDb';
 import { loginSchema } from '@/lib/validations';
 import { ZodError } from 'zod';
 
-export const authOptions: NextAuthOptions = {
+const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',

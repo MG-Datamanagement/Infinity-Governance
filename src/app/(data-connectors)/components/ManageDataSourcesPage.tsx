@@ -3,7 +3,9 @@
 import React, { useState, useMemo, useEffect } from "react";
 
 import { useRouter } from "next/navigation";
-import { dataSources, DataSource, dataSourcesService, ApiDataSource, ApiRunHistory, ApiSourceLog } from "@/services/mock";
+import { dataSources } from "@/services/mock";
+import { dashboardApiServices, ApiDataSource, ApiRunHistory, ApiSourceLog } from "@/services/dashboardApiServices";
+import { DataSource } from "@/types";
 
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 import AddDataSourceModal from "@/app/(data-connectors)/components/AddDataSourceModal";
@@ -86,7 +88,7 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
         const getStats = async () => {
             setIsLoading(true);
             try {
-                const apiStats = await dataSourcesService.fetchSourceStats(source.id);
+                const apiStats = await dashboardApiServices.fetchSourceStats(source.id);
                 setStats({
                     totalTables: apiStats.total_tables_ingested,
                     totalColumns: apiStats.total_column_count,
@@ -102,7 +104,7 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
         const getLogs = async () => {
             setIsLogsLoading(true);
             try {
-                const response = await dataSourcesService.fetchSourceLogs(source.id, { limit: 5 });
+                const response = await dashboardApiServices.fetchSourceLogs(source.id, { limit: 5 });
                 setRowLogs(response.logs);
             } catch (err) {
                 console.error("Failed to fetch logs for expanded row", err);
@@ -148,12 +150,7 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
                             {[
                                 { label: "TOTAL TABLES", value: isLoading ? "..." : (stats?.totalTables.toLocaleString() || "0") },
                                 { label: "TOTAL COLUMNS", value: isLoading ? "..." : (formatNumber(stats?.totalColumns || 0)) },
-                                { label: "TOTAL ROWS", value: isLoading ? "..." : (formatNumber(stats?.totalRows || 0)) },
-                                {
-                                    label: "PII DETECTED",
-                                    value: source.stats.piiDetected.toString(), // Keep using mock/source data for PII for now as it's not in stats API
-                                    highlight: true,
-                                },
+
                             ].map((stat) => (
                                 <div
                                     key={stat.label}
@@ -163,8 +160,7 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
                                         {stat.label}
                                     </p>
                                     <p
-                                        className={`text-2xl font-bold ${stat.highlight ? "text-orange-500" : "text-gray-900"
-                                            }`}
+                                        className="text-2xl font-bold text-gray-900"
                                     >
                                         {stat.value}
                                     </p>
@@ -362,7 +358,7 @@ const ManageDataSourcesPage: React.FC = () => {
         setIsLoading(true);
         setError(null);
         try {
-            const apiData = await dataSourcesService.fetchDataSources({
+            const apiData = await dashboardApiServices.fetchDataSources({
                 status: filter !== "All" ? filter : undefined,
                 limit: 20
             });
@@ -424,7 +420,7 @@ const ManageDataSourcesPage: React.FC = () => {
     const fetchHistory = async () => {
         setIsHistoryLoading(true);
         try {
-            const data = await dataSourcesService.fetchRunHistory(HISTORY_LIMIT, historyOffset, historyStatus);
+            const data = await dashboardApiServices.fetchRunHistory(HISTORY_LIMIT, historyOffset, historyStatus);
             setRunHistory(data);
         } catch (err) {
             console.error("Failed to fetch run history", err);
@@ -461,7 +457,7 @@ const ManageDataSourcesPage: React.FC = () => {
 
     const handleIngest = async (id: string) => {
         try {
-            const response = await dataSourcesService.ingestSource(id);
+            const response = await dashboardApiServices.ingestSource(id);
             if (response.job_id) {
                 setActiveJobs(prev => ({ ...prev, [id]: response.job_id }));
             }

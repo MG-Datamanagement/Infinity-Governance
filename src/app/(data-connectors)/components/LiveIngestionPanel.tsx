@@ -59,7 +59,7 @@ const LiveIngestionPanel: React.FC<LiveIngestionPanelProps> = ({ jobId, sourceId
         if (!jobId) return;
 
         console.log(`Connecting to SSE for job: ${jobId}`);
-        const url = `http://172.188.2.173:8005/api/v1/jobs/${jobId}/logs/stream`;
+        const url = `${process.env.NEXT_PUBLIC_DASHBOARD_API_URL || 'http://172.188.2.173:8005'}/api/v1/jobs/${jobId}/logs/stream`;
         const es = new EventSource(url);
         eventSourceRef.current = es;
 

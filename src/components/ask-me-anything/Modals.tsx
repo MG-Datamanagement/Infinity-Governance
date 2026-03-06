@@ -4,7 +4,7 @@ import { RiRobot2Line } from "react-icons/ri";
 import { IoClose } from "react-icons/io5";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Agent, Dataset } from "@/types";
+import { Agent, ChatDataset } from "@/types";
 
 interface AgentModalProps {
   isOpen: boolean;
@@ -134,7 +134,7 @@ export const AgentModal: React.FC<AgentModalProps> = ({
 
 interface DatasetModalProps {
   isOpen: boolean;
-  datasets: Dataset[];
+  datasets: ChatDataset[];
   selectedDatasets: string[];
   onClose: () => void;
   onToggleDataset: (datasetId: string) => void;

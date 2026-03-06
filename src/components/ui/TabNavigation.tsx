@@ -7,13 +7,31 @@ import { Select } from "./Select";
 import { Option } from "@/types";
 import QuickActionsDropdown from "./QuickActionsDropdown";
 import { Button } from "./Button";
-import { DownloadIcon, PlayIcon } from "lucide-react";
+import { Download, Play, ChevronDown, Loader2 } from "lucide-react";
 import { DashboardTabType, useAppStore } from "@/store/appStore";
+import { useState } from "react";
+import { dashboardApiServices } from "@/services/dashboardApiServices";
+import { ComplianceScanPanel } from "@/components/compliance/ComplianceScanPanel";
 
 export function TabNavigation() {
   const pathname = usePathname();
   const dashboardTab = useAppStore((s) => s.dashboardTab);
   const setDashboardTab = useAppStore((s) => s.setDashboardTab);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isScanOpen, setIsScanOpen] = useState(false);
+
+  const handleExportReport = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      await dashboardApiServices.exportComplianceReport();
+    } catch (err) {
+      console.error("Failed to export compliance report:", err);
+      alert("Failed to export report. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const tabs = [
     { name: "Overview", href: "/overview" },
@@ -44,36 +62,40 @@ export function TabNavigation() {
           <>
             <div>
               <Button
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md",
-                  "border border-gray-300 bg-primary",
-                  "text-gray-800 font-semibold text-base",
-                  "transition-colors",
-                  "text-gray-50",
-                )}
-                icon={<PlayIcon size={16} />}
+                variant="primary"
+                onClick={() => setIsScanOpen(true)}
+                className="bg-indigo-600 hover:bg-indigo-700 h-9 px-4 rounded-lg flex items-center gap-2"
+                icon={<Play size={16} fill="currentColor" />}
               >
                 Run Full Scan
               </Button>
             </div>
             <div>
               <Button
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 rounded-md",
-                  "border border-gray-300 bg-gray-50",
-                  "text-gray-800 font-semibold text-base",
-                  "hover:bg-gray-100 transition-colors",
-                )}
-                icon={<DownloadIcon size={16} />}
                 variant="outline"
+                onClick={handleExportReport}
+                disabled={isExporting}
+                className="h-9 px-4 border-gray-300 rounded-lg text-gray-700 font-medium flex items-center gap-2 bg-white disabled:opacity-60"
+                icon={
+                  isExporting ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Download size={16} />
+                  )
+                }
               >
-                Export Report
+                {isExporting ? "Exporting..." : "Export Report"}
               </Button>
             </div>
           </>
         ) : null}
         <QuickActionsDropdown />
       </div>
+
+      <ComplianceScanPanel
+        isOpen={isScanOpen}
+        onClose={() => setIsScanOpen(false)}
+      />
     </div>
   );
 }

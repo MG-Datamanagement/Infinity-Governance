@@ -3,10 +3,10 @@
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Dataset,
   ClassificationTag,
   ClassificationResponse,
-} from "@/services/mock";
+} from "@/services/dashboardApiServices";
+import { Dataset } from "@/types";
 import { downloadFileFromResponse } from "@/lib/utils";
 import { Check, CheckCircle2, Clock11, Loader2, XIcon } from "lucide-react";
 
@@ -178,12 +178,11 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
     const loadDatasets = async () => {
       setIsLoading(true);
       try {
-        const { dataSourcesService } = await import("@/services/mock");
-        const stats = await dataSourcesService.fetchSourceStats(
-          // sourceId,
-          "7529fa6a-375c-4fa7-86d4-20ba1649946f",
-          //   typeFilter?.toLowerCase(),
-          //   statusFilter?.toLowerCase(),
+        const { dashboardApiServices } = await import("@/services/dashboardApiServices");
+        const stats = await dashboardApiServices.fetchSourceStats(
+          sourceId,
+          // typeFilter?.toLowerCase(),
+          // statusFilter?.toLowerCase(),
         );
         if (stats) {
           if (stats.source_name) setSourceName(stats.source_name);
@@ -214,11 +213,10 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
   const exportList = async () => {
     setIsExportListLoading(true);
     try {
-      const { dataSourcesService } = await import("@/services/mock");
+      const { dashboardApiServices } = await import("@/services/dashboardApiServices");
 
-      const response: any = await dataSourcesService.downloadSourceStats(
-        // sourceId,
-        "4aaffcf3-1522-483a-98fb-6f4a04933f09",
+      const response: any = await dashboardApiServices.downloadSourceStats(
+        sourceId,
         // typeFilter?.toLowerCase(),
         // statusFilter?.toLowerCase()
       );
@@ -243,16 +241,16 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
     setScannedDatasets(initialScanMap);
 
     try {
-      const { dataSourcesService } = await import("@/services/mock");
+      const { dashboardApiServices } = await import("@/services/dashboardApiServices");
       const payload = {
-        source_id: "7529fa6a-375c-4fa7-86d4-20ba1649946f",
+        source_id: sourceId,
         Require_human_approval: true,
         assigned_by: "ai-auto",
         min_confidence: 0.75,
       };
 
       const response: ClassificationResponse =
-        await dataSourcesService.initPiiClassification(payload);
+        await dashboardApiServices.initPiiClassification(payload);
 
       // Simulate staggered per-dataset completion
       const results = allDatasets.map((d) => ({

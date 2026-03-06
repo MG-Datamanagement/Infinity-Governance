@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
+import { ApiOwner } from "@/services/dashboardApiServices";
 
 // ─── Only MongoDB + PostgreSQL ────────────────────────────────────────────────
 const CONNECTORS = [
@@ -394,7 +395,7 @@ const Step4: React.FC<{
   config: { uri: string };
   schedule: { frequency: string; hour: string; minute: string; timezone: string };
   finish: { name: string; piiEnabled: boolean; piiApproval: boolean; failureEmail: string; owner_id: string };
-  owners: any[];
+  owners: ApiOwner[];
   onChange: (k: string, v: string | boolean) => void;
 }> = ({ connector, config, schedule, finish, owners, onChange }) => {
   const scheduleStr = `Every ${schedule.frequency.toLowerCase()} at ${schedule.hour}:${schedule.minute}`;
@@ -573,13 +574,13 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
   const [finish, setFinish] = useState({
     name: "", piiEnabled: true, piiApproval: true, failureEmail: "", owner_id: "",
   });
-  const [owners, setOwners] = useState<any[]>([]);
+  const [owners, setOwners] = useState<ApiOwner[]>([]);
 
   useEffect(() => {
     const fetchOwners = async () => {
       try {
-        const { dataSourcesService } = await import("@/services/mock");
-        const list = await dataSourcesService.fetchOwnersList();
+        const { dashboardApiServices } = await import("@/services/dashboardApiServices");
+        const list = await dashboardApiServices.fetchOwnersList();
         setOwners(list);
         if (list.length > 0 && !finish.owner_id) {
           setFinish(p => ({ ...p, owner_id: list[0].id }));
@@ -593,12 +594,12 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
 
   const connector = CONNECTORS.find((c) => c.id === selectedId) ?? CONNECTORS[0];
 
-  const updateConfig = (k: string, v: string | boolean) => setConfig((p) => ({ ...p, [k]: v }));
-  const updateSchedule = (k: string, v: string | boolean) => setSchedule((p) => ({ ...p, [k]: v }));
-  const updateFinish = (k: string, v: string | boolean) => setFinish((p) => ({ ...p, [k]: v }));
+  const updateConfig = (k: string, v: string | boolean) => setConfig((p: any) => ({ ...p, [k]: v }));
+  const updateSchedule = (k: string, v: string | boolean) => setSchedule((p: any) => ({ ...p, [k]: v }));
+  const updateFinish = (k: string, v: string | boolean) => setFinish((p: any) => ({ ...p, [k]: v }));
 
-  const next = () => setStep((s) => Math.min(s + 1, 4));
-  const prev = () => setStep((s) => Math.max(s - 1, 1));
+  const next = () => setStep((s: number) => Math.min(s + 1, 4));
+  const prev = () => setStep((s: number) => Math.max(s - 1, 1));
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -658,14 +659,17 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
         payload.include_tables = true;
       }
 
-      const { dataSourcesService } = await import("@/services/mock");
-      const createdSource = await dataSourcesService.createDataSource(selectedId as 'postgres' | 'mongodb' | 'postgresql', payload);
+      const { dashboardApiServices } = await import("@/services/dashboardApiServices");
+      const createdSource = await dashboardApiServices.createDataSource(selectedId as 'postgres' | 'mongodb' | 'postgresql', payload);
 
       // Trigger ingestion after creation
       let jobId = "";
       if (createdSource && (createdSource.id || createdSource.source_id)) {
-        const ingestRes = await dataSourcesService.ingestSource(createdSource.id || createdSource.source_id);
-        jobId = ingestRes.job_id;
+        const sourceId = createdSource.id || createdSource.source_id;
+        if (sourceId) {
+          const ingestRes = await dashboardApiServices.ingestSource(sourceId);
+          jobId = ingestRes.job_id;
+        }
       }
 
       if (onSuccess && jobId) {

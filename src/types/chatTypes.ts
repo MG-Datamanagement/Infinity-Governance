@@ -97,7 +97,7 @@ export interface Agent {
   disabled: boolean;
 }
 
-export interface Dataset {
+export interface ChatDataset {
   id: string;
   name: string;
   type: string;

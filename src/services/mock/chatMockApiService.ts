@@ -1,7 +1,7 @@
 import {
   Agent,
   ChatResponse,
-  Dataset,
+  ChatDataset,
   HistoryResponse,
   SessionDetailResponse,
 } from "../../types";
@@ -60,7 +60,7 @@ export const MOCK_AGENTS: Agent[] = [
   },
 ];
 
-export const MOCK_DATASETS: Dataset[] = [
+export const MOCK_DATASETS: ChatDataset[] = [
   {
     id: "customers_prod",
     name: "customers_prod",
@@ -266,6 +266,7 @@ export const MOCK_SESSION_DETAIL: SessionDetailResponse = {
   message_count: 2,
   messages: [
     {
+      id: "msg-1",
       role: "human",
       content:
         "List all tags in the system and show which catalogs and columns each tag is assigned to",
@@ -273,6 +274,7 @@ export const MOCK_SESSION_DETAIL: SessionDetailResponse = {
       error: false,
     },
     {
+      id: "msg-2",
       role: "ai",
       content:
         "Here are all the tags in the system along with the catalogs and columns they are assigned to:\n\n1. Tag: Confidential\n   - Description: Sensitive business or user data that must not be disclosed without authorization, including internal documents and trade secrets.\n   - Assigned Catalogs: 0\n   - Assigned Columns: 4",

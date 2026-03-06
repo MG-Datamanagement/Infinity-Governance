@@ -174,6 +174,8 @@ export const MOCK_DASHBOARD_STATS: DashboardStats = {
   classifiedChange: "+8% vs last month",
   pendingReview: 243,
   aiRiskDomains: 16,
+  activeDomains: 12,
+  activeTables: 45,
 };
 
 export const MOCK_AI_SNAPSHOT: AIGovernanceSnapshot = {

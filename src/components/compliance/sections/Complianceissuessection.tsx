@@ -5,11 +5,12 @@ import { ComplianceIssuesTable } from "@/components/compliance/ComplianceIssuesT
 import { ComplianceData } from "../../../hooks/useComplianceData";
 
 type Props = {
-  query: ComplianceData["issues"];
+  query: ComplianceData["complianceRun"];
 };
 
 function IssuesContent({ query }: Props) {
-  const { data: issues, isLoading, error, refetch } = query;
+  const { data: runData, isLoading, error, refetch } = query;
+  const issues = runData?.open_issues?.items;
 
   if (isLoading) return <InlineState type="loading" message="Loading compliance issues..." />;
   if (error) return <InlineState type="error" message="Failed to load compliance issues." onRetry={refetch} />;

@@ -42,7 +42,7 @@ function OverviewContent() {
   if (stats.error) return <DataErrorFallback retry={stats.refetch} />;
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="max-w-7xl mx-auto px-8 py-8 space-y-5">
       <TabNavigation />
       <OverviewHeader />
 

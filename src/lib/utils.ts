@@ -34,6 +34,8 @@ export function getStatusColor(status: string): string {
 
 export function getSeverityColor(severity: string): string {
   switch (severity) {
+    case "CRITICAL":
+      return "bg-red-200 text-red-900 border border-red-300 font-bold";
     case "HIGH":
       return "bg-red-100 text-red-800";
     case "MEDIUM":

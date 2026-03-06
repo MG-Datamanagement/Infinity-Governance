@@ -66,16 +66,16 @@ export default function QuickActionsDropdown() {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex items-center gap-2 px-3 py-2 rounded-md",
-          "border border-gray-300 bg-gray-50/0",
-          "text-gray-800 font-semibold text-base",
+          "flex items-center gap-2 h-9 px-4 rounded-lg",
+          "border border-gray-300 bg-white",
+          "text-gray-700 font-medium text-sm",
           "hover:bg-gray-50 transition-colors",
         )}
       >
         Quick actions
         <ChevronDown
           size={16}
-          className={cn("transition-transform", open && "rotate-180")}
+          className={cn("transition-transform ml-auto", open && "rotate-180")}
         />
       </button>
 

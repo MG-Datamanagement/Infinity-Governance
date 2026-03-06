@@ -2,7 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { dataSourcesService, ApiCatalogDetail } from "@/services/mock";
+import {
+  dashboardApiServices,
+  ClassificationTag,
+  ClassificationResponse,
+  ApiCatalogDetail,
+} from "@/services/dashboardApiServices";
+import { Dataset, ApiTag, ApiColumn } from "@/types";
 import ComplianceReportModal from "@/app/(data-connectors)/components/ComplianceReportModal";
 
 const TABS = ["DataCard", "Columns", "Lineage", "Properties", "Queries", "Stats", "Quality", "Governance", "Incidents"] as const;
@@ -26,7 +32,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
         const fetchDetail = async () => {
             setIsLoading(true);
             try {
-                const data = await dataSourcesService.fetchCatalogDetail(datasetId);
+                const data = await dashboardApiServices.fetchCatalogDetail(datasetId);
                 setCatalogData(data);
             } catch (err) {
                 console.error("Failed to fetch catalog detail", err);
@@ -43,7 +49,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
         const ownerName =
             typeof catalogData.owner === "string"
                 ? catalogData.owner
-                : catalogData?.owner?.name || "Unknown";
+                : (catalogData?.owner as any)?.name || "Unknown";
         return {
             id: catalogData.id,
             sourceId: sourceId,
@@ -341,7 +347,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
                                     Tags
                                 </div>
                                 <div className="flex flex-wrap gap-1.5">
-                                    {detail.tags.map((tag: any) => (
+                                    {detail.tags.map((tag: ApiTag) => (
                                         <span
                                             key={tag.id}
                                             className="inline-block text-[11px] font-medium text-gray-600 bg-gray-100 rounded px-2 py-0.5"
@@ -389,7 +395,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({ sourceId, dataset
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {catalogData?.columns?.map((col: any, idx: number) => (
+                                    {catalogData?.columns?.map((col: ApiColumn, idx: number) => (
                                         <tr key={col.name} className="border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
                                             <td className="py-4 px-6 text-xs text-gray-400">{idx + 1}</td>
                                             <td className="py-4 px-6">

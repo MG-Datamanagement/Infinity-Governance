@@ -8,40 +8,37 @@ import {
   ComplianceHealthSection,
   ComplianceIssuesSection,
   ComplianceFrameworksPanel,
+  AIInsightsCard,
 } from "@/components/compliance/sections";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function ComplianceContent() {
-  const { frameworks, issues, trends } = useComplianceData();
+  const { complianceRun } = useComplianceData();
 
-  const allLoading =
-    frameworks.isLoading && issues.isLoading && trends.isLoading;
-  const allError = frameworks.error && issues.error && trends.error;
+  const isLoading = complianceRun.isLoading;
+  const error = complianceRun.error;
 
-  if (allLoading) return <LoadingFallback />;
-  if (allError)
+  if (isLoading) return <LoadingFallback />;
+  if (error)
     return (
       <DataErrorFallback
-        retry={() => {
-          frameworks.refetch();
-          issues.refetch();
-          trends.refetch();
-        }}
+        retry={() => complianceRun.refetch()}
       />
     );
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
+    <div className="max-w-7xl mx-auto px-8 py-8 space-y-5">
       <TabNavigation />
       <ComplianceHeader />
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-        <div className="grid grid-cols-1 gap-2 col-span-8">
-          <ComplianceHealthSection trendsQuery={trends} />
-          <ComplianceIssuesSection query={issues} />
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+        <div className="grid grid-cols-1 gap-5 col-span-8 min-w-0">
+          <ComplianceHealthSection complianceRunQuery={complianceRun} />
+          <AIInsightsCard text={complianceRun.data?.ai_insights?.text} />
+          <ComplianceIssuesSection query={complianceRun} />
         </div>
 
-        <ComplianceFrameworksPanel query={frameworks} />
+        <ComplianceFrameworksPanel query={complianceRun} />
       </div>
     </div>
   );

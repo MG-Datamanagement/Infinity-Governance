@@ -14,10 +14,42 @@ import { ComplianceTrend } from "@/types";
 import { TrendingUpIcon } from "lucide-react";
 
 interface ComplianceTrendsChartProps {
-  data: ComplianceTrend[];
+  data: {
+    labels: string[];
+    datasets: {
+      label: string;
+      data: number[];
+    }[];
+  };
 }
 
 export function ComplianceTrendsChart({ data }: ComplianceTrendsChartProps) {
+  // Transform API data format to Recharts format
+  // From: { labels: ["Mar"], datasets: [{ label: "Overall", data: [44.4] }, ...] }
+  // To: [{ month: "Mar", "Overall": 44.4, ... }]
+  const chartData = data.labels.map((label, index) => {
+    const point: any = { month: label };
+    data.datasets.forEach((dataset) => {
+      point[dataset.label] = dataset.data[index];
+    });
+    return point;
+  });
+
+  const getLineColor = (label: string) => {
+    switch (label.toUpperCase()) {
+      case "OVERALL":
+        return "#6b7280";
+      case "GDPR":
+        return "#10b981";
+      case "SOC2":
+        return "#3b82f6";
+      case "HIPAA":
+        return "#f59e0b";
+      default:
+        return "#94a3b8";
+    }
+  };
+
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
@@ -25,16 +57,16 @@ export function ComplianceTrendsChart({ data }: ComplianceTrendsChartProps) {
           <h3 className="text-sm font-bold text-gray-900">
             Compliance Score Trends
           </h3>
-          <p className="text-xs text-gray-500">Last 6 months performance</p>
+          <p className="text-xs text-gray-500">Performance across frameworks</p>
         </div>
         <div className="flex items-center gap-1 text-xs text-success font-medium bg-success/10 px-1.5 py-0.5 rounded-full border border-success/50">
           <TrendingUpIcon size={14} className="text-success" />
-          +7% Overall
+          Live Data
         </div>
       </div>
 
       <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={data}>
+        <LineChart data={chartData}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis
             dataKey="month"
@@ -42,7 +74,7 @@ export function ComplianceTrendsChart({ data }: ComplianceTrendsChartProps) {
             tickLine={{ stroke: "#e5e7eb" }}
           />
           <YAxis
-            domain={[60, 100]}
+            domain={[0, 100]}
             tick={{ fill: "#6b7280", fontSize: 8 }}
             tickLine={{ stroke: "#e5e7eb" }}
           />
@@ -59,38 +91,18 @@ export function ComplianceTrendsChart({ data }: ComplianceTrendsChartProps) {
             iconType="circle"
             iconSize={12}
           />
-          <Line
-            type="monotone"
-            dataKey="overall"
-            stroke="#6b7280"
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            name="Overall"
-          />
-          <Line
-            type="monotone"
-            dataKey="gdpr"
-            stroke="#10b981"
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            name="GDPR"
-          />
-          <Line
-            type="monotone"
-            dataKey="soc2"
-            stroke="#3b82f6"
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            name="SOC 2"
-          />
-          <Line
-            type="monotone"
-            dataKey="hipaa"
-            stroke="#f59e0b"
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            name="HIPAA"
-          />
+          {data.datasets.map((dataset) => (
+            <Line
+              key={dataset.label}
+              type="monotone"
+              dataKey={dataset.label}
+              stroke={getLineColor(dataset.label)}
+              strokeWidth={dataset.label.toUpperCase() === "OVERALL" ? 3 : 2}
+              dot={{ r: 2 }}
+              name={dataset.label}
+              activeDot={{ r: 4 }}
+            />
+          ))}
         </LineChart>
       </ResponsiveContainer>
     </div>

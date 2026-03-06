@@ -29,15 +29,15 @@ type Props = {
 
 const defaultStats: DashboardStats = {
   totalAssets: 0,
-  // totalAssetsChange: "",
-  // governanceScore: 0,
-  // governanceScoreStatus: "",
+  totalAssetsChange: "",
+  governanceScore: 0,
+  governanceScoreStatus: "",
   classified: 0,
-  // classifiedChange: "",
-  // aiRiskDomains: 0,
+  classifiedChange: "",
+  aiRiskDomains: 0,
   activeDomains: 0,
   activeTables: 0,
-  // pendingReview: 0,
+  pendingReview: 0,
 };
 
 export function OverviewStatsGrid({ stats = defaultStats }: Props) {

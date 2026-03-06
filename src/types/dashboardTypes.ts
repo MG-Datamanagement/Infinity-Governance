@@ -50,15 +50,77 @@ export interface ComplianceTrend {
   hipaa: number;
 }
 
+// ─── Compliance API Response Types ───────────────────────────────────────────────
+
+export interface ApiComplianceIndicator {
+  text: string;
+  status: "success" | "error" | "warning";
+}
+
+export interface ApiComplianceFramework {
+  name: string;
+  score: number;
+  status: "excellent" | "warning" | "critical" | "needs_attention";
+  details: string;
+  last_checked: string;
+  indicators: ApiComplianceIndicator[];
+}
+
+export interface ApiComplianceIssue {
+  issue: string;
+  framework: string;
+  severity: "HIGH" | "MEDIUM" | "LOW" | "CRITICAL";
+  dataset: string;
+  assignee: string;
+  due_date: string;
+  action_url: string;
+}
+
+export interface ApiComplianceRunResponse {
+  timestamp: string;
+  overall_compliance: {
+    score: number;
+    change_from_last_month: number;
+    health_status: string;
+    last_updated: string;
+  };
+  compliance_health: {
+    score: number;
+    trend_label: string;
+  };
+  trends: {
+    labels: string[];
+    datasets: {
+      label: string;
+      data: number[];
+    }[];
+  };
+  frameworks: ApiComplianceFramework[];
+  open_issues: {
+    count: number;
+    severity_summary: Record<string, number>;
+    items: ApiComplianceIssue[];
+  };
+  ai_insights: {
+    text: string;
+    beta: boolean;
+  };
+  quick_actions: {
+    label: string;
+    action: string;
+  }[];
+}
+
+
 export interface DashboardStats {
   totalAssets: number;
-  // totalAssetsChange: string;
-  // governanceScore: number;
-  // governanceScoreStatus: string;
+  totalAssetsChange?: string;
+  governanceScore?: number;
+  governanceScoreStatus?: string;
   classified: number;
-  // classifiedChange: string;
-  // pendingReview: number;
-  // aiRiskDomains: number;
+  classifiedChange?: string;
+  pendingReview?: number;
+  aiRiskDomains?: number;
   activeDomains: number;
   activeTables: number;
 }
@@ -78,13 +140,13 @@ export interface ModelRiskTrend {
 export interface DomainAsset {
   domain: string;
   count: number;
-  urn: string;
+  urn?: string;
 }
 
 export interface PlatformUsage {
   platform: string;
   count: number;
-  urn: string;
+  urn?: string;
 }
 
 export interface RecentlyViewed {
@@ -107,8 +169,10 @@ export interface RecentActivity {
   id: string;
   name: string;
   type: string;
-  platform: string;
+  platform?: string;
   time?: string;
+  table?: string;
+  timestamp?: string;
 }
 
 export interface NewRecentActivity {
@@ -205,10 +269,98 @@ export interface RecentlyViewedDatasetsResponse extends BaseApiResponse {
   recently_viewed_datasets: RecentlyViewedDataset[];
 }
 
+export interface IngestionLog {
+  time: string;
+  message: string;
+  status: "success" | "error" | "info";
+}
+
 export interface RecentlyViewedDataset {
   urn: string;
   name: string;
   platform: string;
   description: string | null;
   source_module: string;
+}
+
+export type DataSourceStatus = "success" | "failed" | "running";
+
+export interface DataSourceStats {
+  totalDatasets: number;
+  totalColumns: string;
+  totalRows: string;
+  piiDetected: number;
+}
+
+export interface DataSource {
+  id: string;
+  name: string;
+  icon: string;
+  iconBg: string;
+  schedule: string;
+  owner: string;
+  ownerIcon: string;
+  lastRun: string;
+  status: DataSourceStatus;
+  stats: DataSourceStats;
+  ingestionLogs: IngestionLog[];
+  totalDatasets: number;
+}
+
+export interface ApiTag {
+  id: string;
+  name: string;
+  color?: string;
+}
+
+export interface ApiColumn {
+  name: string;
+  data_type: string;
+  description: string | null;
+  comment: string | null;
+  is_nullable: boolean;
+  is_primary_key: boolean;
+}
+
+// ─── Dataset & Catalog ────────────────────────────────────────────────────────
+
+export type DatasetType = "Table" | "View" | "Materialized View";
+export type DatasetStatus = "Healthy" | "Warning" | "Error";
+
+export interface Dataset {
+  id: string;
+  name: string;
+  hasPII: boolean;
+  type: DatasetType;
+  rows: string | null; // null for views
+  columns: number;
+  size: string | null;
+  lastSync: string;
+  status: DatasetStatus;
+}
+
+export interface DatasetsBySource {
+  [sourceId: string]: Dataset[];
+}
+
+export interface KeyField {
+  name: string;
+  description: string;
+}
+
+export interface DatasetDetail {
+  id: string;
+  sourceId: string;
+  name: string;
+  type: string;
+  overview: string;
+  keyFields: KeyField[];
+  freshness: string;
+  volume: string;
+  qualityScore: string;
+  columnCount: number;
+  owner: string;
+  ownerInitials: string;
+  tags: string[];
+  lineageWarning?: string;
 }

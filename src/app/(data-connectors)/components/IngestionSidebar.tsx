@@ -58,7 +58,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         if (!jobId || !isOpen) return;
 
         console.log(`Sidebar connecting to SSE for job: ${jobId}`);
-        const url = `http://172.188.2.173:8005/api/v1/jobs/${jobId}/logs/stream`;
+        const url = `${process.env.NEXT_PUBLIC_DASHBOARD_API_URL || 'http://172.188.2.173:8005'}/api/v1/jobs/${jobId}/logs/stream`;
         const es = new EventSource(url);
         eventSourceRef.current = es;
 
