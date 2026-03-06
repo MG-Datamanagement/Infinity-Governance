@@ -12,15 +12,20 @@ RUN pip install --no-cache-dir uv
 
 # Copy requirements first → excellent caching when deps don't change
 COPY requirements.txt .
+COPY index_to_solr.py .       
+COPY configure_solr_schema.sh .
+COPY services/ ./services/
+
 
 # Install Python dependencies using uv
 RUN uv pip install --system -r requirements.txt
 
-# Copy your app code last (changes most often)
+# Copy your app code and package (changes most often)
 COPY app.py .
+# COPY app/ ./app/
 
-# Make sure the app can find its modules
-ENV PYTHONPATH=/app
+# # Make sure the app can find its modules
+# ENV PYTHONPATH=/app
 
 EXPOSE 8005
 
