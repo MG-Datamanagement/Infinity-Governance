@@ -15,7 +15,7 @@ import { MdOutlinePolicy } from "react-icons/md";
 
 export const MOCK_AGENTS: Agent[] = [
   {
-    id: "schema-scout",
+    id: "schema_scout",
     name: "Schema Scout",
     description: "Analyzes table schemas and column types",
     icon: TbZoomScan,
@@ -43,7 +43,7 @@ export const MOCK_AGENTS: Agent[] = [
     disabled: false,
   },
   {
-    id: "sql-agent",
+    id: "sql_agent",
     name: "SQL Agent",
     description: "Generates & runs SQL queries",
     icon: GoDatabase,

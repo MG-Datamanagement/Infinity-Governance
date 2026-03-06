@@ -34,7 +34,7 @@ const AskMeAnything: React.FC = () => {
     showAgentModal: false,
     showDatasetModal: false,
     showReasoningPanel: false,
-    selectedAgents: ["schema-scout", "sql-agent"],
+    selectedAgents: ["schema_scout", "sql_agent"],
     selectedDatasets: [],
     showAIPreferences: false,
     aiPreferences: {
@@ -230,7 +230,7 @@ const AskMeAnything: React.FC = () => {
     setMessageResponses(new Map());
     setUIState((prev) => ({
       ...prev,
-      selectedAgents: ["schema-scout", "sql-agent"],
+      selectedAgents: ["schema_scout", "sql_agent"],
       selectedDatasets: [],
     }));
   };
