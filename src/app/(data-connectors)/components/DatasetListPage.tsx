@@ -9,6 +9,8 @@ import {
 } from "@/services/mock";
 import { downloadFileFromResponse } from "@/lib/utils";
 import { Check, CheckCircle2, Clock11, Loader2, XIcon } from "lucide-react";
+import { ClassifyScanPhase } from "@/types/datasourcesTypes";
+import { CONSTANTS } from "@/lib/constants";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge: React.FC<{ status: Dataset["status"] }> = ({ status }) => {
@@ -166,9 +168,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [isExportListLoading, setIsExportListLoading] = useState(false);
   const [isPiiScanLoading, setIsPiiScanLoading] = useState(false);
-  const [piiScanPhase, setPiiScanPhase] = useState<
-    "never" | "scanning" | "complete" | "re-scan"
-  >("never");
+  const [piiScanPhase, setPiiScanPhase] = useState<ClassifyScanPhase>("never");
   const [scannedDatasets, setScannedDatasets] = useState<
     Record<string, "scanning" | "pii" | "clean">
   >({});
@@ -180,8 +180,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
       try {
         const { dataSourcesService } = await import("@/services/mock");
         const stats = await dataSourcesService.fetchSourceStats(
-          // sourceId,
-          "7529fa6a-375c-4fa7-86d4-20ba1649946f",
+          sourceId,
           //   typeFilter?.toLowerCase(),
           //   statusFilter?.toLowerCase(),
         );
@@ -217,8 +216,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
       const { dataSourcesService } = await import("@/services/mock");
 
       const response: any = await dataSourcesService.downloadSourceStats(
-        // sourceId,
-        "4aaffcf3-1522-483a-98fb-6f4a04933f09",
+        sourceId,
         // typeFilter?.toLowerCase(),
         // statusFilter?.toLowerCase()
       );
@@ -245,10 +243,11 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
     try {
       const { dataSourcesService } = await import("@/services/mock");
       const payload = {
-        source_id: "7529fa6a-375c-4fa7-86d4-20ba1649946f",
-        Require_human_approval: true,
-        assigned_by: "ai-auto",
-        min_confidence: 0.75,
+        source_id: sourceId,
+        // source_id: "7529fa6a-375c-4fa7-86d4-20ba1649946f",
+        Require_human_approval: CONSTANTS.RequireHumanApproval,
+        assigned_by: CONSTANTS.assignedBy,
+        min_confidence: CONSTANTS.minConfidence,
       };
 
       const response: ClassificationResponse =

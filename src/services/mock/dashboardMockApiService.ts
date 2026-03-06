@@ -530,6 +530,44 @@ export interface ClassificationResponse {
   results: TableClassificationResult[];
 }
 
+export interface ReclassifyWithAiRequest {
+  source_id: string;
+  catalog_id: string;
+  save_to_db: boolean;
+  assigned_by: string;
+  min_confidence: number;
+}
+
+export interface ReClassifyWithAiResponse {
+  source_id: string;
+  catalog_id: string;
+  total_columns: number;
+  classified: number;
+  saved: number;
+  results: ReClassifyWithAIColumn[];
+}
+
+export interface ReClassifyWithAIColumn {
+  column_id: string;
+  column_name: string;
+  description: string;
+  is_nullable: boolean;
+  column_data_type: string;
+  catalog_id: string;
+  table_name: string;
+  suggested_tag: string;
+  tag: TagInfo;
+  is_sensitive: boolean;
+  confidence_score: number;
+  reasoning: string;
+  saved: boolean;
+}
+
+export interface TagInfo {
+  tag_id: string;
+  tag_name: string;
+}
+
 const BASE_DEV_API_URL = process.env.NEXT_PUBLIC_DEV_API_URL;
 
 export const dataSourcesService = {
@@ -763,6 +801,33 @@ export const dataSourcesService = {
       return response;
     } catch (error) {
       console.error(`Failed to fetch stats for source ${id}:`, error);
+      throw error;
+    }
+  },
+  async reclassifyWithAi(
+    reClassifyPayload: ReclassifyWithAiRequest,
+  ): Promise<ReClassifyWithAiResponse> {
+    const url = `${BASE_DEV_API_URL}/columns/classify-column/source`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reClassifyPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `ReClassification with Ai API error: ${response.statusText}`,
+        );
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(
+        `Failed to trigger ReClassification with Ai for source ${reClassifyPayload?.source_id}:`,
+        error,
+      );
       throw error;
     }
   },
