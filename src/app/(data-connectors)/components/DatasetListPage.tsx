@@ -7,7 +7,7 @@ import {
   ClassificationResponse,
 } from "@/services/dashboardApiServices";
 import { Dataset } from "@/types";
-import { downloadFileFromResponse } from "@/lib/utils";
+import { downloadFileFromResponse, formatDateTime } from "@/lib/utils";
 import { Check, CheckCircle2, Clock11, Loader2, XIcon } from "lucide-react";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
@@ -195,7 +195,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
               rows: cat.row_count ? cat.row_count.toString() : null,
               columns: cat.column_count || 0,
               size: null,
-              lastSync: "Just now",
+              lastSync: formatDateTime(cat.updated_at),
               status: "Healthy",
             }));
             setAllDatasets(mapped);

@@ -79,14 +79,14 @@ export function Header({ userName }: HeaderProps) {
                 <RiRobot2Line size={20} className="text-slate-500" />
               </Button>
             </div>
-            <div>
+            {/* <div>
               <Button
                 variant="transparent"
                 className="p-1 transition-colors hidden md:block"
               >
                 <LuCircleHelp size={20} className="text-slate-500" />
               </Button>
-            </div>
+            </div> */}
             <div>
               <Button
                 variant="transparent"

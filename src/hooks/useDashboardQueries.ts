@@ -51,6 +51,34 @@ export const useDashboardStats = () => {
   });
 };
 
+export const usePendingReviewCount = () => {
+  return useQuery({
+    queryKey: ['pending-review-count'],
+    queryFn: dashboardApiServices.getPendingReviewCount,
+  });
+};
+
+export const useOpenIssues = () => {
+  return useQuery({
+    queryKey: ['open-issues-count'],
+    queryFn: dashboardApiServices.getOpenIssues,
+  });
+};
+
+export const useGovernanceScore = () => {
+  return useQuery({
+    queryKey: ['governance-score'],
+    queryFn: dashboardApiServices.getGovernanceScore,
+  });
+};
+
+export const useComplianceOverview = () => {
+  return useQuery({
+    queryKey: ['compliance-overview'],
+    queryFn: dashboardApiServices.getComplianceOverview,
+  });
+};
+
 export const useDomainAssets = () => {
   return useQuery({
     queryKey: ['domain-assets'],

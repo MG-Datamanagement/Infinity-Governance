@@ -25,6 +25,9 @@ import { DashboardStats } from "@/types";
 
 type Props = {
   stats: NonNullable<OverviewData["stats"]["data"]>;
+  pendingReviewCount?: number;
+  governanceScore?: number;
+  openIssuesCount?: number;
 };
 
 const defaultStats: DashboardStats = {
@@ -40,14 +43,19 @@ const defaultStats: DashboardStats = {
   pendingReview: 0,
 };
 
-export function OverviewStatsGrid({ stats = defaultStats }: Props) {
+export function OverviewStatsGrid({
+  stats = defaultStats,
+  pendingReviewCount,
+  governanceScore,
+  openIssuesCount,
+}: Props) {
   return (
     <div className="grid row-span-1 xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
       <StatCard
         icon={Database}
         iconColor="text-blue-600"
         label="Total Assets"
-        value={stats?.totalAssets}
+        value={stats?.activeTables}
         change={stats?.totalAssetsChange ?? "+12% vs last month"}
         changeType="positive"
         iconBg="bg-blue-100"
@@ -56,7 +64,7 @@ export function OverviewStatsGrid({ stats = defaultStats }: Props) {
         icon={ShieldCheckIcon}
         iconColor="text-green-600"
         label="Governance Score"
-        value={`${stats?.governanceScore ?? 87}%`}
+        value={governanceScore ? `${governanceScore}%` : `${stats?.governanceScore ?? 0}%`}
         change={stats?.governanceScoreStatus ?? "Above target"}
         changeType="neutral"
         iconBg="bg-green-100"
@@ -74,7 +82,7 @@ export function OverviewStatsGrid({ stats = defaultStats }: Props) {
         icon={Activity}
         iconColor="text-orange-600"
         label="Pending Review"
-        value={stats?.pendingReview ?? "240"}
+        value={pendingReviewCount ?? stats?.pendingReview ?? "0"}
         iconBg="bg-orange-100"
       />
       <StatCard
@@ -88,7 +96,7 @@ export function OverviewStatsGrid({ stats = defaultStats }: Props) {
         icon={AlertTriangleIcon}
         iconColor="text-red-600"
         label="Open Issues"
-        value={stats?.activeTables ?? "6"}
+        value={openIssuesCount ?? stats?.activeTables ?? "0"}
         change="Needs attention"
         changeType="negative"
         iconBg="bg-red-100"

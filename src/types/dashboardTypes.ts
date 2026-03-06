@@ -111,6 +111,22 @@ export interface ApiComplianceRunResponse {
   }[];
 }
 
+export interface ApiOpenIssuesResponse {
+  open_issues: number;
+}
+
+export interface ApiGovernanceScoreResponse {
+  governance_score: number;
+}
+
+export interface ApiComplianceOverviewResponse {
+  insight: string;
+  framework_scores: {
+    framework: string;
+    score: number;
+  }[];
+}
+
 
 export interface DashboardStats {
   totalAssets: number;

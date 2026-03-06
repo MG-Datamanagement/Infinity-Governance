@@ -87,6 +87,14 @@ export interface ChatResponse {
   reasoning_enabled: boolean;
 }
 
+export interface NewChatbotResponse {
+  agent_used: string;
+  intent_detected: string;
+  response: string;
+  reasoning: string;
+  source: string[];
+}
+
 export interface Agent {
   id: string;
   name: string;

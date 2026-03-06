@@ -34,7 +34,7 @@ const AskMeAnything: React.FC = () => {
     showAgentModal: false,
     showDatasetModal: false,
     showReasoningPanel: false,
-    selectedAgents: [],
+    selectedAgents: ["schema-scout", "sql-agent"],
     selectedDatasets: [],
     showAIPreferences: false,
     aiPreferences: {
@@ -114,62 +114,48 @@ const AskMeAnything: React.FC = () => {
 
     setIsThinking(true);
 
-    const agentNames = "lineage_tracker,schema_scout";
-    uiState.selectedAgents.length
-      ? uiState.selectedAgents?.join(",")
-      : CONSTANTS.defaultAgentName;
-    const datasetNames = "catalogs,api_logs";
-    uiState.selectedDatasets.length
-      ? uiState.selectedDatasets?.join(",")
-      : CONSTANTS.defaultDatasetName;
+    const agentNames = uiState.selectedAgents.length
+      ? uiState.selectedAgents.join(",")
+      : "sql_agent,schema_scout";
+    const datasetNames = uiState.selectedDatasets.length
+      ? uiState.selectedDatasets.join(",")
+      : "catalogs";
 
     const isMemoryEnabled = uiState.memoryEnabled ? "on" : "off";
     const isReasoningEnabled = uiState.reasoningEnabled ? "on" : "off";
 
-    const payload = {
-      message: content,
-      session_id: currentSessionId,
-      memory: isMemoryEnabled,
-      reasoning: isReasoningEnabled,
-    };
-
     try {
-      const mock: any = {
-        agent_used: "Lineage Tracker",
-        intent_detected: "lineage_mapping",
-        response:
-          "The catalogs table is related to the owners table through the owner_id column. The owner_id in catalogs is a foreign key that references the id column in the owners table. This relationship means each catalog entry can be associated with an owner, and if the owner is deleted, the owner_id in catalogs is set to NULL.",
-        reasoning:
-          "The catalogs table schema defines a foreign key constraint catalogs_owner_id_fkey on owner_id referencing owners(id) with ON DELETE SET NULL. This establishes a direct dependency from catalogs to owners.",
-        source: ["catalogs"],
-      };
-      const response: any = await chatApiServices.sendMessage(
-        payload,
+      const response = await chatApiServices.sendNewChatbotMessage(
+        content,
+        currentSessionId,
         agentNames,
         datasetNames,
+        isReasoningEnabled as "on" | "off",
+        isMemoryEnabled as "on" | "off",
       );
 
       const aiMessage: Message = {
         id: crypto.randomUUID(),
         role: "ai",
-        content: response?.response,
-        created_at: response?.timestamp,
+        content: response.response,
+        created_at: new Date().toISOString(),
         error: false,
       };
 
       setMessages((prev) => {
         const updatedMessages = [...prev, aiMessage];
-        const aiIndex = updatedMessages.length - 1;
 
         setMessageResponses((prevMap) => {
           const newMap = new Map(prevMap);
           newMap.set(aiMessage.id, {
-            reasoning: response?.reasoning,
-            reasoningSummary: response.reasoning_summary,
-            reasoningTools: response.reasoning_tools,
-            sources: response.sources,
-            toolsDetail: response.tools_detail,
-            suggestions: response.suggestions,
+            reasoningSummary: response.reasoning,
+            sources: response.source.map((s) => ({
+              label: s,
+              type: "Table",
+              icon: "FiDatabase",
+              pill: "bg-slate-50",
+            })),
+            // Map other fields if necessary, or leave as undefined for mock compatibility
           });
           return newMap;
         });
@@ -178,7 +164,9 @@ const AskMeAnything: React.FC = () => {
       });
 
       if (!currentSessionId) {
-        setCurrentSessionId(response.session_id);
+        // Since we don't have a real session tracking yet for this endpoint in the response, 
+        // we'll just keep the 1001 for now or handle as needed.
+        setCurrentSessionId("1001");
         loadHistory();
       }
     } catch (error) {
@@ -242,7 +230,7 @@ const AskMeAnything: React.FC = () => {
     setMessageResponses(new Map());
     setUIState((prev) => ({
       ...prev,
-      selectedAgents: [],
+      selectedAgents: ["schema-scout", "sql-agent"],
       selectedDatasets: [],
     }));
   };

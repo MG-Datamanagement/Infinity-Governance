@@ -30,10 +30,10 @@ import { BrandLogo } from "../ui/BrandLogo";
 const GOVERN_ITEMS = [
   { icon: Home, label: "Home", href: "/overview" },
   { icon: Database, label: "Data Sources", href: "/data-sources" },
-  { icon: Book, label: "Glossary", href: "/glossary" },
-  { icon: Tag, label: "Tags", href: "/tags" },
-  { icon: FileTextIcon, label: "Applications", href: "/applications" },
   { icon: Globe, label: "Domains", href: "/domains" },
+  { icon: Tag, label: "Tags", href: "/tags" },
+  { icon: Book, label: "Glossary", href: "/glossary" },
+  // { icon: FileTextIcon, label: "Applications", href: "/applications" },
 ];
 
 const ADMIN_ITEMS = [
@@ -45,9 +45,9 @@ const AI_ASSISTANT_ITEMS = [
   { icon: LuMessageSquare, label: "Ask Me Anything", href: "/ask-me-anything" },
 ];
 
-const CONTEXT_ITEMS = [
-  { icon: FilePlus, label: "New Document", href: "/documents/new" },
-];
+// const CONTEXT_ITEMS = [
+//   { icon: FilePlus, label: "New Document", href: "/documents/new" },
+// ];
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -189,7 +189,7 @@ export function Sidebar() {
           </div>
 
           {/* Context */}
-          <div>
+          {/* <div>
             {!sidebarCollapsed && (
               <h3 className="px-3 mb-1 text-xs font-medium text-gray-500 uppercase">
                 Context
@@ -211,7 +211,7 @@ export function Sidebar() {
                 </Link>
               ))}
             </div>
-          </div>
+          </div> */}
         </nav>
       </div>
 

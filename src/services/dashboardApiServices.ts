@@ -63,6 +63,7 @@ export interface ApiSourceStats {
     table_name: string;
     row_count: number | null;
     column_count: number;
+    updated_at: string;
   }>;
 }
 
@@ -93,6 +94,15 @@ export interface ApiCatalogDetail {
   domains?: any[];
   tags?: ApiTag[];
   columns: ApiColumn[];
+}
+
+export interface ApiCatalogDatacard {
+  catalog_id: string;
+  table_name: string;
+  full_name: string;
+  data_card: string;
+  generated_at: string;
+  status: string;
 }
 
 export type ClassificationTag = "PII" | "Non-PII" | "Error";
@@ -218,6 +228,31 @@ export const dashboardApiServices = {
     return dashboardStats;
   },
 
+  async getPendingReviewCount() {
+    return dashboardApiClient.get<{ pending_review: number }>(
+      "/api/dashboard/pending-review",
+    );
+  },
+
+  async getOpenIssues() {
+    return dashboardApiClient.get<{ open_issues: number }>(
+      "/api/dashboard/open-issues",
+    );
+  },
+
+  async getGovernanceScore() {
+    return dashboardApiClient.get<{ governance_score: number }>(
+      "/api/dashboard/governance-score",
+    );
+  },
+
+  async getComplianceOverview() {
+    return dashboardApiClient.get<{
+      insight: string;
+      framework_scores: { framework: string; score: number }[];
+    }>("/api/dashboard/compliance-overview");
+  },
+
   async getDomainAssets() {
     const response: TopDomainsWithCountsResponse[] = await dashboardApiClient.get(
       "/api/v1/domains/dataset-count",
@@ -320,6 +355,13 @@ export const dashboardApiServices = {
     );
   },
 
+  async fetchCatalogDatacard(catalogId: string) {
+    return dashboardApiClient.post<ApiCatalogDatacard>(
+      `/api/v1/catalogs/${catalogId}/datacard`,
+      {},
+    );
+  },
+
   async fetchRunHistory(
     limit: number = 50,
     offset: number = 0,
@@ -352,13 +394,25 @@ export const dashboardApiServices = {
   async downloadSourceStats(
     id: string,
     typeFilter?: string,
-    statusFiter?: string,
+    statusFilter?: string,
   ) {
-    // Special case for export which might use a different tunnel or direct file download link
-    const tunnelUrl = process.env.NEXT_PUBLIC_DEV_TUNNEL_API_URL;
-    const url = `${tunnelUrl}/api/v1/sources/${id}/stats/export`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Download failed: ${response.statusText}`);
+    const baseUrl =
+      process.env.NEXT_PUBLIC_DASHBOARD_API_URL || "http://localhost:8000";
+    const url = `${baseUrl}/api/v1/sources/${id}/stats/export`;
+
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.statusText}`);
+    }
     return response;
   },
 

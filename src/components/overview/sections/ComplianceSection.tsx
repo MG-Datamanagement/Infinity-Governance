@@ -15,10 +15,19 @@ import { OverviewData } from "@/hooks/useOverviewData";
 
 type Props = {
   query: OverviewData["frameworks"];
+  overviewQuery: OverviewData["complianceOverview"];
 };
 
-function ComplianceContent({ query }: Props) {
-  const { data: frameworks, isLoading, error, refetch } = query;
+function ComplianceContent({ query, overviewQuery }: Props) {
+  const { data: frameworks, isLoading: isFrameworksLoading, error: frameworksError, refetch: refetchFrameworks } = query;
+  const { data: overview, isLoading: isOverviewLoading, error: overviewError, refetch: refetchOverview } = overviewQuery;
+
+  const isLoading = isFrameworksLoading || isOverviewLoading;
+  const error = frameworksError || overviewError;
+  const refetch = () => {
+    refetchFrameworks();
+    refetchOverview();
+  };
 
   return (
     <div className="card p-6 space-y-4 lg:col-span-4">
@@ -55,24 +64,23 @@ function ComplianceContent({ query }: Props) {
 
       {!isLoading && !error && frameworks && frameworks.length > 0 && (
         <div className="space-y-5">
-          <div className="p-3 bg-green-50 rounded-lg">
-            <p className="text-xs  text-green-800 leading-relaxed">
-              Your governance is in excellent shape! All critical compliance
-              frameworks are above 90%, with GDPR and SOC 2 leading at 96% and
-              98%. HIPAA needs attention at 79% - consider reviewing data
-              classification policies.
-            </p>
-          </div>
+          {overview?.insight && (
+            <div className="p-3 bg-green-50 rounded-lg">
+              <p className="text-xs text-green-800 leading-relaxed whitespace-pre-wrap">
+                {overview.insight}
+              </p>
+            </div>
+          )}
 
           <div className="pr-1 space-y-6">
-            {frameworks.map((framework) => (
+            {(overview?.framework_scores || []).map((framework) => (
               <div
-                key={framework.id}
+                key={framework.framework}
                 className="flex-col items-center justify-between"
               >
                 <div className="flex justify-between items-center">
                   <div className="text-xs font-medium text-gray-700">
-                    {framework.name}
+                    {framework.framework}
                   </div>
                   <div className="text-sm font-semibold text-gray-900 text-right">
                     {framework.score}%
@@ -83,9 +91,9 @@ function ComplianceContent({ query }: Props) {
                     <div
                       className={cn(
                         "h-2 rounded-full transition-all",
-                        framework.status === "excellent"
+                        framework.score >= 90
                           ? "bg-success"
-                          : framework.status === "warning"
+                          : framework.score >= 70
                             ? "bg-warning"
                             : "bg-danger",
                       )}

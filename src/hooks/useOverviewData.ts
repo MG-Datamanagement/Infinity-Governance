@@ -18,6 +18,10 @@ import {
   useRecentActivity,
   useComplianceFrameworks,
   useRecentlyViewed,
+  usePendingReviewCount,
+  useOpenIssues,
+  useGovernanceScore,
+  useComplianceOverview,
 } from "@/hooks/useDashboardQueries";
 
 const USER_URN = "urn:li:corpuser:datahub";
@@ -31,6 +35,10 @@ export function useOverviewData() {
   const activity = useRecentActivity(USER_URN);
   const recentlyViewed = useRecentlyViewed(USER_URN);
   const frameworks = useComplianceFrameworks();
+  const pendingReviewCount = usePendingReviewCount();
+  const openIssues = useOpenIssues();
+  const governanceScore = useGovernanceScore();
+  const complianceOverview = useComplianceOverview();
 
   return {
     stats,
@@ -41,6 +49,10 @@ export function useOverviewData() {
     activity,
     recentlyViewed,
     frameworks,
+    pendingReviewCount,
+    openIssues,
+    governanceScore,
+    complianceOverview,
   } as const;
 }
 

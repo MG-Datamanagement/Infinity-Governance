@@ -114,7 +114,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         </div>
       </div>
 
-      {showAIPreferences && (
+      {/* {showAIPreferences && (
         <div className="px-4 py-2.5 border-b border-gray-200">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
@@ -176,7 +176,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             </button>
           </div>
         </div>
-      )}
+      )} */}
     </>
   );
 };
