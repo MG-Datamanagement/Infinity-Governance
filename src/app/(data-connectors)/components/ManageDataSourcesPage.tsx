@@ -123,21 +123,21 @@ const ExpandedRow: React.FC<{ source: DataSource; activeJobId?: string; onLiveEr
         return num.toString();
     };
 
-    if (activeJobId || source.status === 'running') {
-        return (
-            <tr>
-                <td colSpan={7} className="bg-gray-50 px-6 pb-4 pt-4">
-                    <LiveIngestionPanel
-                        jobId={activeJobId || "running"}
-                        sourceId={source.id}
-                        sourceName={source.name}
-                        onClose={() => { }}
-                        onNotFound={() => onLiveError?.(source.id)}
-                    />
-                </td>
-            </tr>
-        );
-    }
+    // if (activeJobId || source.status === 'running') {
+    //     return (
+    //         <tr>
+    //             <td colSpan={7} className="bg-gray-50 px-6 pb-4 pt-4">
+    //                 <LiveIngestionPanel
+    //                     jobId={activeJobId || "running"}
+    //                     sourceId={source.id}
+    //                     sourceName={source.name}
+    //                     onClose={() => { }}
+    //                     onNotFound={() => onLiveError?.(source.id)}
+    //                 />
+    //             </td>
+    //         </tr>
+    //     );
+    // }
 
     return (
         <tr>
