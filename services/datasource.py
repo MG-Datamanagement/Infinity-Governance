@@ -444,21 +444,20 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
 
         # Prepare nested JSON blobs
         conn_details_dict = source.connection_details.dict(exclude_none=True)
-        advanced_dict = source.advanced.dict(exclude_none=True) if source.advanced else {}
+        # advanced_dict = source.advanced.dict(exclude_none=True) if source.advanced else {}
+        # advanced_dict = source.advanced if source.advanced else {}
 
         # For DynamoDB we usually set include_views=False (no views concept)
         result = await db.fetch_one("""
             INSERT INTO data_sources (
                 name, source_type, connection_details, description,
                 include_views, include_tables, schema_pattern, table_pattern,
-                schedule, owner_id,
-                advanced_options  -- extra column if you added it to the table
+                schedule, owner_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id, name, source_type, connection_details, description,
                       include_views, include_tables, schema_pattern, table_pattern,
-                      status, schedule, owner_id, created_at, updated_at, last_ingested_at,
-                      advanced_options
+                      status, schedule, owner_id, created_at, updated_at, last_ingested_at
         """,
             source.name,
             source.source_type.value,
@@ -469,8 +468,8 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
             None,   # schema_pattern – rarely used for DynamoDB
             json.dumps(source.table_pattern) if source.table_pattern else None,
             source.schedule or "00:00 GMT+5:30",
-            source.owner_id,
-            json.dumps(advanced_dict) if advanced_dict else None
+            source.owner_id
+            # json.dumps(advanced_dict) if advanced_dict else None
         )
 
         # Format response (same pattern as Athena)
@@ -479,7 +478,7 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
         data['owner_id'] = str(data['owner_id']) if data.get('owner_id') else None
         data['connection_details'] = json.loads(data['connection_details']) if data['connection_details'] else {}
         data['table_pattern'] = json.loads(data['table_pattern']) if data['table_pattern'] else None
-        data['advanced_options'] = json.loads(data['advanced_options']) if data.get('advanced_options') else {}
+        # data['advanced_options'] = json.loads(data['advanced_options']) if data.get('advanced_options') else {}
 
         await log_api_action(
             endpoint="/sources/dynamodb", method="POST",
@@ -840,11 +839,11 @@ async def start_ingestion(
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
 
-        if source['status'] == JobStatus.FAILED.value:
-            raise HTTPException(
-                status_code=400,
-                detail="Source is in a failed state. Please review and re-register if needed."
-            )
+        # if source['status'] == JobStatus.FAILED.value:
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail="Source is in a failed state. Please review and re-register if needed."
+        #     )
 
         # Create job
         job_id = await ingestion_manager.create_job(

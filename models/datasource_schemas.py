@@ -143,6 +143,7 @@ class DataSourceCreateDynamoDB(BaseModel):
         description="Optional glob-like patterns to filter which tables to ingest (e.g. ['prod_*', 'analytics_orders'])"
     )
     schedule: Optional[str] = Field("00:00 GMT+5:30")
+    # advanced: Optional[dict] = None
 
 class DataSourceCreateGlue(BaseModel):
     """Create request for Glue data source."""
