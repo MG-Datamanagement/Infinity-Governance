@@ -105,8 +105,6 @@ export interface ApiCatalogDatacard {
   status: string;
 }
 
-export type ClassificationTag = "PII" | "Non-PII" | "Error";
-
 export interface ApiRunHistory {
   total: number;
   limit: number;
@@ -154,7 +152,7 @@ export interface TableClassificationResult {
   catalog_id: string;
   table_name: string;
   full_name: string;
-  suggested_tag: ClassificationTag;
+  suggested_tag: string;
   tag_id: string | null;
   confidence_score: number;
   reasoning: string;

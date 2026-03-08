@@ -3,7 +3,6 @@
 import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ClassificationTag,
   ClassificationResponse,
 } from "@/services/dashboardApiServices";
 import { Dataset } from "@/types";
@@ -152,7 +151,7 @@ export interface DatasetScanState {
   datasetId: string;
   scanState: ScanState;
   progress?: number;
-  tag?: ClassificationTag;
+  tag?: string;
   confidence?: number;
 }
 
@@ -233,7 +232,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
     setPiiScanPhase("scanning");
     setScanCount(0);
 
-    // Mark all datasets as "scanning"
+    // Mark all datasets as scanning
     const initialScanMap: Record<string, "scanning" | "pii" | "clean"> = {};
     allDatasets.forEach((d) => {
       initialScanMap[d.id] = "scanning";
@@ -242,6 +241,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
 
     try {
       const { dashboardApiServices } = await import("@/services/dashboardApiServices");
+
       const payload = {
         source_id: sourceId,
         Require_human_approval: CONSTANTS.RequireHumanApproval,
@@ -252,26 +252,36 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
       const response: ClassificationResponse =
         await dashboardApiServices.initPiiClassification(payload);
 
-      // Simulate staggered per-dataset completion
+      // Create lookup map from response
+      const classificationMap: Record<string, "pii" | "clean"> = {};
+      (response?.results || []).forEach((r) => {
+        const tag = (r.suggested_tag || "").toLowerCase();
+        classificationMap[r.catalog_id] =
+          tag === "pii" || tag === "phi" ? "pii" : "clean";
+      });
+
+      // Preserve staggered animation but use real results
       const results = allDatasets.map((d) => ({
         id: d.id,
-        result: Math.random() > 0.5 ? "pii" : ("clean" as "pii" | "clean"),
+        result: classificationMap[d.id] || "clean",
       }));
 
       for (let i = 0; i < results.length; i++) {
         await new Promise((res) => setTimeout(res, 600));
+
         setScannedDatasets((prev) => ({
           ...prev,
           [results[i].id]: results[i].result,
         }));
+
         setScanCount(i + 1);
       }
 
-      // Update hasPII on allDatasets
+      // Update dataset PII flag
       setAllDatasets((prev) =>
         prev.map((d) => {
-          const r = results.find((r) => r.id === d.id);
-          return r ? { ...d, hasPII: r.result === "pii" } : d;
+          const result = classificationMap[d.id];
+          return result ? { ...d, hasPII: result === "pii" } : d;
         }),
       );
 

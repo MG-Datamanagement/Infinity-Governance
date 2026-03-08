@@ -4,7 +4,6 @@ import React, { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   dashboardApiServices,
-  ClassificationTag,
   ClassificationResponse,
   ApiCatalogDetail,
   ApiCatalogDatacard,
@@ -232,8 +231,15 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
         setIsLoading(false);
       }
     };
-    fetchAll();
+
+    const handleFetchClassifyApi = async() => {
+      await handleReclassifyWithAI();
+      await fetchAll();
+    }
+    
+    handleFetchClassifyApi()
   }, [datasetId]);
+
   const detail = useMemo(() => {
     if (!catalogData) return null;
     const ownerName =
@@ -272,9 +278,11 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
   }, [catalogData, datacardData, sourceId]);
 
 
-  const handleReclassifyWithAI = async () => {
-    setIsReclassifyAiLoading(true);
-    setReclassifyAiScanPhase("scanning");
+  const handleReclassifyWithAI = async (manual: boolean = false) => {
+    if(manual) {
+      setIsReclassifyAiLoading(true);
+      setReclassifyAiScanPhase("scanning");
+    }
 
     try {
       const payload = {
@@ -296,13 +304,15 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
       setAiResults(map);
 
       await new Promise((res) => setTimeout(res, 1000));
-      setReclassifyAiScanPhase("complete");
+      if(manual) setReclassifyAiScanPhase("complete");
     } catch (err) {
       console.error("Error during PII classification:", err);
-      setReclassifyAiScanPhase("never");
+      if(manual) setReclassifyAiScanPhase("never");
     } finally {
-      setIsReclassifyAiLoading(false);
-      setReclassifyAiScanPhase("re-scan");
+      if(manual) {
+        setIsReclassifyAiLoading(false);
+        setReclassifyAiScanPhase("re-scan");
+      }
     }
   };
 
@@ -895,7 +905,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
               <div className="flex items-center gap-2">
                 {reclassifyAiScanPhase === "never" && (
                   <button
-                    onClick={handleReclassifyWithAI}
+                    onClick={() => handleReclassifyWithAI(true)}
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
                   >
                     <svg
@@ -932,7 +942,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                   <button
                     onClick={() => {
                       setReclassifyAiScanPhase("re-scan");
-                      handleReclassifyWithAI();
+                      handleReclassifyWithAI(true);
                     }}
                     className="flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-indigo-600 border border-indigo-200 rounded-lg hover:bg-indigo-50 transition-colors"
                   >

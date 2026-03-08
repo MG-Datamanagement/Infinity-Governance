@@ -126,7 +126,6 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     try {
       const payload = {
         source_id: addDsConfig.sourceId,
-        // source_id: "0148fab3-c65c-4a09-bda4-a47fc099de27",
         Require_human_approval: addDsConfig.piiApproval,
         assigned_by: CONSTANTS.assignedBy,
         min_confidence: CONSTANTS.minConfidence,
