@@ -1,7 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { X, Bell, History, Check, Loader2, Database, Shield, Zap, Search, AlertCircle } from 'lucide-react';
+import { X, Bell, History, Check, Loader2, Database, Shield, Zap, Search, AlertCircle, ShieldCheckIcon, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { useAppStore } from '@/store/appStore';
+import { Button } from '@/components/ui/Button';
+import { CONSTANTS } from '@/lib/constants';
+import { dashboardApiServices } from '@/services/dashboardApiServices';
 
 interface IngestionLog {
     timestamp: string;
@@ -37,9 +41,13 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     const [showNotification, setShowNotification] = useState(true);
     const [logs, setLogs] = useState<IngestionLog[]>([]);
     const [isComplete, setIsComplete] = useState(false);
+    const [completePiiScan, setCompletePiiScan] = useState(false);
 
     const eventSourceRef = useRef<EventSource | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const [streamStatus, setStreamStatus] = useState<"connecting" | "connected" | "completed" | "error">("connecting");
+    const { addDsConfig } = useAppStore();
+    console.log("🚀 ~ IngestionSidebar ~ addDSConfig:", addDsConfig)
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -61,6 +69,10 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         const url = `${process.env.NEXT_PUBLIC_DASHBOARD_API_URL || 'http://172.188.2.173:8005'}/api/v1/jobs/${jobId}/logs/stream`;
         const es = new EventSource(url);
         eventSourceRef.current = es;
+
+        es.onopen = () => {
+            setStreamStatus("connected");
+        };
 
         es.onmessage = (event) => {
             try {
@@ -85,10 +97,14 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
             setIsThinking(false);
             setSteps(prev => prev.map(s => ({ ...s, status: 'completed' })));
             setProgress(totalSteps);
+            setStreamStatus("completed");
             es.close();
+
+            if(addDsConfig && !addDsConfig.piiApproval) handleCompletePiiScan();
         });
 
         es.onerror = (err) => {
+            setStreamStatus("error");
             console.error("Sidebar SSE Error:", err);
         };
 
@@ -97,6 +113,33 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
             eventSourceRef.current = null;
         };
     }, [jobId, isOpen]);
+
+    useEffect(() => {
+        if (streamStatus === "completed") {
+            handleCompletePiiScan()
+        }
+    }, [streamStatus]);
+
+    const handleCompletePiiScan = async () => {
+    setCompletePiiScan(true);
+
+    try {
+      const payload = {
+        source_id: addDsConfig.sourceId,
+        // source_id: "0148fab3-c65c-4a09-bda4-a47fc099de27",
+        Require_human_approval: addDsConfig.piiApproval,
+        assigned_by: CONSTANTS.assignedBy,
+        min_confidence: CONSTANTS.minConfidence,
+      };
+
+      const response: any =
+        await dashboardApiServices.initPiiClassification(payload);
+      onClose();
+    } catch (err) {
+      console.error("Error during PII classification:", err);
+      setCompletePiiScan(false);
+    }
+  };
 
     const handleNewLog = (log: IngestionLog) => {
         setLogs(prev => [...prev.slice(-100), log]);
@@ -295,6 +338,20 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             </div>
                         </div>
                     </div>
+                    {(addDsConfig && addDsConfig.piiApproval) ? <div className='w-full flex justify-center items-center gap-2'>
+                        <div>
+                            <Button disabled={completePiiScan} onClick={onClose} variant="outline" className='disabled:opacity-50'>
+                                <ArrowRight />
+                                Complete, skip PII
+                            </Button>
+                       </div>
+                       <div>
+                            <Button disabled={completePiiScan} onClick={handleCompletePiiScan} className='disabled:opacity-50'>
+                                {completePiiScan ? <Loader2 className='animate-spin' /> : <ShieldCheckIcon />}
+                                Complete with PII Scan
+                            </Button>
+                       </div>
+                    </div> : null}
                 </div>
 
                 {/* Footer Placeholder (Removed) */}

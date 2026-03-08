@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 import { ApiOwner } from "@/services/dashboardApiServices";
+import { useAppStore } from "@/store/appStore";
 
 // ─── Only MongoDB + PostgreSQL ────────────────────────────────────────────────
 const CONNECTORS = [
@@ -705,6 +706,7 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
     name: "", piiEnabled: true, piiApproval: true, failureEmail: "", owner_id: "",
   });
   const [owners, setOwners] = useState<ApiOwner[]>([]);
+  const { setAddDsConfig } = useAppStore()
 
   useEffect(() => {
     const fetchOwners = async () => {
@@ -807,6 +809,7 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
         if (sourceId) {
           const ingestRes = await dashboardApiServices.ingestSource(sourceId);
           jobId = ingestRes.job_id;
+          setAddDsConfig({...config, ...finish, sourceId, jobId})
         }
       }
 

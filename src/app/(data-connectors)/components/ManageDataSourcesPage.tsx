@@ -11,6 +11,7 @@ import ConnectorIcon from "@/app/(data-connectors)/components/ConnectorIcon";
 import AddDataSourceModal from "@/app/(data-connectors)/components/AddDataSourceModal";
 import LiveIngestionPanel from "@/app/(data-connectors)/components/LiveIngestionPanel";
 import IngestionSidebar from "@/app/(data-connectors)/components/IngestionSidebar";
+import { useAppStore } from "@/store/appStore";
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge: React.FC<{ status: DataSource["status"] }> = ({ status }) => {
@@ -353,6 +354,7 @@ const ManageDataSourcesPage: React.FC = () => {
     const [sources, setSources] = useState<DataSource[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const { setAddDsConfig } = useAppStore()
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -490,7 +492,10 @@ const ManageDataSourcesPage: React.FC = () => {
                     isOpen={showSidebar}
                     jobId={sidebarJobId}
                     sourceName={sidebarSourceName}
-                    onClose={() => setShowSidebar(false)}
+                    onClose={() => { 
+                        setShowSidebar(false); 
+                        setAddDsConfig({});
+                    }}
                 />
             )}
             <main className="max-w-7xl mx-auto px-8 py-8">
