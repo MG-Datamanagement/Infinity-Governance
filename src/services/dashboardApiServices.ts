@@ -342,6 +342,13 @@ export const dashboardApiServices = {
     });
   },
 
+  async deleteSource(sourceId: string): Promise<{
+    message: string;
+    source_id: string;
+  }> {
+    return dashboardApiClient.delete(`/api/v1/delete-source/${sourceId}`);
+  },
+
   async fetchOwnersList(limit: number = 100) {
     return dashboardApiClient.get<ApiOwner[]>("/api/v1/owners-list", {
       params: { limit },

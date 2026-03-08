@@ -233,8 +233,9 @@ const SourceRow: React.FC<{
     activeJobId?: string;
     onCheck: (id: string) => void;
     onIngest: (id: string) => void;
+    onDelete: (source: DataSource) => void;
     onLiveError: (id: string) => void;
-}> = ({ source, checked, activeJobId, onCheck, onIngest, onLiveError }) => {
+}> = ({ source, checked, activeJobId, onCheck, onIngest, onDelete, onLiveError }) => {
     const [expanded, setExpanded] = useState(false);
 
     return (
@@ -313,6 +314,16 @@ const SourceRow: React.FC<{
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
                             </svg>
                         </button>
+                        {/* Delete button */}
+                        <button
+                            onClick={() => onDelete(source)}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Source"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.34 12m-4.78 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                            </svg>
+                        </button>
                         {/* More options */}
                         <button className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
@@ -354,6 +365,9 @@ const ManageDataSourcesPage: React.FC = () => {
     const [sources, setSources] = useState<DataSource[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [sourceToDelete, setSourceToDelete] = useState<DataSource | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
     const { setAddDsConfig } = useAppStore()
 
     const fetchData = async () => {
@@ -471,6 +485,27 @@ const ManageDataSourcesPage: React.FC = () => {
         }
     };
 
+    const handleDelete = async () => {
+        if (!sourceToDelete) return;
+
+        setIsDeleting(true);
+        try {
+            await dashboardApiServices.deleteSource(sourceToDelete.id);
+            setToast({ message: "Source Deleted Successfully", type: "success" });
+            setSourceToDelete(null);
+            fetchData();
+            
+            // Auto-hide toast after 3 seconds
+            setTimeout(() => setToast(null), 3000);
+        } catch (err) {
+            console.error("Failed to delete source", err);
+            setToast({ message: "Failed to delete source", type: "error" });
+            setTimeout(() => setToast(null), 3000);
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 font-sans">
             {showAddModal && (
@@ -498,6 +533,73 @@ const ManageDataSourcesPage: React.FC = () => {
                     }}
                 />
             )}
+
+            {/* Delete Confirmation Modal */}
+            {sourceToDelete && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-2xl shadow-xl border border-gray-100 w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                                <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900">Delete Data Source</h3>
+                        </div>
+                        <p className="text-sm text-gray-500 mb-6 font-medium">
+                            Are you sure you want to delete <span className="text-gray-900 font-bold">"{sourceToDelete.name}"</span>? 
+                            This action cannot be undone and will remove all associated metadata.
+                        </p>
+                        <div className="flex items-center justify-end gap-3">
+                            <button
+                                onClick={() => setSourceToDelete(null)}
+                                disabled={isDeleting}
+                                className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                disabled={isDeleting}
+                                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-800 rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                            >
+                                {isDeleting ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                                        Deleting...
+                                    </>
+                                ) : (
+                                    "Delete"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className="fixed bottom-8 right-8 z-[60] flex items-center gap-3 bg-gray-900 text-white px-5 py-3.5 rounded-xl shadow-2xl animate-in slide-in-from-bottom-5 duration-300">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${toast.type === "success" ? "bg-green-500" : "bg-red-500"}`}>
+                        {toast.type === "success" ? (
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                            </svg>
+                        ) : (
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                            </svg>
+                        )}
+                    </div>
+                    <p className="text-sm font-semibold tracking-wide">{toast.message}</p>
+                    <button onClick={() => setToast(null)} className="ml-2 p-1 hover:bg-white/10 rounded-lg transition-colors">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+            )}
+
             <main className="max-w-7xl mx-auto px-8 py-8">
 
                 {/* Breadcrumb */}
@@ -670,6 +772,7 @@ const ManageDataSourcesPage: React.FC = () => {
                                             activeJobId={activeJobs[source.id]}
                                             onCheck={toggleOne}
                                             onIngest={handleIngest}
+                                            onDelete={(s) => setSourceToDelete(s)}
                                             onLiveError={(id) => {
                                                 setActiveJobs(prev => {
                                                     const next = { ...prev };

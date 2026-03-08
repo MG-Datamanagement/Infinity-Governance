@@ -66,6 +66,10 @@ export function ComplianceScanPanel({ isOpen, onClose, onScanComplete }: Props) 
                 setSummary(result.summary);
                 setReasoning(result.reasoning);
                 setPhase("done");
+
+                // Refresh compliance overview data
+                await dashboardApiServices.runCompliance();
+
                 onScanComplete?.();
             } catch (err) {
                 if (timerRef.current) clearInterval(timerRef.current);

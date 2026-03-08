@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { InlineState } from "@/components/ui/InlineState";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OverviewData } from "@/hooks/useOverviewData";
+import { MarkdownRenderer } from "@/components/ui/MarkdownRenderer";
 
 type Props = {
   query: OverviewData["frameworks"];
@@ -66,9 +67,7 @@ function ComplianceContent({ query, overviewQuery }: Props) {
         <div className="space-y-5">
           {overview?.insight && (
             <div className="p-3 bg-green-50 rounded-lg">
-              <p className="text-xs text-green-800 leading-relaxed whitespace-pre-wrap">
-                {overview.insight}
-              </p>
+              <MarkdownRenderer content={overview.insight} />
             </div>
           )}
 

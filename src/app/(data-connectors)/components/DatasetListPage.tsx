@@ -257,7 +257,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
       (response?.results || []).forEach((r) => {
         const tag = (r.suggested_tag || "").toLowerCase();
         classificationMap[r.catalog_id] =
-          tag === "pii" || tag === "phi" ? "pii" : "clean";
+          tag === "error" ? "clean" : "pii";
       });
 
       // Preserve staggered animation but use real results

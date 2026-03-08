@@ -100,7 +100,9 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
             setStreamStatus("completed");
             es.close();
 
-            if(addDsConfig && !addDsConfig.piiApproval) handleCompletePiiScan();
+            if (addDsConfig && !addDsConfig.piiApproval) {
+                handleCompletePiiScan();
+            }
         });
 
         es.onerror = (err) => {
@@ -114,11 +116,6 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         };
     }, [jobId, isOpen]);
 
-    useEffect(() => {
-        if (streamStatus === "completed") {
-            handleCompletePiiScan()
-        }
-    }, [streamStatus]);
 
     const handleCompletePiiScan = async () => {
     setCompletePiiScan(true);
@@ -337,7 +334,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             </div>
                         </div>
                     </div>
-                    {(addDsConfig && addDsConfig.piiApproval) ? <div className='w-full flex justify-center items-center gap-2'>
+                    {(isComplete && addDsConfig?.piiApproval) ? <div className='w-full flex justify-center items-center gap-2'>
                         <div>
                             <Button disabled={completePiiScan} onClick={onClose} variant="outline" className='disabled:opacity-50'>
                                 <ArrowRight />

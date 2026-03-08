@@ -304,7 +304,7 @@ const Step2: React.FC<{
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Connection URI</label>
             <input
               type="text"
-              value={config.uri || (connector.id === 'mongodb' ? "mongodb+srv://Md-Ashif:XDkD9CJaBBPBmKKr@cluster0.8z8om.mongodb.net/Patient360DB" : "")}
+              value={config.uri}
               onChange={(e) => onChange("uri", e.target.value)}
               placeholder={connector.uriPlaceholder}
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -317,7 +317,7 @@ const Step2: React.FC<{
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
             <input
               type="text"
-              value={config.username || (connector.id === 'mongodb' ? "Md-Ashif" : "")}
+              value={config.username}
               onChange={(e) => onChange("username", e.target.value)}
               placeholder="e.g. admin"
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -327,7 +327,7 @@ const Step2: React.FC<{
             <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
             <input
               type="password"
-              value={config.password || (connector.id === 'mongodb' ? "XDkD9CJaBBPBmKKr" : "")}
+              value={config.password}
               onChange={(e) => onChange("password", e.target.value)}
               placeholder="••••••••"
               className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
@@ -703,7 +703,7 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
     enabled: true, frequency: "Daily" as Frequency, hour: "00", minute: "00", timezone: "Asia/Calcutta",
   });
   const [finish, setFinish] = useState({
-    name: "", piiEnabled: true, piiApproval: true, failureEmail: "", owner_id: "",
+    name: "", piiEnabled: true, piiApproval: false, failureEmail: "", owner_id: "",
   });
   const [owners, setOwners] = useState<ApiOwner[]>([]);
   const { setAddDsConfig } = useAppStore()
