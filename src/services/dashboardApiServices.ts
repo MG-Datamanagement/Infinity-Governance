@@ -310,11 +310,12 @@ export const dashboardApiServices = {
   },
 
   async createDataSource(
-    type: "postgres" | "mongodb" | "postgresql",
+    type: "postgres" | "mongodb" | "postgresql" | "athena",
     payload: any,
   ): Promise<{ id?: string; source_id?: string }> {
     const endpoint =
-      type === "postgres" || type === "postgresql" ? "postgres" : "mongodb";
+      type === "athena" ? "athena" :
+        (type === "postgres" || type === "postgresql" ? "postgres" : "mongodb");
     return dashboardApiClient.post(`/api/v1/sources/${endpoint}`, payload);
   },
 
