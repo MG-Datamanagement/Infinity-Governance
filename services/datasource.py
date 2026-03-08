@@ -1032,12 +1032,6 @@ async def get_source_stats(
     type: Optional[str] = Query(None, description="Filter by type: table or view or all"),
     status: Optional[str] = Query(None, description="Filter by status: healthy, warning, risk"),
 ):
-    """
-    Get metadata stats for a specific datasource:
-    - total tables ingested
-    - per-catalog row_count and column_count
-    - optional filters: type (table | view | all), status (healthy | warning | risk)
-    """
     from app import db
 
     try:
@@ -1077,6 +1071,28 @@ async def get_source_stats(
             ORDER BY c.table_name
         """, *params)
 
+        # Fetch tags for all catalogs in one query
+        catalog_ids = [r['id'] for r in catalogs]
+        tags_by_catalog = {}
+        if catalog_ids:
+            tag_rows = await db.fetch_all("""
+                SELECT 
+                    tca.catalog_id,
+                    t.id   AS tag_id,
+                    t.name AS tag_name,
+                    t.color
+                FROM tag_catalog_assignments tca
+                JOIN tags t ON t.id = tca.tag_id
+                WHERE tca.catalog_id = ANY($1)
+            """, catalog_ids)
+
+            for row in tag_rows:
+                tags_by_catalog.setdefault(row['catalog_id'], []).append({
+                    "tag_id": str(row['tag_id']),
+                    "name": row['tag_name'],
+                    "color": row['color'],
+                })
+
         total_row_count = sum(r['row_count'] or 0 for r in catalogs)
         total_column_count = sum(r['column_count'] for r in catalogs)
 
@@ -1101,6 +1117,7 @@ async def get_source_stats(
                     "type": r['type'],
                     "status": r['status'],
                     "last_sync": r['last_sync'].isoformat() if r['last_sync'] else None,
+                    "tags": tags_by_catalog.get(r['id'], []),
                 }
                 for r in catalogs
             ],
@@ -1109,8 +1126,6 @@ async def get_source_stats(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
 
 @router.get("/api/v1/sources/{source_id}/summary")
 async def get_source_summary(source_id: str):
@@ -1497,3 +1512,227 @@ async def export_source_stats(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+
+
+# =============================================================================
+# AI Summary — pipeline completion summary (matches UI summary card)
+# =============================================================================
+
+@router.get(
+    "/api/v1/sources/{source_id}/ai-summary",
+    summary="Get AI pipeline completion summary for a source",
+    responses={
+        200: {"description": "AI summary with badge stats for the latest ingestion"},
+        404: {"description": "Source or job not found"},
+        400: {"description": "No completed job found for this source"},
+    },
+)
+async def get_source_pipeline_summary(source_id: str):
+    """
+    Returns the pipeline completion summary card data for a source's most recent job.
+
+    Matches the UI summary card:
+      - Badge counts: ingested, classified
+      - One-line AI prose summary (e.g. "All 5 datasets ingested, PII scanned...")
+      - Overall pipeline status
+    """
+    import os
+    from openai import AsyncAzureOpenAI
+    from app import db, logger
+
+    
+
+    # ── 1. Fetch source ──────────────────────────────────────────────────────
+    source = await db.fetch_one(
+        "SELECT id, name, source_type FROM data_sources WHERE id = $1",
+        source_id,
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Source not found.")
+
+    # ── 2. Fetch latest COMPLETED job ────────────────────────────────────────
+    job = await db.fetch_one(
+        """
+        SELECT id, status, records_ingested, error_message, created_at, completed_at
+        FROM   ingestion_jobs
+        WHERE  source_id = $1
+          AND  status IN ('success', 'failed')
+        ORDER  BY created_at DESC
+        LIMIT  1
+        """,
+        source_id,
+    )
+    if not job:
+        raise HTTPException(
+            status_code=400,
+            detail="No completed ingestion job found for this source.",
+        )
+
+    job_id = str(job["id"])
+
+    # ── 3. Fetch catalog stats for this source ───────────────────────────────
+    catalog_stats = await db.fetch_one(
+        """
+        SELECT
+            COUNT(*)                                            AS total_tables,
+            COUNT(*) FILTER (WHERE status = 'healthy')         AS healthy_count,
+            COUNT(*) FILTER (WHERE status = 'warning')         AS warning_count,
+            COUNT(*) FILTER (WHERE status = 'risk')            AS risk_count,
+            COALESCE(SUM(row_count), 0)                        AS total_rows
+        FROM catalogs
+        WHERE source_id = $1
+        """,
+        source_id,
+    )
+
+    # ── 4. Fetch PII / classified tag counts ─────────────────────────────────
+    # "classified" = catalogs that have at least one tag assigned
+    classified_count = await db.fetch_val(
+        """
+        SELECT COUNT(DISTINCT catalog_id)
+        FROM   tag_catalog_assignments tca
+        JOIN   catalogs c ON c.id = tca.catalog_id
+        WHERE  c.source_id = $1
+        """,
+        source_id,
+    )
+
+    # Sensitive columns = columns with a tag assigned (PII detection)
+    sensitive_columns = await db.fetch_val(
+        """
+        SELECT COUNT(DISTINCT tca.column_id)
+        FROM   tag_column_assignments tca
+        JOIN   catalogs c ON c.id = tca.catalog_id
+        WHERE  c.source_id = $1
+        """,
+        source_id,
+    )
+
+    # ── 5. Fetch error/warning log counts for the job ────────────────────────
+    log_counts = await db.fetch_one(
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE level = 'error')   AS error_count,
+            COUNT(*) FILTER (WHERE level = 'warning') AS warning_count,
+            COUNT(*) FILTER (WHERE level = 'success') AS success_count
+        FROM job_logs
+        WHERE job_id = $1
+        """,
+        job_id,
+    )
+
+    # Top errors to give AI context (capped at 10)
+    top_errors = await db.fetch_all(
+        """
+        SELECT message FROM job_logs
+        WHERE  job_id = $1 AND level = 'error'
+        ORDER  BY logged_at ASC
+        LIMIT  10
+        """,
+        job_id,
+    )
+
+    # ── 6. Build stats dict ──────────────────────────────────────────────────
+    total_tables     = int(catalog_stats["total_tables"]   or 0)
+    healthy_count    = int(catalog_stats["healthy_count"]  or 0)
+    warning_count    = int(catalog_stats["warning_count"]  or 0)
+    risk_count       = int(catalog_stats["risk_count"]     or 0)
+    total_rows       = int(catalog_stats["total_rows"]     or 0)
+    classified       = int(classified_count                or 0)
+    sensitive_cols   = int(sensitive_columns               or 0)
+    error_log_count  = int(log_counts["error_count"]       or 0)
+    warning_log_count= int(log_counts["warning_count"]     or 0)
+
+    duration_seconds = None
+    if job["created_at"] and job["completed_at"]:
+        duration_seconds = int(
+            (job["completed_at"] - job["created_at"]).total_seconds()
+        )
+
+    # ── 7. Build AI prompt ───────────────────────────────────────────────────
+    error_lines = "\n".join(f"  - {r['message']}" for r in top_errors) or "  none"
+
+    prompt_context = f"""
+Source        : {source['name']} ({source['source_type']})
+Job Status    : {job['status'].upper()}
+Duration      : {f"{duration_seconds}s" if duration_seconds else "unknown"}
+
+Ingestion Results:
+  Tables/datasets ingested : {total_tables}
+  Rows ingested            : {total_rows:,}
+  Classified datasets      : {classified}
+  Sensitive columns (PII)  : {sensitive_cols}
+  Healthy datasets         : {healthy_count}
+  Warning datasets         : {warning_count}
+  At-risk datasets         : {risk_count}
+
+Log Summary:
+  Errors   : {error_log_count}
+  Warnings : {warning_log_count}
+
+Top Errors:
+{error_lines}
+
+Top-level error message: {job['error_message'] or 'none'}
+""".strip()
+
+    system_prompt = (
+        "You are a data pipeline assistant. Based on the ingestion run metadata provided, "
+        "write a single concise sentence (max 30 words) summarising the pipeline result. "
+        "Format: start with an emoji (⚡ for success, ⚠️ for warnings, ❌ for failure), "
+        "then state: datasets ingested, PII scanned with sensitive column count, and classification status. "
+        "Example: '⚡ All 5 datasets ingested, PII scanned (3 sensitive columns found), classified and compliance-checked.' "
+        "Be factual. No markdown. One sentence only."
+    )
+
+    # ── 8. Call Azure OpenAI ─────────────────────────────────────────────────
+    try:
+        client = AsyncAzureOpenAI(
+            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            api_version=os.environ["AZURE_OPENAI_API_VERSION"],
+            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+        )
+        response = await client.chat.completions.create(
+            model=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": prompt_context},
+            ],
+            temperature=0.2,
+            max_tokens=80,
+        )
+        ai_summary = response.choices[0].message.content.strip()
+
+    except KeyError as e:
+        raise HTTPException(status_code=500, detail=f"Missing env variable: {e}")
+    except Exception as e:
+        logger.error(f"Azure OpenAI failed for source {source_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"AI summary failed: {str(e)}")
+
+    # ── 9. Return response ───────────────────────────────────────────────────
+    return {
+        "source_id":   source_id,
+        "source_name": source["name"],
+        "job_id":      job_id,
+        "pipeline_status": job["status"],       # "success" | "failed"
+        "badges": {
+            "ingested":   total_tables,          # → "5 ingested"
+            "classified": classified,            # → "5 classified"
+        },
+        "stats": {
+            "total_rows":       total_rows,
+            "sensitive_columns": sensitive_cols,
+            "healthy":          healthy_count,
+            "warning":          warning_count,
+            "risk":             risk_count,
+            "duration_seconds": duration_seconds,
+        },
+        "log_counts": {
+            "error":   error_log_count,
+            "warning": warning_log_count,
+        },
+        "ai_summary": ai_summary,   # → one-line prose for the Summary card
+    }
