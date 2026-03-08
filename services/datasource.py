@@ -1025,44 +1025,54 @@ async def get_job(job_id: str):
         logger.error(f"Error getting job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/api/v1/sources/{source_id}/stats")
 async def get_source_stats(
     source_id: str,
     type: Optional[str] = Query(None, description="Filter by type: table or view or all"),
     status: Optional[str] = Query(None, description="Filter by status: healthy, warning, risk"),
 ):
-    """
-    Get metadata stats for a specific datasource:
-    - total tables ingested
-    - per-catalog row_count and column_count
-    - optional filters: type (table | view | all), status (healthy | warning | risk)
-    """
     from app import db
-
+ 
     try:
         source = await db.fetch_one("SELECT id, name, source_type FROM data_sources WHERE id = $1", source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
-
+ 
         total_tables = await db.fetch_val(
             "SELECT COUNT(*) FROM catalogs WHERE source_id = $1", source_id
         )
-
+ 
         filters = ["c.source_id = $1"]
         params = [source_id]
-
+ 
         if type and type.lower() != "all":
             params.append(type.lower())
             filters.append(f"c.type = ${len(params)}")
-
+ 
         if status:
             params.append(status.lower())
             filters.append(f"c.status = ${len(params)}")
-
+ 
+        # For Athena: restrict to catalogs that have at least one column ingested.
+        # Athena emits multiple MCP aspects per table; catalogs with 0 columns are
+        # intermediate/duplicate rows that should not be surfaced to the user.
+        is_athena = source['source_type'] == "athena"
+        if is_athena:
+            filters.append(
+                "c.id IN ("
+                "  SELECT DISTINCT catalog_id FROM columns"
+                "  WHERE catalog_id IS NOT NULL"
+                "  GROUP BY catalog_id HAVING COUNT(*) > 0"
+                ")"
+            )
+ 
         where_clause = "WHERE " + " AND ".join(filters)
-
+ 
+        having_clause = "HAVING COUNT(DISTINCT col.id) > 0" if is_athena else ""
+ 
         catalogs = await db.fetch_all(f"""
-            SELECT 
+            SELECT
                 c.id, c.full_name, c.table_name,
                 c.row_count,
                 c.type,
@@ -1073,12 +1083,13 @@ async def get_source_stats(
             LEFT JOIN columns col ON c.id = col.catalog_id
             {where_clause}
             GROUP BY c.id, c.full_name, c.table_name, c.row_count, c.type, c.status, c.last_seen_at
+            {having_clause}
             ORDER BY c.table_name
         """, *params)
-
+ 
         total_row_count = sum(r['row_count'] or 0 for r in catalogs)
         total_column_count = sum(r['column_count'] for r in catalogs)
-
+ 
         return {
             "source_id": source_id,
             "source_name": source['name'],
@@ -1108,6 +1119,90 @@ async def get_source_stats(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# @router.get("/api/v1/sources/{source_id}/stats")
+# async def get_source_stats(
+#     source_id: str,
+#     type: Optional[str] = Query(None, description="Filter by type: table or view or all"),
+#     status: Optional[str] = Query(None, description="Filter by status: healthy, warning, risk"),
+# ):
+#     """
+#     Get metadata stats for a specific datasource:
+#     - total tables ingested
+#     - per-catalog row_count and column_count
+#     - optional filters: type (table | view | all), status (healthy | warning | risk)
+#     """
+#     from app import db
+
+#     try:
+#         source = await db.fetch_one("SELECT id, name, source_type FROM data_sources WHERE id = $1", source_id)
+#         if not source:
+#             raise HTTPException(status_code=404, detail="Source not found")
+
+#         total_tables = await db.fetch_val(
+#             "SELECT COUNT(*) FROM catalogs WHERE source_id = $1", source_id
+#         )
+
+#         filters = ["c.source_id = $1"]
+#         params = [source_id]
+
+#         if type and type.lower() != "all":
+#             params.append(type.lower())
+#             filters.append(f"c.type = ${len(params)}")
+
+#         if status:
+#             params.append(status.lower())
+#             filters.append(f"c.status = ${len(params)}")
+
+#         where_clause = "WHERE " + " AND ".join(filters)
+
+#         catalogs = await db.fetch_all(f"""
+#             SELECT 
+#                 c.id, c.full_name, c.table_name,
+#                 c.row_count,
+#                 c.type,
+#                 c.status,
+#                 c.last_seen_at AS last_sync,
+#                 COUNT(DISTINCT col.id) AS column_count
+#             FROM catalogs c
+#             LEFT JOIN columns col ON c.id = col.catalog_id
+#             {where_clause}
+#             GROUP BY c.id, c.full_name, c.table_name, c.row_count, c.type, c.status, c.last_seen_at
+#             ORDER BY c.table_name
+#         """, *params)
+
+#         total_row_count = sum(r['row_count'] or 0 for r in catalogs)
+#         total_column_count = sum(r['column_count'] for r in catalogs)
+
+#         return {
+#             "source_id": source_id,
+#             "source_name": source['name'],
+#             "source_type": source['source_type'],
+#             "total_tables_ingested": total_tables,
+#             "total_row_count": total_row_count,
+#             "total_column_count": total_column_count,
+#             "filters": {
+#                 "type": type,
+#                 "status": status,
+#             },
+#             "catalogs": [
+#                 {
+#                     "catalog_id": str(r['id']),
+#                     "full_name": r['full_name'],
+#                     "table_name": r['table_name'],
+#                     "row_count": r['row_count'],
+#                     "column_count": r['column_count'],
+#                     "type": r['type'],
+#                     "status": r['status'],
+#                     "last_sync": r['last_sync'].isoformat() if r['last_sync'] else None,
+#                 }
+#                 for r in catalogs
+#             ],
+#         }
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 
