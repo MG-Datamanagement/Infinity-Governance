@@ -496,38 +496,6 @@ async def get_statistics():
     except Exception as e:
         logger.error(f"Error getting statistics: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-# @router.get("/api/v1/statistics", response_model=StatisticsResponse, tags=["Overview"])
-# async def get_statistics():
-#     """Get metadata statistics"""
-#     from app import db, logger
-#     try:
-#         stats = await db.fetch_one("""
-#             SELECT
-#                 (SELECT COUNT(*) FROM data_sources) as total_sources,
-#                 (SELECT COUNT(*) FROM data_sources WHERE status = 'success') as success_sources,
-#                 (SELECT COUNT(*) FROM catalogs) as total_datasets,
-#                 (SELECT COUNT(*) FROM columns) as total_columns,
-#                 (SELECT COUNT(*) FROM ingestion_jobs WHERE status = 'success') as successful_jobs,
-#                 (SELECT COUNT(*) FROM ingestion_jobs WHERE status = 'failed') as failed_jobs,
-#                 (SELECT COUNT(DISTINCT source_type) FROM data_sources) as source_types_count,
-#                 (SELECT MAX(last_ingested_at) FROM data_sources) as last_ingestion
-#         """)
-        
-#         # Get sources by type
-#         sources_by_type = await db.fetch_all("""
-#             SELECT source_type, COUNT(*) as count
-#             FROM data_sources
-#             GROUP BY source_type
-#         """)
-        
-#         result = dict(stats)
-#         result['sources_by_type'] = {row['source_type']: row['count'] for row in sources_by_type}
-        
-#         return result
-    
-#     except Exception as e:
-#         logger.error(f"Error getting statistics: {e}")
-#         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
