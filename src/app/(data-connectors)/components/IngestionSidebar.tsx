@@ -5,7 +5,9 @@ import { X, Bell, History, Check, Loader2, Database, Shield, Zap, Search, AlertC
 import { useAppStore } from '@/store/appStore';
 import { Button } from '@/components/ui/Button';
 import { CONSTANTS } from '@/lib/constants';
-import { dashboardApiServices } from '@/services/dashboardApiServices';
+import { dashboardApiServices, SourceAiSummaryResponse } from '@/services/dashboardApiServices';
+import { RiRobot2Fill } from 'react-icons/ri';
+import { useRouter } from 'next/navigation';
 
 interface IngestionLog {
     timestamp: string;
@@ -22,7 +24,7 @@ interface IngestionSidebarProps {
     jobId: string;
     sourceName: string;
     isOpen: boolean;
-    onClose: () => void;
+    onClose: (viewIngestedDataset: boolean) => void;
 }
 
 const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, isOpen, onClose }) => {
@@ -41,13 +43,16 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     const [showNotification, setShowNotification] = useState(true);
     const [logs, setLogs] = useState<IngestionLog[]>([]);
     const [isComplete, setIsComplete] = useState(false);
-    const [completePiiScan, setCompletePiiScan] = useState(false);
 
     const eventSourceRef = useRef<EventSource | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [streamStatus, setStreamStatus] = useState<"connecting" | "connected" | "completed" | "error">("connecting");
     const { addDsConfig } = useAppStore();
-    console.log("🚀 ~ IngestionSidebar ~ addDSConfig:", addDsConfig)
+    const router = useRouter();
+
+    const [sourceAiSummary, setSourceAiSummary] = useState<SourceAiSummaryResponse | null>(null);
+    const [isSourceAiSummaryLoading, setIsSourceAiSummaryLoading] = useState<boolean>(false);
+
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -101,7 +106,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
             es.close();
 
             if (addDsConfig && !addDsConfig.piiApproval) {
-                handleCompletePiiScan();
+                handleBatchApis();
             }
         });
 
@@ -116,26 +121,65 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         };
     }, [jobId, isOpen]);
 
+     const handleBatchApis = async () => {
+       setIsSourceAiSummaryLoading(true);
+       try {
+         await handleTableClassification();
+         await handleColumnClassification();
+         await handleFetchIngestionSourceAiSummary();
+       } catch (error) {
+         console.error("Error during classification and Ai summary:", error);
+         setIsSourceAiSummaryLoading(false);
+       } finally {
+         setIsSourceAiSummaryLoading(false);
+       }
+     };
 
-    const handleCompletePiiScan = async () => {
-    setCompletePiiScan(true);
+     const handleTableClassification = async () => {
+       try {
+         const payload = {
+           source_id: addDsConfig.sourceId,
+           Require_human_approval: addDsConfig.piiApproval,
+           assigned_by: CONSTANTS.assignedBy,
+           min_confidence: CONSTANTS.minConfidence,
+         };
 
-    try {
-      const payload = {
-        source_id: addDsConfig.sourceId,
-        Require_human_approval: addDsConfig.piiApproval,
-        assigned_by: CONSTANTS.assignedBy,
-        min_confidence: CONSTANTS.minConfidence,
-      };
+         const response: any =
+           await dashboardApiServices.initPiiClassification(payload);
+       } catch (err) {
+         console.error("Error during PII classification:", err);
+       }
+     };
 
-      const response: any =
-        await dashboardApiServices.initPiiClassification(payload);
-      onClose();
-    } catch (err) {
-      console.error("Error during PII classification:", err);
-      setCompletePiiScan(false);
-    }
-  };
+     const handleColumnClassification = async () => {
+       try {
+         const payload = {
+           source_id: addDsConfig.sourceId,
+           save_to_db: CONSTANTS.saveToDb,
+           assigned_by: CONSTANTS.assignedBy,
+           min_confidence: CONSTANTS.minConfidence,
+         };
+
+         const { dataSourcesService } = await import("@/services/mock");
+         const response: any =
+           await dataSourcesService.reclassifyWithAi(payload);
+       } catch (err) {
+         console.error("Error during PII classification:", err);
+       }
+     };
+
+     const handleFetchIngestionSourceAiSummary = async () => {
+       try {
+         const response: SourceAiSummaryResponse =
+           await dashboardApiServices.fetchIngestionAiSummary(
+             addDsConfig?.sourceId,
+           );
+         setSourceAiSummary(response);
+       } catch (err) {
+         console.error("Error during classification and Ai summary:", err);
+         setIsSourceAiSummaryLoading(false);
+       }
+     };
 
     const handleNewLog = (log: IngestionLog) => {
         setLogs(prev => [...prev.slice(-100), log]);
@@ -178,50 +222,50 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         <>
             {/* Overlay */}
             <div
-                className="fixed inset-0 bg-black/20 backdrop-blur-[2px] z-[60] transition-opacity duration-300"
-                onClick={onClose}
+                className="fixed inset-0 backdrop-blur-[1px] z-[60] transition-opacity duration-300"
+                onClick={() => onClose(false)}
             />
 
             {/* Sidebar Container */}
             <div className={`fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl z-[70] transform transition-transform duration-500 ease-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
 
                 {/* Header */}
-                <div className="bg-indigo-600 p-6 text-white relative flex-shrink-0">
+                <div className="bg-indigo-600 p-4 text-white relative flex-shrink-0">
                     <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
-                                <Zap className="w-7 h-7 text-white fill-white" />
+                        <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+                                <Zap className="w-4 h-4 text-white fill-white" />
                             </div>
                             <div>
-                                <h2 className="text-xl font-bold font-sans">AI Ingestion Agent</h2>
-                                <p className="text-xs text-indigo-100 font-medium opacity-80 uppercase tracking-widest">Data pipeline overview</p>
+                                <h2 className="text-base font-semibold font-sans">AI Ingestion Agent</h2>
+                                <p className="text-xs text-indigo-100 opacity-80">Data pipeline overview</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors cursor-pointer">
-                                <Bell className="w-5 h-5" />
+                            <div className="bg-white/10 hover:bg-white/20 p-1 rounded-xl transition-colors cursor-pointer">
+                                <Bell className="w-4 h-4" />
                             </div>
-                            <div className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors cursor-pointer">
-                                <History className="w-5 h-5" />
+                            <div className="bg-white/10 hover:bg-white/20 p-1 rounded-xl transition-colors cursor-pointer">
+                                <History className="w-4 h-4" />
                             </div>
-                            <div onClick={onClose} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-colors cursor-pointer">
-                                <X className="w-5 h-5" />
+                            <div onClick={() => onClose(false)} className="bg-white/10 hover:bg-white/20 p-1 rounded-xl transition-colors cursor-pointer">
+                                <X className="w-4 h-4" />
                             </div>
                         </div>
                     </div>
 
-                    <div className="mt-4">
+                    <div className="mt-2">
                         <div className="flex items-center justify-between">
-                            <div className={`inline-flex items-center gap-1.5 border text-white px-3 py-1 rounded-full text-xs font-bold shadow-lg ${isThinking ? 'bg-orange-500/90 border-orange-400' : 'bg-green-500 border-green-400'}`}>
+                            <div className={`inline-flex items-center gap-1.5 border text-white px-2 py-0.5 rounded-full text-xs font-medium shadow-lg ${isThinking ? 'bg-orange-500/90 border-orange-400' : 'bg-green-500 border-green-400'}`}>
                                 <span className={`w-1.5 h-1.5 bg-white rounded-full ${isThinking ? 'animate-pulse' : ''}`} />
                                 {isThinking ? 'Thinking' : 'Completed'}
                             </div>
-                            <button className="text-xs font-bold text-white/70 hover:text-white transition-colors underline underline-offset-4">Override</button>
+                            <button className="text-xs font-medium text-white/70 hover:text-white transition-colors underline underline-offset-4">Override</button>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-5">
                     {/* Notification Toast (Inside Sidebar top) */}
                     {showNotification && (
                         <div className="bg-white border-2 border-indigo-100 rounded-2xl p-4 shadow-xl flex items-start gap-4 animate-in slide-in-from-top-4 duration-500">
@@ -238,7 +282,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     )}
 
                     {/* Summary Info */}
-                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-5 relative overflow-hidden group">
+                    <div className="bg-indigo-50/50 border border-indigo-100 rounded-2xl p-4 relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
                             <Zap className="w-12 h-12 text-indigo-600" />
                         </div>
@@ -260,10 +304,10 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     </div>
 
                     {/* Central Animation Placeholder */}
-                    <div className="flex flex-col items-center justify-center py-6">
+                    <div className="flex flex-col items-center justify-center p-2">
                         <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center mb-4 relative">
                             {!isComplete && (
-                                <div className="absolute inset-x-0 bottom-[-10px] flex justify-center gap-1.5 opacity-40">
+                                <div className="absolute inset-x-0 bottom-[-5px] flex justify-center gap-1.5 opacity-40">
                                     <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-0" />
                                     <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-150" />
                                     <span className="w-1.5 h-1.5 bg-indigo-600 rounded-full animate-bounce delay-300" />
@@ -288,7 +332,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Pipeline Progress</h3>
                             <span className="text-[10px] font-bold text-indigo-600">{progress}/{totalSteps} steps</span>
                         </div>
-                        <div className="p-5">
+                        <div className="p-4">
                             <div className="w-full bg-gray-200 rounded-full h-2 mb-4 overflow-hidden">
                                 <div
                                     className="bg-indigo-600 h-full transition-all duration-1000 ease-in-out"
@@ -334,20 +378,46 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             </div>
                         </div>
                     </div>
-                    {(isComplete && addDsConfig?.piiApproval) ? <div className='w-full flex justify-center items-center gap-2'>
+                    {(streamStatus === "completed" && addDsConfig?.piiApproval && !isSourceAiSummaryLoading && !sourceAiSummary) ? <div className='w-full flex justify-between items-center gap-2 transition-all'>
                         <div>
-                            <Button disabled={completePiiScan} onClick={onClose} variant="outline" className='disabled:opacity-50'>
+                            <Button onClick={() => onClose(false)} variant="outline" className='disabled:opacity-50'>
                                 <ArrowRight />
                                 Complete, skip PII
                             </Button>
                        </div>
                        <div>
-                            <Button disabled={completePiiScan} onClick={handleCompletePiiScan} className='disabled:opacity-50'>
-                                {completePiiScan ? <Loader2 className='animate-spin' /> : <ShieldCheckIcon />}
+                            <Button onClick={handleBatchApis} className='disabled:opacity-50'>
+                                <ShieldCheckIcon />
                                 Complete with PII Scan
                             </Button>
                        </div>
                     </div> : null}
+                    {(isSourceAiSummaryLoading || sourceAiSummary?.ai_summary) &&
+                    <div className='bg-gray-50 border border-gray-200 px-4 py-2 rounded-lg transition-all space-y-3'>
+                        <div className='text-indigo-600 flex items-center gap-2'>
+                            {isSourceAiSummaryLoading ? <Loader2 size={14} className='animate-spin' />  : <RiRobot2Fill size={14} />}
+                            <span className='text-xs font-medium'>Summary</span>
+                        </div>
+                        {(sourceAiSummary?.ai_summary) && 
+                        <div className='space-y-3 flex flex-col items-center'>
+                            <p className='text-gray-600 leading-relaxed text-xs'>
+                                {sourceAiSummary?.ai_summary}
+                                {/* ⚡ Force-completed with PII detection. All 5 datasets ingested, PII scanned (5 sensitive columns found), classified and compliance-checked. */}
+                                </p>
+                            <Button 
+                                variant="primary" 
+                                className='text-white w-full gap-2 flex justify-center items-center' 
+                                onClick={() => {
+                                    onClose(true)
+                                }}
+                            >
+                                <Database size={14} />
+                                View Ingested Dataset
+                                <ArrowRight size={14} />
+                            </Button>
+                        </div>
+                        }
+                    </div>}
                 </div>
 
                 {/* Footer Placeholder (Removed) */}

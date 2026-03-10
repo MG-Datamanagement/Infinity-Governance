@@ -167,6 +167,38 @@ export interface ClassificationResponse {
   results: TableClassificationResult[];
 }
 
+export interface SourceAiSummaryResponse {
+  source_id: string;
+  source_name: string;
+  job_id: string;
+  pipeline_status: PipelineStatus;
+  badges: SourceAiSummaryBadges;
+  stats: SourceAiSummaryStats;
+  log_counts: SourceAiSummaryLogCounts;
+  ai_summary: string;
+}
+
+export type PipelineStatus = "success" | "failed" | "running" | "pending";
+
+export interface SourceAiSummaryBadges {
+  ingested: number;
+  classified: number;
+}
+
+export interface SourceAiSummaryStats {
+  total_rows: number;
+  sensitive_columns: number;
+  healthy: number;
+  warning: number;
+  risk: number;
+  duration_seconds: number;
+}
+
+export interface SourceAiSummaryLogCounts {
+  error: number;
+  warning: number;
+}
+
 const config: AxiosRequestConfig = {
   headers: {
     "Content-Type": "application/json",
@@ -451,5 +483,11 @@ export const dashboardApiServices = {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(objectUrl);
+  },
+
+  async fetchIngestionAiSummary(sourceId: string) {
+    return dashboardApiClient.get<SourceAiSummaryResponse>(
+      `/api/v1/sources/${sourceId}/ai-summary`,
+    );
   },
 };

@@ -466,7 +466,7 @@ export interface ClassificationResponse {
 
 export interface ReclassifyWithAiRequest {
   source_id: string;
-  catalog_id: string;
+  // catalog_id: string;
   save_to_db: boolean;
   assigned_by: string;
   min_confidence: number;

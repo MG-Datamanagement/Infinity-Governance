@@ -527,7 +527,7 @@ const ManageDataSourcesPage: React.FC = () => {
                     isOpen={showSidebar}
                     jobId={sidebarJobId}
                     sourceName={sidebarSourceName}
-                    onClose={() => { 
+                    onClose={(viewIngestedDataset: boolean = false) => { 
                         setShowSidebar(false); 
                         setAddDsConfig({});
                     }}

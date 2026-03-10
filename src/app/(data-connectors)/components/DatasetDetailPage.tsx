@@ -74,7 +74,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
     };
 
     const handleFetchClassifyApi = async() => {
-      await handleReclassifyWithAI();
+      // await handleReclassifyWithAI();
       await fetchAll();
     }
     
@@ -128,7 +128,6 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
     try {
       const payload = {
         source_id: sourceId,
-        catalog_id: datasetId,
         save_to_db: CONSTANTS.saveToDb,
         assigned_by: CONSTANTS.assignedBy,
         min_confidence: CONSTANTS.minConfidence,
@@ -449,7 +448,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                 }`}
               >
                 {name}
-                {count !== undefined && (
+                {count !== undefined && name !== "Properties" && (
                   <span
                     className={`text-[11px] px-1.5 py-0.5 rounded-full font-semibold ${
                       activeTab === name
@@ -904,7 +903,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                         </td>
                         <td className="py-4 px-6">
                           <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold border border-gray-200">
-                            {(col.data_type || "UNKNOWN").toUpperCase()}
+                            {(col.type || col.data_type || "UNKNOWN").toUpperCase()}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-sm text-gray-500 italic max-w-xs truncate">
