@@ -1,4 +1,11 @@
 import {
+  DiPostgresql,
+} from "react-icons/di";
+import { FaRegSnowflake } from "react-icons/fa";
+import { SiMongodb } from "react-icons/si";
+import { BiLogoPostgresql } from "react-icons/bi";
+import { Database } from "lucide-react";
+import {
   MOCK_RECENTLY_VIEWED,
   MOCK_COMPLIANCE_FRAMEWORKS,
   MOCK_COMPLIANCE_ISSUES,
@@ -199,7 +206,7 @@ export interface SourceAiSummaryLogCounts {
   warning: number;
 }
 
-export type CatalogStatus  = "healthy" | "warning" | "error";
+export type CatalogStatus = "healthy" | "warning" | "error";
 export type CatalogType = "table" | "view";
 
 export interface SourceCatalogResponse {
@@ -245,7 +252,7 @@ const config: AxiosRequestConfig = {
 export const dashboardApiServices = {
   // ─── Compliance & Overview ───────────────────────────────────────────────
   async runCompliance(): Promise<ApiComplianceRunResponse> {
-    return dashboardApiClient.get("/api/compliance/overview");
+    return dashboardApiClient.get("/api/compliance/run");
   },
 
   async getComplianceLoadingSteps(): Promise<{ reasoning_loads: string[] }> {
@@ -291,6 +298,10 @@ export const dashboardApiServices = {
       classified: response?.total_tags || 0,
       activeDomains: response?.total_domains || 0,
       activeTables: response?.total_datasets || 0,
+      pendingReview: response?.pending_review || 0,
+      openIssues: response?.open_issues || 0,
+      governanceScore: response?.governance_score || 0,
+      aiRiskDomains: response?.at_risk_domains || 0,
     };
     return dashboardStats;
   },
@@ -317,7 +328,7 @@ export const dashboardApiServices = {
     return dashboardApiClient.get<{
       insight: string;
       framework_scores: { framework: string; score: number }[];
-    }>("/api/dashboard/compliance-overview");
+    }>("/compliance-overview");
   },
 
   async getDomainAssets() {
@@ -343,15 +354,60 @@ export const dashboardApiServices = {
   },
 
   async getRecentlyViewed(userUrn: string) {
-    return MOCK_RECENTLY_VIEWED;
+    try {
+      const response = await dashboardApiClient.get<{ recently_viewed: any[] }>(
+        "/api/v1/recently-viewed",
+      );
+
+      return response.recently_viewed.map((item, index) => {
+        let icon: any = Database;
+        let iconColor = "text-gray-600";
+        let tagColor = "gray";
+
+        const platform = (item.source || "").toLowerCase();
+
+        if (platform.includes("postgres")) {
+          icon = BiLogoPostgresql;
+          iconColor = "text-slate-600";
+        } else if (platform.includes("snowflake")) {
+          icon = FaRegSnowflake;
+          iconColor = "text-sky-600";
+        } else if (platform.includes("mongo")) {
+          icon = SiMongodb;
+          iconColor = "text-green-600";
+        }
+
+        const tag = (item.tag || "").toLowerCase();
+        if (tag === "pii") tagColor = "yellow";
+        else if (tag === "financial") tagColor = "blue";
+        else if (tag === "phi") tagColor = "red";
+        else if (tag === "gdpr") tagColor = "green";
+        else if (tag === "hipaa") tagColor = "indigo";
+        else tagColor = "gray";
+
+        return {
+          id: `${item.dataset}-${index}`,
+          name: item.dataset || "Unknown Dataset",
+          platform: item.source || "Unknown Platform",
+          tag: item.tag || "",
+          tagColor,
+          time: item.time || "",
+          icon,
+          iconColor,
+        };
+      });
+    } catch (e) {
+      console.error(e);
+      return [];
+    }
   },
 
   async getRecentActivity(userUrn: string) {
     const response: NewRecentActivity[] = await dashboardApiClient.get(
       `/api/v1/recent-activity`,
     );
-    return response.map((activity: NewRecentActivity) => ({
-      id: activity.msg,
+    return response.map((activity: NewRecentActivity, index: number) => ({
+      id: `${activity.t}-${index}`,
       name: activity.msg || "",
       type: "",
       platform: "",

@@ -8,7 +8,6 @@ import {
   ComplianceHealthSection,
   ComplianceIssuesSection,
   ComplianceFrameworksPanel,
-  AIInsightsCard,
 } from "@/components/compliance/sections";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -34,7 +33,6 @@ function ComplianceContent() {
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
         <div className="grid grid-cols-1 gap-5 col-span-8 min-w-0">
           <ComplianceHealthSection complianceRunQuery={complianceRun} />
-          <AIInsightsCard text={complianceRun.data?.ai_insights?.text} />
           <ComplianceIssuesSection query={complianceRun} />
         </div>
 

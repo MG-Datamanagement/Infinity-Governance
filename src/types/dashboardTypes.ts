@@ -140,6 +140,7 @@ export interface DashboardStats {
   aiRiskDomains?: number;
   activeDomains: number;
   activeTables: number;
+  openIssues?: number;
 }
 
 export interface AIGovernanceSnapshot {
@@ -210,6 +211,10 @@ export interface DashboardEntityMetricsResponse extends BaseApiResponse {
   total_datasets: number;
   total_domains: number;
   total_tags: number;
+  pending_review?: number;
+  open_issues?: number;
+  governance_score?: number;
+  at_risk_domains?: number;
 }
 
 export type EntityCounts = Record<EntityType, number>;

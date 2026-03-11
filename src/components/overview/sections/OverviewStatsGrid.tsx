@@ -50,12 +50,12 @@ export function OverviewStatsGrid({
   openIssuesCount,
 }: Props) {
   return (
-    <div className="grid row-span-1 xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+    <div className="grid xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
       <StatCard
         icon={Database}
         iconColor="text-blue-600"
         label="Total Assets"
-        value={stats?.activeTables}
+        value={stats?.totalAssets}
         change={stats?.totalAssetsChange ?? "+12% vs last month"}
         changeType="positive"
         iconBg="bg-blue-100"
@@ -96,7 +96,7 @@ export function OverviewStatsGrid({
         icon={AlertTriangleIcon}
         iconColor="text-red-600"
         label="Open Issues"
-        value={openIssuesCount ?? stats?.activeTables ?? "0"}
+        value={openIssuesCount ?? stats?.openIssues ?? "0"}
         change="Needs attention"
         changeType="negative"
         iconBg="bg-red-100"
