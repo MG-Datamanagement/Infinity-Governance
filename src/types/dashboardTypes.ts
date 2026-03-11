@@ -1,3 +1,4 @@
+import { CatalogTag } from "@/services/dashboardApiServices";
 import { IconType } from "react-icons/lib";
 
 export type InlineStateType = "loading" | "empty" | "error";
@@ -340,8 +341,8 @@ export interface ApiColumn {
 
 // ─── Dataset & Catalog ────────────────────────────────────────────────────────
 
-export type DatasetType = "Table" | "View" | "Materialized View";
-export type DatasetStatus = "Healthy" | "Warning" | "Error";
+export type DatasetType = "table" | "view" | "Materialized View";
+export type DatasetStatus = "healthy" | "warning" | "error";
 
 export interface Dataset {
   id: string;
@@ -353,6 +354,7 @@ export interface Dataset {
   size: string | null;
   lastSync: string;
   status: DatasetStatus;
+  tags: CatalogTag[]
 }
 
 export interface DatasetsBySource {

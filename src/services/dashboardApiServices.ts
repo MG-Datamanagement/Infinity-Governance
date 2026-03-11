@@ -199,6 +199,43 @@ export interface SourceAiSummaryLogCounts {
   warning: number;
 }
 
+export type CatalogStatus  = "healthy" | "warning" | "error";
+export type CatalogType = "table" | "view";
+
+export interface SourceCatalogResponse {
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  total_tables_ingested: number;
+  total_row_count: number;
+  total_column_count: number;
+  filters: Filters;
+  catalogs: Catalog[];
+}
+
+export interface Filters {
+  type: string | null;
+  status: string | null;
+}
+
+export interface Catalog {
+  catalog_id: string;
+  full_name: string;
+  table_name: string;
+  row_count: number | null;
+  column_count: number;
+  type: CatalogType;
+  status: CatalogStatus;
+  last_sync: string;
+  tags: CatalogTag[];
+}
+
+export interface CatalogTag {
+  name: string;
+  color: string;
+  tag_id: string;
+}
+
 const config: AxiosRequestConfig = {
   headers: {
     "Content-Type": "application/json",
@@ -358,7 +395,7 @@ export const dashboardApiServices = {
     if (typeFilter && typeFilter !== "all") params.type = typeFilter;
     if (statusFilter && statusFilter !== "all") params.status = statusFilter;
 
-    return dashboardApiClient.get<ApiSourceStats>(`/api/v1/sources/${id}/stats`, {
+    return dashboardApiClient.get<SourceCatalogResponse>(`/api/v1/sources/${id}/stats`, {
       params,
     });
   },

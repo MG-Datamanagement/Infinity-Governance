@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ClassificationResponse,
+  SourceCatalogResponse,
 } from "@/services/dashboardApiServices";
 import { Dataset } from "@/types";
 import { downloadFileFromResponse, formatDateTime } from "@/lib/utils";
@@ -14,17 +15,17 @@ import { CONSTANTS } from "@/lib/constants";
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 const StatusBadge: React.FC<{ status: Dataset["status"] }> = ({ status }) => {
   const map = {
-    Healthy: {
+    healthy: {
       bg: "bg-green-50",
       text: "text-green-700",
       border: "border-green-200",
     },
-    Warning: {
+    warning: {
       bg: "bg-yellow-50",
       text: "text-yellow-700",
       border: "border-yellow-200",
     },
-    Error: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200" },
+    error: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200" },
   };
   const s = map[status];
   return (
@@ -98,7 +99,7 @@ const TypeIcon: React.FC<{
           ? "text-indigo-300"
           : "bg-blue-100";
 
-  if (type === "View" || type === "Materialized View") {
+  if (type === "view" || type === "Materialized View") {
     return (
       <div
         className={`w-7 h-7 rounded-md ${bgColor} flex items-center justify-center flex-shrink-0`}
@@ -178,7 +179,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
       setIsLoading(true);
       try {
         const { dashboardApiServices } = await import("@/services/dashboardApiServices");
-        const stats = await dashboardApiServices.fetchSourceStats(
+        const stats: SourceCatalogResponse = await dashboardApiServices.fetchSourceStats(
           sourceId,
           // typeFilter?.toLowerCase(),
           // statusFilter?.toLowerCase(),
@@ -186,17 +187,27 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
         if (stats) {
           if (stats.source_name) setSourceName(stats.source_name);
           if (stats.catalogs) {
-            const mapped: Dataset[] = stats.catalogs.map((cat) => ({
+            const mapped: Dataset[] = stats.catalogs.map((cat) => {
+            // keep only pii & phi tags
+            const filteredTags =
+              cat.tags?.filter((tag) =>
+                ["pii", "phi"].includes(tag.name.toLowerCase())
+              ) || [];
+
+            return {
               id: cat.catalog_id,
               name: cat.table_name || cat.full_name,
-              hasPII: false,
-              type: "Table",
+              hasPII: filteredTags.length > 0,
+              type: cat.type || "table",
               rows: cat.row_count ? cat.row_count.toString() : null,
               columns: cat.column_count || 0,
               size: null,
-              lastSync: formatDateTime(cat.updated_at),
-              status: "Healthy",
-            }));
+              lastSync: formatDateTime(cat.last_sync),
+              status: cat.status || "healthy",
+              tags: filteredTags
+            };
+          });
+
             setAllDatasets(mapped);
           }
         }
@@ -253,11 +264,19 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
         await dashboardApiServices.initPiiClassification(payload);
 
       // Create lookup map from response
+      // const classificationMap: Record<string, "pii" | "clean"> = {};
+      // (response?.results || []).forEach((r) => {
+      //   const tag = (r.suggested_tag || "").toLowerCase();
+      //   classificationMap[r.catalog_id] =
+      //     tag === "error" ? "clean" : "pii";
+      // });
       const classificationMap: Record<string, "pii" | "clean"> = {};
       (response?.results || []).forEach((r) => {
         const tag = (r.suggested_tag || "").toLowerCase();
-        classificationMap[r.catalog_id] =
-          tag === "error" ? "clean" : "pii";
+
+        classificationMap[r.catalog_id] = ["pii", "phi"].includes(tag)
+          ? "pii"
+          : "clean";
       });
 
       // Preserve staggered animation but use real results
@@ -281,7 +300,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
       setAllDatasets((prev) =>
         prev.map((d) => {
           const result = classificationMap[d.id];
-          return result ? { ...d, hasPII: result === "pii" } : d;
+          return result ? { ...d, hasPII: ["pii", "phi"].includes(result) } : d;
         }),
       );
 
@@ -699,7 +718,7 @@ const DatasetListPage: React.FC<DatasetListPageProps> = ({ sourceId }) => {
                             </span>
                           )}
 
-                          {/* PII found */}
+                          {/* PII found in scanning */}
                           {(scannedDatasets[dataset.id] === "pii" ||
                             (piiScanPhase !== "scanning" &&
                               dataset.hasPII &&
