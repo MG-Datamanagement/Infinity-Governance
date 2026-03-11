@@ -20,6 +20,7 @@ import {
   FilePlus,
   FileTextIcon,
   Book,
+  Bot,
 } from "lucide-react";
 import { MdOutlineAutoAwesome } from "react-icons/md";
 import { LuMessageSquare, LuCable, LuSparkles } from "react-icons/lu";
@@ -33,7 +34,7 @@ const GOVERN_ITEMS = [
   { icon: Globe, label: "Domains", href: "/domains" },
   { icon: Tag, label: "Tags", href: "/tags" },
   { icon: Book, label: "Glossary", href: "/glossary" },
-  // { icon: FileTextIcon, label: "Applications", href: "/applications" },
+  { icon: Bot, label: "Agents", href: "/agents" },
 ];
 
 const ADMIN_ITEMS = [
