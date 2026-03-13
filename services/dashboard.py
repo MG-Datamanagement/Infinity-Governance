@@ -10,12 +10,43 @@ Provides endpoints for:
 
 import json
 import re
-from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
 from models.search_schemas import SearchRequest, StatisticsResponse
 from models.catalog_schemas import CatalogInfo
+import psycopg2
+from datetime import datetime, timezone
 
+
+import os
+import psycopg2.extras
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DB_CONFIG = {
+    "host": os.getenv("PG_HOST", "postgres_ig"),
+    "port": int(os.getenv("PG_PORT", "5432")),
+    "dbname": os.getenv("PG_NAME", "ig_database"),
+    "user": os.getenv("PG_USER", "ig_user"),
+    "password": os.getenv("PG_PASSWORD", "ig_pass"),
+}
+
+
+def get_connection():
+    return psycopg2.connect(**DB_CONFIG)
+
+
+def execute_query(query, params=None):
+    conn = get_connection()
+
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query, params or {})
+            return cur.fetchall()
+    finally:
+        conn.close()
+        
 router = APIRouter()
 
 
@@ -496,38 +527,6 @@ async def get_statistics():
     except Exception as e:
         logger.error(f"Error getting statistics: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
-# @router.get("/api/v1/statistics", response_model=StatisticsResponse, tags=["Overview"])
-# async def get_statistics():
-#     """Get metadata statistics"""
-#     from app import db, logger
-#     try:
-#         stats = await db.fetch_one("""
-#             SELECT
-#                 (SELECT COUNT(*) FROM data_sources) as total_sources,
-#                 (SELECT COUNT(*) FROM data_sources WHERE status = 'success') as success_sources,
-#                 (SELECT COUNT(*) FROM catalogs) as total_datasets,
-#                 (SELECT COUNT(*) FROM columns) as total_columns,
-#                 (SELECT COUNT(*) FROM ingestion_jobs WHERE status = 'success') as successful_jobs,
-#                 (SELECT COUNT(*) FROM ingestion_jobs WHERE status = 'failed') as failed_jobs,
-#                 (SELECT COUNT(DISTINCT source_type) FROM data_sources) as source_types_count,
-#                 (SELECT MAX(last_ingested_at) FROM data_sources) as last_ingestion
-#         """)
-        
-#         # Get sources by type
-#         sources_by_type = await db.fetch_all("""
-#             SELECT source_type, COUNT(*) as count
-#             FROM data_sources
-#             GROUP BY source_type
-#         """)
-        
-#         result = dict(stats)
-#         result['sources_by_type'] = {row['source_type']: row['count'] for row in sources_by_type}
-        
-#         return result
-    
-#     except Exception as e:
-#         logger.error(f"Error getting statistics: {e}")
-#         raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -548,11 +547,11 @@ async def list_api_logs(
     from app import db, logger
     try:
         query = """
-            SELECT 
-                l.id, l.api_endpoint, l.http_method, l.action_description,
+            SELECT
+                l.id, l.endpoint, l.method, l.action_summary,
                 l.entity_type, l.entity_id, l.entity_name,
                 l.owner_id, o.name AS owner_name, o.role AS owner_role,
-                l.status, l.details, l.created_at
+                l.status_code, l.request_body, l.created_at
             FROM api_logs l
             LEFT JOIN owners o ON l.owner_id = o.id
             WHERE 1=1
@@ -562,7 +561,7 @@ async def list_api_logs(
             query += f" AND l.entity_type = ${len(params)+1}"
             params.append(entity_type)
         if api_endpoint:
-            query += f" AND l.api_endpoint = ${len(params)+1}"
+            query += f" AND l.endpoint = ${len(params)+1}"
             params.append(api_endpoint)
         query += f" ORDER BY l.created_at DESC LIMIT ${len(params)+1}"
         params.append(limit)
@@ -573,9 +572,9 @@ async def list_api_logs(
             d = dict(r)
             d['id'] = str(d['id'])
             d['owner_id'] = str(d['owner_id']) if d.get('owner_id') else None
-            if d.get('details') and isinstance(d['details'], str):
+            if d.get('request_body') and isinstance(d['request_body'], str):
                 try:
-                    d['details'] = json.loads(d['details'])
+                    d['request_body'] = json.loads(d['request_body'])
                 except Exception:
                     pass
             result.append(d)
@@ -609,6 +608,64 @@ async def get_recent_activity_minimal(
     ]
 
 
+
+def format_time_ago(timestamp):
+    now = datetime.now(timezone.utc)
+    diff = now - timestamp
+
+    seconds = diff.total_seconds()
+
+    if seconds < 60:
+        return "just now"
+
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{int(minutes)} min ago"
+
+    hours = minutes // 60
+    if hours < 24:
+        return f"{int(hours)} hr ago"
+
+    days = hours // 24
+    return f"{int(days)} days ago"
+@router.get("/api/v1/recently-viewed" , tags=["Overview"])
+def get_recently_viewed():
+    try:
+
+        rows = execute_query("""
+            SELECT
+                c.table_name,
+                ds.name AS source_name,
+                t.name AS tag,
+                al.created_at
+            FROM api_logs al
+            JOIN catalogs c
+                ON c.id::text = al.entity_id
+            LEFT JOIN data_sources ds
+                ON ds.id = c.source_id
+            LEFT JOIN tag_catalog_assignments tca
+                ON tca.catalog_id = c.id
+            LEFT JOIN tags t
+                ON t.id = tca.tag_id
+            WHERE al.entity_type = 'catalog'
+            ORDER BY al.created_at DESC
+            LIMIT 5
+        """)
+
+        datasets = [
+            {
+                "dataset": row["table_name"],
+                "source": row["source_name"],
+                "tag": row["tag"],
+                "time": format_time_ago(row["created_at"])
+            }
+            for row in rows
+        ]
+
+        return {"recently_viewed": datasets}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 # ============================================================================
 # RUN HISTORY
 # ============================================================================
@@ -706,10 +763,13 @@ async def get_run_history(
 @router.get("/api/v1/overview/stats", tags=["Overview"])
 async def get_overview_stats():
     """
-    Returns total counts for datasets, tags, domains, and overall assets.
+    Returns total counts for datasets, tags, domains, overall assets,
+    plus compliance metrics: pending_review, open_issues, governance_score,
+    and at_risk_domains.
     """
     from app import db, logger
     try:
+        # -- Core asset counts ------------------------------------------------
         row = await db.fetch_one("""
             SELECT
                 (SELECT COUNT(*) FROM catalogs)         AS total_datasets,
@@ -722,11 +782,52 @@ async def get_overview_stats():
                 )                                       AS total_assets
         """)
 
+        # -- Pending review: catalogs missing owner or description ------------
+        pending_review = await db.fetch_val("""
+            SELECT COUNT(*)
+            FROM catalogs c
+            WHERE NOT EXISTS (
+            SELECT 1
+            FROM tag_catalog_assignments tca
+            WHERE tca.catalog_id = c.id
+        );
+        """)
+
+        # -- Latest compliance snapshot ---------------------------------------
+        snapshot_row = await db.fetch_one("""
+            SELECT open_issues_count, overall_score
+            FROM compliance_snapshots
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        """)
+
+        open_issues      = None
+        governance_score = None
+        at_risk_domains  = 0
+
+        if snapshot_row:
+            open_issues      = snapshot_row["open_issues_count"]
+            governance_score = snapshot_row["overall_score"]
+
+            # -- At-risk domains: CRITICAL or HIGH severity issues ------------
+            at_risk_row = await db.fetch_val("""
+                SELECT COUNT(DISTINCT issue->>'dataset')
+                FROM compliance_snapshots,
+                     jsonb_array_elements(snapshot_json->'open_issues'->'items') AS issue
+                WHERE issue->>'severity' IN ('CRITICAL', 'HIGH')
+                  AND recorded_at = (SELECT MAX(recorded_at) FROM compliance_snapshots)
+            """)
+            at_risk_domains = at_risk_row or 0
+
         return {
-            "total_datasets": row["total_datasets"],
-            "total_tags":     row["total_tags"],
-            "total_domains":  row["total_domains"],
-            "total_assets":   row["total_assets"]
+            "total_datasets":   row["total_datasets"],
+            "total_tags":       row["total_tags"],
+            "total_domains":    row["total_domains"],
+            "total_assets":     row["total_assets"],
+            "pending_review":   pending_review or 0,
+            "open_issues":      open_issues,
+            "governance_score": governance_score,
+            "at_risk_domains":  at_risk_domains,
         }
 
     except Exception as e:
@@ -795,3 +896,31 @@ async def domains_simple_with_count(
         {"id": str(row["id"]), "name": row["name"], "dataset_count": row["dataset_count"] or 0}
         for row in rows
     ]
+
+
+@router.get("/compliance-overview", tags=["Overview"])
+def get_compliance_overview():
+    try:
+        snapshot = execute_query("""
+            SELECT snapshot_json
+            FROM compliance_snapshots
+            ORDER BY recorded_at DESC
+            LIMIT 1
+        """)[0]["snapshot_json"]
+
+        insight_text = snapshot.get("ai_insights", {}).get("text", "")
+
+        frameworks = snapshot.get("frameworks", [])
+
+        framework_scores = [
+            {"framework": fw["name"], "score": fw["score"]}
+            for fw in frameworks
+        ]
+
+        return {
+            "insight": insight_text,
+            "framework_scores": framework_scores
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

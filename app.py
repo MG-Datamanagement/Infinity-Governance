@@ -152,6 +152,9 @@ async def lifespan(app: FastAPI):
     await db.connect(settings)
     ingestion_manager.set_db(db)
     ingestion_manager.set_settings(settings)
+
+    from services.compliance import init_compliance_engine
+    await init_compliance_engine()
     
     yield
     

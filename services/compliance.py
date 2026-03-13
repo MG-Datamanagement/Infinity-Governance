@@ -1,24 +1,33 @@
 # =============================================================================
-#  COMPLIANCE ENGINE — FastAPI Dashboard API
+#  COMPLIANCE ENGINE — FastAPI Dashboard API with PDF Report Export
 #
 #  Endpoints:
-#    GET /api/compliance/overview      → trigger fresh scan + return dashboard
-#    GET /health                    → liveness check
+#    GET /health                         → liveness check
+#    GET /api/compliance/run             → trigger fresh scan + return dashboard
+#    GET /api/compliance/summary         → summary from latest snapshot
+#    GET /api/compliance/loading         → loading state
+#    GET /api/compliance/report/export   → export latest snapshot as PDF
 #
-#  New table: compliance_snapshots
-#    Replaces compliance_history entirely.
-#    Stores the FULL dashboard response payload as JSONB plus individual
-#    score columns for fast trend queries.
+#  Updated: Added Philippine Data Privacy Frameworks
+#    - Data Privacy Act of 2012 (DPA)
+#    - Implementing Rules and Regulations (IRR) of the DPA
+#    - Philippine Statistical Act of 2013 (PSA)
+#
+#  Updated table: compliance_snapshots
+#    Now stores ALL dashboard data as individual columns for maximum performance
 #
 #  Install:
-#    pip install fastapi uvicorn langchain langchain-groq langgraph
-#                psycopg2-binary python-dotenv
+#    pip install fastapi uvicorn langchain langchain-openai langgraph
+#                psycopg2-binary python-dotenv reportlab
 #
 #  .env:
 #    PG_DSN=postgresql://user:password@host:5432/dbname
 #    -- or individual: DB_HOST / DB_PORT / DB_NAME / DB_USER / DB_PASSWORD
-#    GROQ_API_KEY=...
-#    GROQ_MODEL_NAME=llama-3.1-8b-instant
+#    AZURE_OPENAI_API_KEY=...
+#    AZURE_OPENAI_API_VERSION=...
+#    AZURE_OPENAI_ENDPOINT=...
+#    AZURE_OPENAI_DEPLOYMENT_NAME=...
+#    AZURE_OPENAI_API_MODEL_NAME=...
 #
 #  Run:
 #    uvicorn main:app --reload --port 8000
@@ -26,34 +35,26 @@
 #    python main.py
 # =============================================================================
 
+import io
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from itertools import chain
 from typing import Any, Generator, Optional, TypedDict
-import re
-from langchain_openai import AzureChatOpenAI
+
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.graph import END, StateGraph
+from langchain_openai import AzureChatOpenAI
 
-import io
-import json
-import os
-from datetime import datetime
-
-import psycopg2
-import psycopg2.extras
-from dotenv import load_dotenv
-from fastapi import APIRouter, FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -61,8 +62,8 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (HRFlowable, KeepTogether, Paragraph,
                                 SimpleDocTemplate, Spacer, Table, TableStyle)
-
-
+from fastapi import APIRouter
+from datetime import datetime, timezone
 load_dotenv()
 
 logging.basicConfig(
@@ -71,8 +72,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("compliance_engine")
 
-# Use UTC timezone (cross-platform compatible)
+# Use UTC timezone
 IST = timezone.utc
+
 
 # =============================================================================
 # CONSTANTS
@@ -85,17 +87,26 @@ QUICK_ACTIONS = [
 
 SEVERITY_DUE_DAYS = {"critical": 3, "high": 7, "medium": 14, "low": 30}
 
+# Colour palette for PDF
+DARK_BLUE   = colors.HexColor("#1A2B4A")
+MID_BLUE    = colors.HexColor("#2563EB")
+LIGHT_BLUE  = colors.HexColor("#EFF6FF")
+GREEN       = colors.HexColor("#16A34A")
+GREEN_BG    = colors.HexColor("#F0FDF4")
+RED         = colors.HexColor("#DC2626")
+RED_BG      = colors.HexColor("#FEF2F2")
+ORANGE      = colors.HexColor("#D97706")
+ORANGE_BG   = colors.HexColor("#FFFBEB")
+GREY_TEXT   = colors.HexColor("#6B7280")
+GREY_LIGHT  = colors.HexColor("#F3F4F6")
+GREY_BORDER = colors.HexColor("#E5E7EB")
+WHITE       = colors.white
+BLACK       = colors.HexColor("#111827")
 
-# =============================================================================
-# DDL — AUTO-CREATED TABLES ON STARTUP
-#
-# compliance_snapshots replaces compliance_history:
-#   - One row per scan run
-#   - Individual score columns (fast trend queries without JSON parsing)
-#   - snapshot_json stores the FULL dashboard payload for GET /dashboard
-#
-# glossary tables auto-created if missing (needed by GDPR-003 / HIPAA-002)
-# =============================================================================
+
+
+
+
 
 # =============================================================================
 # FRAMEWORK RULES
@@ -269,7 +280,9 @@ FRAMEWORK_RULES: dict = {
                 JOIN tags t ON t.id = tca.tag_id
                 LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
-                  AND (c.owner_id IS NULL OR o.email IS NULL OR TRIM(o.email) = '')
+                  AND (c.owner_id IS NULL 
+                       OR o.id IS NULL
+                       OR COALESCE(TRIM(o.email), '') = '')
                 ORDER BY c.full_name LIMIT 100
             """,
             "sql_params": {"tags": ["phi", "hipaa", "health data", "medical"]},
@@ -343,7 +356,603 @@ FRAMEWORK_RULES: dict = {
             ),
         },
     ],
+
+    "DPA": [
+        {
+            "rule_id": "DPA-001",
+            "rule": "Personal data catalogs must have a description (Data Privacy Act of 2012 - Section 4)",
+            "sql": """
+                SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
+                       c.database_name, c.description, c.owner_id,
+                       t.name AS tag_name, c.updated_at
+                FROM catalogs c
+                JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
+                JOIN tags t ON t.id = tca.tag_id
+                WHERE LOWER(t.name) = ANY(%(tags)s)
+                  AND (c.description IS NULL OR TRIM(c.description) = '')
+                ORDER BY c.full_name LIMIT 100
+            """,
+            "sql_params": {"tags": ["personal data", "pii", "sensitive", "confidential"]},
+            "eval_prompt": (
+                "You are a Data Privacy Act (RA 10173) compliance auditor. "
+                "These tables contain personal data but lack documentation on their processing purpose. "
+                "DPA Section 4 requires clear identification and documentation of personal data handling. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+        {
+            "rule_id": "DPA-002",
+            "rule": "Personal data catalogs must have an assigned Data Protection Officer or owner (DPA - Section 12)",
+            "sql": """
+                SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
+                       c.database_name, c.owner_id, t.name AS tag_name,
+                       c.created_at, c.updated_at
+                FROM catalogs c
+                JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
+                JOIN tags t ON t.id = tca.tag_id
+                WHERE LOWER(t.name) = ANY(%(tags)s)
+                  AND c.owner_id IS NULL
+                ORDER BY c.full_name LIMIT 100
+            """,
+            "sql_params": {"tags": ["personal data", "pii", "sensitive"]},
+            "eval_prompt": (
+                "You are a DPA compliance auditor. "
+                "These personal data assets have no assigned Data Protection Officer or owner. "
+                "DPA Section 12 requires accountability through designated responsible parties. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+        {
+            "rule_id": "DPA-003",
+            "rule": "Personal data columns must be linked to glossary terms (DPA - Section 4 data identification)",
+            "sql": """
+                SELECT col.id AS column_id, col.name AS column_name, col.data_type,
+                       col.description AS column_description, c.id AS catalog_id,
+                       c.table_name, c.full_name, c.schema_name, t.name AS tag_name
+                FROM columns col
+                JOIN catalogs c ON c.id = col.catalog_id
+                JOIN tag_column_assignments tca ON tca.column_id = col.id
+                JOIN tags t ON t.id = tca.tag_id
+                WHERE LOWER(t.name) = ANY(%(tags)s)
+                  AND (
+                    (col.description IS NULL OR TRIM(col.description) = '')
+                    OR col.id NOT IN (SELECT column_id FROM glossary_term_column_assignments)
+                  )
+                ORDER BY c.full_name, col.name LIMIT 100
+            """,
+            "sql_params": {"tags": ["personal data", "pii", "sensitive"]},
+            "eval_prompt": (
+                "You are a DPA compliance auditor. "
+                "These personal data columns lack glossary term mapping or description. "
+                "DPA Section 4 requires proper identification of personal data elements. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+    ],
+
+    "IRR": [
+        {
+            "rule_id": "IRR-001",
+            "rule": "Data controllers must maintain current privacy notices (IRR Rule 2.4)",
+            "sql": """
+                SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
+                       c.database_name, c.description, c.owner_id,
+                       t.name AS tag_name, c.updated_at
+                FROM catalogs c
+                JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
+                JOIN tags t ON t.id = tca.tag_id
+                WHERE LOWER(t.name) = ANY(%(tags)s)
+                  AND (c.updated_at < NOW() - INTERVAL '6 months'
+                       OR c.description IS NULL OR TRIM(c.description) = '')
+                ORDER BY c.full_name LIMIT 100
+            """,
+            "sql_params": {"tags": ["personal data", "pii"]},
+            "eval_prompt": (
+                "You are an IRR compliance auditor. "
+                "These personal data catalogs lack current privacy notices or documentation. "
+                "IRR Rule 2.4 requires controllers to maintain updated privacy statements. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+        {
+            "rule_id": "IRR-002",
+            "rule": "All data subjects must have identified contact points (IRR Rule 2.5)",
+            "sql": """
+                SELECT o.id, o.name, o.role, o.email, o.created_at, o.updated_at
+                FROM owners o
+                WHERE o.role = ANY(%(roles)s)
+                  AND (o.email IS NULL OR TRIM(o.email) = '' OR o.name IS NULL)
+                ORDER BY o.role, o.name LIMIT 100
+            """,
+            "sql_params": {"roles": ["data_controller", "data_protection_officer", "dpo"]},
+            "eval_prompt": (
+                "You are an IRR compliance auditor. "
+                "These data controllers have incomplete contact information. "
+                "IRR Rule 2.5 requires readily available, identifiable contact points for data subjects. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+    {
+    "rule_id": "IRR-003",
+    "rule": "Data retention periods must be documented (IRR Rule 3.2 data retention)",
+    "sql": """
+        SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
+               c.database_name, c.description, c.owner_id, t.name AS tag_name
+        FROM catalogs c
+        JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
+        JOIN tags t ON t.id = tca.tag_id
+        WHERE LOWER(t.name) IN (%(tag1)s, %(tag2)s, %(tag3)s)
+          AND (c.description IS NULL 
+               OR c.description = ''
+               OR (c.description NOT ILIKE '%%retain%%'
+                   AND c.description NOT ILIKE '%%expir%%'
+                   AND c.description NOT ILIKE '%%delete%%'))
+        ORDER BY c.full_name LIMIT 100
+    """,
+    "sql_params": {"tag1": "personal data", "tag2": "pii", "tag3": "sensitive"},
+    "eval_prompt": (
+        "You are an IRR compliance auditor. "
+        "These personal data catalogs lack documented retention periods. "
+        "IRR Rule 3.2 requires clear retention period documentation. "
+        "If any rows are returned, this rule has FAILED. "
+        "Respond ONLY with valid JSON: "
+        "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+        "No markdown, no extra text. Query Results:"
+    ),
+},
+    ],
+
+    "PSA": [
+        {
+            "rule_id": "PSA-001",
+            "rule": "Statistical data catalogs must be marked confidential (PSA Section 4.1)",
+            "sql": """
+                SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
+                       c.database_name, c.description, c.owner_id, c.updated_at
+                FROM catalogs c
+                WHERE (c.schema_name ILIKE ANY(%(patterns)s)
+                    OR c.table_name ILIKE ANY(%(patterns)s)
+                    OR c.description ILIKE ANY(%(patterns)s))
+                AND NOT EXISTS (
+                    SELECT 1 FROM tag_catalog_assignments tca
+                    JOIN tags t ON t.id = tca.tag_id
+                    WHERE tca.catalog_id = c.id
+                    AND LOWER(t.name) = 'confidential'
+                )
+                ORDER BY c.full_name LIMIT 100
+            """,
+            "sql_params": {"patterns": ["%statistic%", "%census%", "%survey%", "%demographic%"]},
+            "eval_prompt": (
+                "You are a Philippine Statistical Act auditor. "
+                "These statistical data catalogs are not marked as confidential. "
+                "PSA Section 4.1 mandates confidential treatment of statistical data. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+        {
+            "rule_id": "PSA-002",
+            "rule": "Statistical data handlers must be properly authorized (PSA Section 6)",
+            "sql": """
+                SELECT o.id, o.name, o.role, o.email, o.created_at, o.updated_at
+                FROM owners o
+                WHERE o.role = ANY(%(roles)s)
+                  AND (o.email IS NULL OR TRIM(o.email) = '')
+                ORDER BY o.role, o.name LIMIT 100
+            """,
+            "sql_params": {"roles": ["statistics_officer", "data_handler", "analyst"]},
+            "eval_prompt": (
+                "You are a PSA compliance auditor. "
+                "These statistical data handlers have incomplete authorization records. "
+                "PSA Section 6 requires proper documentation of authorized handlers. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+        {
+            "rule_id": "PSA-003",
+            "rule": "Statistical data must have documented classification (PSA Section 3)",
+            "sql": """
+                SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
+                       c.database_name, c.description, c.updated_at
+                FROM catalogs c
+                WHERE (c.schema_name ILIKE ANY(%(patterns)s)
+                    OR c.table_name ILIKE ANY(%(patterns)s)
+                    OR c.description ILIKE ANY(%(patterns)s))
+                AND (c.description IS NULL OR TRIM(c.description) = '')
+                ORDER BY c.full_name LIMIT 100
+            """,
+            "sql_params": {"patterns": ["%statistic%", "%census%", "%survey%", "%demographic%"]},
+            "eval_prompt": (
+                "You are a PSA compliance auditor. "
+                "These statistical data catalogs lack proper classification documentation. "
+                "PSA Section 3 requires data classification and purpose documentation. "
+                "If any rows are returned, this rule has FAILED. "
+                "Respond ONLY with valid JSON: "
+                "{\"passed\": true, \"reason\": \"explanation\", \"severity\": \"low|medium|high|critical\"}. "
+                "No markdown, no extra text. Query Results:"
+            ),
+        },
+    ],
 }
+
+# =============================================================================
+# PDF GENERATION FUNCTIONS
+# =============================================================================
+
+def _pdf_styles():
+    """Define all PDF styles."""
+    return {
+        "title": ParagraphStyle("title", fontSize=22, textColor=WHITE,
+                                fontName="Helvetica-Bold", alignment=TA_LEFT, leading=28),
+        "subtitle": ParagraphStyle("subtitle", fontSize=10, textColor=colors.HexColor("#BFDBFE"),
+                                   fontName="Helvetica", alignment=TA_LEFT),
+        "section_head": ParagraphStyle("section_head", fontSize=13, textColor=DARK_BLUE,
+                                       fontName="Helvetica-Bold", spaceAfter=6, leading=18),
+        "body": ParagraphStyle("body", fontSize=9, textColor=BLACK,
+                               fontName="Helvetica", leading=14),
+        "small": ParagraphStyle("small", fontSize=8, textColor=GREY_TEXT,
+                                fontName="Helvetica", leading=12),
+        "bold_small": ParagraphStyle("bold_small", fontSize=8, textColor=BLACK,
+                                     fontName="Helvetica-Bold", leading=12),
+        "indicator": ParagraphStyle("indicator", fontSize=8.5, textColor=BLACK,
+                                    fontName="Helvetica", leading=13),
+        "insight": ParagraphStyle("insight", fontSize=8.5, textColor=BLACK,
+                                  fontName="Helvetica", leading=14, spaceAfter=4),
+        "insight_bold": ParagraphStyle("insight_bold", fontSize=9, textColor=DARK_BLUE,
+                                       fontName="Helvetica-Bold", leading=14, spaceAfter=2),
+        "footer": ParagraphStyle("footer", fontSize=8, textColor=GREY_TEXT,
+                                 fontName="Helvetica", alignment=TA_CENTER),
+    }
+
+
+def _status_color(status: str):
+    """Map status to color and background."""
+    s = (status or "").lower()
+    if s in ("critical", "error"):
+        return RED, RED_BG
+    if s in ("needs_attention", "warning"):
+        return ORANGE, ORANGE_BG
+    if s in ("excellent", "success"):
+        return GREEN, GREEN_BG
+    return MID_BLUE, LIGHT_BLUE
+
+
+def _score_color(score: float):
+    """Map score to color."""
+    if score >= 90:
+        return GREEN
+    if score >= 60:
+        return ORANGE
+    return RED
+
+
+def _header_table(snapshot, st):
+    """Build PDF header section."""
+    recorded = snapshot.get("recorded_at", datetime.utcnow())
+    ts_str = recorded.strftime("%Y-%m-%d %H:%M UTC") if hasattr(recorded, "strftime") else str(recorded)
+
+    left = [
+        Paragraph("Compliance Report", st["title"]),
+        Spacer(1, 4),
+        Paragraph("Data Governance Health &amp; Activities", st["subtitle"]),
+        Spacer(1, 4),
+        Paragraph(f"Generated: {ts_str}", st["subtitle"]),
+    ]
+    right_text = ParagraphStyle("rt", fontSize=9, textColor=colors.HexColor("#BFDBFE"),
+                                fontName="Helvetica", alignment=TA_RIGHT)
+    right = [
+        Paragraph("Report Period: Latest Snapshot", right_text),
+        Paragraph(f"Record ID: {str(snapshot.get('id', ''))[:8]}...", right_text),
+    ]
+    t = Table([[left, right]], colWidths=[110*mm, 70*mm])
+    t.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (-1, -1), DARK_BLUE),
+        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING",  (0, 0), (0,  0),  10*mm),
+        ("RIGHTPADDING", (1, 0), (1,  0),  8*mm),
+        ("TOPPADDING",   (0, 0), (-1, -1), 8*mm),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 8*mm),
+    ]))
+    return t
+
+
+def _overall_score_table(snapshot, st):
+    """Build overall score and issues summary section."""
+    overall = float(snapshot.get("overall_score", 0))
+    status  = snapshot.get("overall_health_status", "")
+    fg, bg  = _status_color(status)
+    sc      = _score_color(overall)
+
+    score_cell = [
+        Paragraph(f'<font color="#{sc.hexval()[2:]}"><b>{overall:.1f}%</b></font>',
+                  ParagraphStyle("sc", fontSize=36, fontName="Helvetica-Bold",
+                                 alignment=TA_CENTER, leading=42)),
+        Paragraph("Overall Compliance Score",
+                  ParagraphStyle("sl", fontSize=10, fontName="Helvetica-Bold",
+                                 textColor=DARK_BLUE, alignment=TA_CENTER)),
+        Spacer(1, 4),
+        Paragraph(status.replace("_", " ").title(),
+                  ParagraphStyle("ss", fontSize=9, fontName="Helvetica-Bold",
+                                 textColor=fg, alignment=TA_CENTER)),
+    ]
+
+    sev_data = [
+        [Paragraph("<b>Open Issues Summary</b>", st["bold_small"]), ""],
+        ["Total Open Issues", str(snapshot.get("open_issues_count", 0))],
+        ["Critical",         str(snapshot.get("critical_issues_count", 0))],
+        ["High",             str(snapshot.get("high_issues_count", 0))],
+        ["Medium",           str(snapshot.get("medium_issues_count", 0))],
+        ["Low",              str(snapshot.get("low_issues_count", 0))],
+    ]
+    sev_table = Table(sev_data, colWidths=[55*mm, 20*mm])
+    sev_table.setStyle(TableStyle([
+        ("SPAN",         (0, 0), (1, 0)),
+        ("BACKGROUND",   (0, 0), (1, 0), GREY_LIGHT),
+        ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
+        ("FONTSIZE",     (0, 0), (-1, -1), 8.5),
+        ("TEXTCOLOR",    (1, 2), (1, 2),  RED),
+        ("FONTNAME",     (1, 2), (1, 2),  "Helvetica-Bold"),
+        ("GRID",         (0, 0), (-1, -1), 0.5, GREY_BORDER),
+        ("ROWBACKGROUNDS",(0,1), (-1, -1), [WHITE, GREY_LIGHT]),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING",   (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
+    ]))
+
+    outer = Table([[score_cell, sev_table]], colWidths=[80*mm, 100*mm])
+    outer.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (0, 0), bg),
+        ("BACKGROUND",   (1, 0), (1, 0), WHITE),
+        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX",          (0, 0), (-1, -1), 1, GREY_BORDER),
+        ("LINEAFTER",    (0, 0), (0, 0),   1, GREY_BORDER),
+        ("TOPPADDING",   (0, 0), (-1, -1), 6*mm),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 6*mm),
+        ("LEFTPADDING",  (0, 0), (0, 0),   6*mm),
+        ("LEFTPADDING",  (1, 0), (1, 0),   5*mm),
+    ]))
+    return outer
+
+
+def _framework_cards(frameworks, st):
+    """Build framework compliance cards."""
+    elements = []
+    elements.append(Paragraph("Framework Compliance Status", st["section_head"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
+
+    for fw in frameworks:
+        name    = fw.get("name", "")
+        score   = float(fw.get("score", 0))
+        status  = fw.get("status", "")
+        details = fw.get("details", "")
+        fg, bg  = _status_color(status)
+        sc      = _score_color(score)
+
+        pill = Table([[Paragraph(f'<b>{score:.1f}%</b>',
+                                 ParagraphStyle("p", fontSize=11, textColor=sc,
+                                                fontName="Helvetica-Bold", alignment=TA_CENTER))]],
+                     colWidths=[22*mm])
+        pill.setStyle(TableStyle([
+            ("BACKGROUND",   (0,0),(-1,-1), GREY_LIGHT),
+            ("BOX",          (0,0),(-1,-1), 1, GREY_BORDER),
+            ("TOPPADDING",   (0,0),(-1,-1), 4),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+        ]))
+
+        badge = Table([[Paragraph(status.replace("_", " ").title(),
+                                  ParagraphStyle("b", fontSize=8, textColor=fg,
+                                                 fontName="Helvetica-Bold", alignment=TA_CENTER))]],
+                      colWidths=[30*mm])
+        badge.setStyle(TableStyle([
+            ("BACKGROUND",   (0,0),(-1,-1), bg),
+            ("BOX",          (0,0),(-1,-1), 0.5, fg),
+            ("TOPPADDING",   (0,0),(-1,-1), 3),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 3),
+        ]))
+
+        header_row = Table([
+            [Paragraph(f"<b>{name}</b>",
+                       ParagraphStyle("fn", fontSize=12, textColor=DARK_BLUE,
+                                      fontName="Helvetica-Bold")),
+             pill, badge,
+             Paragraph(details, st["small"])]
+        ], colWidths=[35*mm, 25*mm, 33*mm, 87*mm])
+        header_row.setStyle(TableStyle([
+            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
+            ("LEFTPADDING",  (0,0),(0,0), 0),
+            ("RIGHTPADDING", (0,0),(-1,-1), 4),
+        ]))
+
+        ind_rows = []
+        for ind in fw.get("indicators", []):
+            ist    = ind.get("status", "")
+            ifg, _ = _status_color(ist)
+            icon   = "✓" if ist == "success" else "✗"
+            ind_rows.append([
+                Paragraph(f'<font color="#{ifg.hexval()[2:]}"><b>{icon}</b></font>',
+                          ParagraphStyle("ic", fontSize=10, fontName="Helvetica-Bold",
+                                         alignment=TA_CENTER)),
+                Paragraph(ind.get("text", ""), st["indicator"]),
+                Paragraph(ist.upper(),
+                          ParagraphStyle("is", fontSize=7.5, textColor=ifg,
+                                         fontName="Helvetica-Bold", alignment=TA_CENTER)),
+            ])
+
+        ind_table = Table(ind_rows, colWidths=[8*mm, 148*mm, 24*mm])
+        ind_table.setStyle(TableStyle([
+            ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
+            ("ROWBACKGROUNDS",(0,0),(-1,-1), [WHITE, GREY_LIGHT]),
+            ("TOPPADDING",   (0,0),(-1,-1), 4),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 4),
+            ("LEFTPADDING",  (1,0),(1,-1),  4),
+            ("BOX",          (0,0),(-1,-1), 0.5, GREY_BORDER),
+            ("LINEBELOW",    (0,0),(-1,-2), 0.3, GREY_BORDER),
+        ]))
+
+        card = Table([[header_row], [Spacer(1, 4)], [ind_table]], colWidths=[180*mm])
+        card.setStyle(TableStyle([
+            ("BOX",          (0,0),(-1,-1), 1, GREY_BORDER),
+            ("BACKGROUND",   (0,0),(-1,-1), WHITE),
+            ("TOPPADDING",   (0,0),(-1,-1), 4*mm),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 4*mm),
+            ("LEFTPADDING",  (0,0),(-1,-1), 4*mm),
+            ("RIGHTPADDING", (0,0),(-1,-1), 4*mm),
+        ]))
+
+        elements.append(KeepTogether(card))
+        elements.append(Spacer(1, 5*mm))
+
+    return elements
+
+
+def _open_issues_table(issues, st):
+    """Build open issues table."""
+    elements = []
+    elements.append(Paragraph("Open Issues", st["section_head"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
+
+    if not issues:
+        elements.append(Paragraph("No open issues found.", st["body"]))
+        return elements
+
+    header = [
+        Paragraph("<b>#</b>",         st["bold_small"]),
+        Paragraph("<b>Issue</b>",      st["bold_small"]),
+        Paragraph("<b>Framework</b>",  st["bold_small"]),
+        Paragraph("<b>Severity</b>",   st["bold_small"]),
+        Paragraph("<b>Dataset</b>",    st["bold_small"]),
+        Paragraph("<b>Due Date</b>",   st["bold_small"]),
+    ]
+    rows = [header]
+    for i, issue in enumerate(issues, 1):
+        sev    = issue.get("severity", "")
+        fg, _  = _status_color(sev)
+        dataset = issue.get("dataset", "")
+        rows.append([
+            Paragraph(str(i), st["small"]),
+            Paragraph(issue.get("issue", ""), st["small"]),
+            Paragraph(issue.get("framework", ""), st["small"]),
+            Paragraph(sev, ParagraphStyle("sv", fontSize=7.5, textColor=fg,
+                                          fontName="Helvetica-Bold", alignment=TA_CENTER)),
+            Paragraph(dataset[:120] + ("..." if len(dataset) > 120 else ""), st["small"]),
+            Paragraph(issue.get("due_date", ""), st["small"]),
+        ])
+
+    t = Table(rows, colWidths=[8*mm, 55*mm, 20*mm, 18*mm, 55*mm, 24*mm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (-1, 0), DARK_BLUE),
+        ("TEXTCOLOR",    (0, 0), (-1, 0), WHITE),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, GREY_LIGHT]),
+        ("GRID",         (0, 0), (-1,-1), 0.4, GREY_BORDER),
+        ("VALIGN",       (0, 0), (-1,-1), "TOP"),
+        ("TOPPADDING",   (0, 0), (-1,-1), 4),
+        ("BOTTOMPADDING",(0, 0), (-1,-1), 4),
+        ("LEFTPADDING",  (0, 0), (-1,-1), 4),
+        ("RIGHTPADDING", (0, 0), (-1,-1), 4),
+        ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE",     (0, 0), (-1, 0), 8),
+    ]))
+    elements.append(t)
+    return elements
+
+
+def _ai_insights_section(ai_text, st):
+    """Build AI insights section."""
+    elements = []
+    elements.append(Spacer(1, 4*mm))
+    elements.append(Paragraph("AI Insights", st["section_head"]))
+    elements.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
+
+    inner = []
+    for line in ai_text.split("\n"):
+        line = line.strip()
+        if not line:
+            inner.append(Spacer(1, 3))
+            continue
+        if line.startswith("**") and line.endswith("**"):
+            inner.append(Paragraph(line.replace("**", ""), st["insight_bold"]))
+        elif "**" in line:
+            clean = line.replace("**", "<b>", 1).replace("**", "</b>", 1)
+            inner.append(Paragraph(clean, st["insight"]))
+        else:
+            inner.append(Paragraph(line, st["insight"]))
+
+    box = Table([[inner]], colWidths=[180*mm])
+    box.setStyle(TableStyle([
+        ("BACKGROUND",   (0,0),(-1,-1), LIGHT_BLUE),
+        ("BOX",          (0,0),(-1,-1), 1, MID_BLUE),
+        ("TOPPADDING",   (0,0),(-1,-1), 5*mm),
+        ("BOTTOMPADDING",(0,0),(-1,-1), 5*mm),
+        ("LEFTPADDING",  (0,0),(-1,-1), 5*mm),
+        ("RIGHTPADDING", (0,0),(-1,-1), 5*mm),
+    ]))
+    elements.append(box)
+    return elements
+
+
+def generate_compliance_pdf(snapshot: dict) -> bytes:
+    """Generate PDF report from compliance snapshot."""
+    buf  = io.BytesIO()
+    doc  = SimpleDocTemplate(buf, pagesize=A4,
+                             leftMargin=15*mm, rightMargin=15*mm,
+                             topMargin=12*mm,  bottomMargin=18*mm,
+                             title="Compliance Report",
+                             author="Data Governance Platform")
+    st      = _pdf_styles()
+    snap    = snapshot.get("snapshot_json", {})
+    fw_list = snap.get("frameworks", [])
+    issues  = snap.get("open_issues", {}).get("items", [])
+    ai_text = snap.get("ai_insights", {}).get("text", "")
+
+    story = []
+    story.append(_header_table(snapshot, st))
+    story.append(Spacer(1, 6*mm))
+
+    story.append(Paragraph("Executive Summary", st["section_head"]))
+    story.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
+    story.append(_overall_score_table(snapshot, st))
+    story.append(Spacer(1, 6*mm))
+
+    story.extend(_framework_cards(fw_list, st))
+    story.extend(_open_issues_table(issues, st))
+    story.append(Spacer(1, 6*mm))
+
+    if ai_text:
+        story.extend(_ai_insights_section(ai_text, st))
+
+    story.append(Spacer(1, 8*mm))
+    story.append(HRFlowable(width="100%", thickness=0.5, color=GREY_BORDER))
+    story.append(Spacer(1, 3))
+    story.append(Paragraph(
+        f"Generated by Data Governance Platform &nbsp;|&nbsp; "
+        f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} &nbsp;|&nbsp; Confidential",
+        st["footer"]
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
 
 
 # =============================================================================
@@ -403,11 +1012,11 @@ def _build_pg_connect_kwargs() -> dict:
     if dsn:
         return {"dsn": dsn}
     return {
-        "host":               os.getenv("PG_HOST",     "postgres_ig"),
+        "host":               os.getenv("PG_HOST",     "localhost"),
         "port":               int(os.getenv("PG_PORT", "5432")),
-        "dbname":             os.getenv("PG_DBNAME",     "semantic_search"),
-        "user":               os.getenv("PG_USER",     "semantic_user"),
-        "password":           os.getenv("PG_PASSWORD", "semantic_pass"),
+        "dbname":             os.getenv("PG_DB",     "compliance_db"),
+        "user":               os.getenv("PG_USER",     "postgres"),
+        "password":           os.getenv("PG_PASS", ""),
         "sslmode":            os.getenv("PG_SSLMODE",  "prefer"),
         "keepalives":          1,
         "keepalives_idle":     30,
@@ -417,32 +1026,19 @@ def _build_pg_connect_kwargs() -> dict:
     }
 
 
-# Schema is managed by init.sql (executed at app startup via app.py).
-# DDL_STATEMENTS is kept as an empty list so DatabaseManager._ensure_tables()
-# is a no-op rather than raising NameError.
-DDL_STATEMENTS: list = []
-
-
 class DatabaseManager:
     def __init__(self, min_conn: int = 1, max_conn: int = 10):
         self._connect_kwargs = _build_pg_connect_kwargs()
-        psycopg2.extras.register_default_jsonb(globally=True, loads=json.loads)
-        self._pool = psycopg2.pool.ThreadedConnectionPool(
-            minconn=min_conn, maxconn=max_conn, **self._connect_kwargs
-        )
-        self._ensure_tables()
-        logger.info("DatabaseManager: pool ready (min=%d, max=%d).", min_conn, max_conn)
 
-    def _ensure_tables(self):
-        try:
-            with self._get_conn() as conn:
-                with conn.cursor() as cur:
-                    for stmt in DDL_STATEMENTS:
-                        cur.execute(stmt)
-                conn.commit()
-            logger.info("DatabaseManager: all tables are ready.")
-        except psycopg2.Error as exc:
-            logger.error("Table setup failed [pgcode=%s]: %s", exc.pgcode, exc.pgerror)
+        psycopg2.extras.register_default_jsonb(globally=True, loads=json.loads)
+
+        self._pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=min_conn,
+            maxconn=max_conn,
+            **self._connect_kwargs
+        )
+
+        logger.info("DatabaseManager: connection pool ready.")
 
     @contextmanager
     def _get_conn(self) -> Generator:
@@ -497,52 +1093,255 @@ class DatabaseManager:
             return "Unassigned"
 
     def persist_snapshot(self, dashboard: dict) -> bool:
-        """
-        INSERT one row into compliance_snapshots.
-        Stores queryable score columns + full dashboard JSON payload.
-        """
-        fw_list = dashboard.get("frameworks", [])
-        issues  = dashboard.get("open_issues", {})
-        sev     = issues.get("severity_summary", {})
+        """Insert one row into compliance_snapshots."""
+        timestamp = dashboard.get("timestamp")
+        overall_compliance = dashboard.get("overall_compliance", {})
+        compliance_health = dashboard.get("compliance_health", {})
+        open_issues = dashboard.get("open_issues", {})
+        frameworks = dashboard.get("frameworks", [])
+        trends = dashboard.get("trends", {})
+        ai_insights = dashboard.get("ai_insights", {})
 
-        def fw_score(name):
-            match = next((f for f in fw_list if f["name"] == name), None)
-            return match["score"] if match else None
+        overall_score = overall_compliance.get("score")
+        overall_health_status = overall_compliance.get("health_status")
+        overall_change = overall_compliance.get("change_from_last_month")
+
+        compliance_score = compliance_health.get("score")
+        trend_label = compliance_health.get("trend_label")
+
+        issues = open_issues.get("items", [])
+        severity_summary = open_issues.get("severity_summary", {})
+        critical_count = severity_summary.get("critical", 0)
+        high_count = severity_summary.get("high", 0)
+        medium_count = severity_summary.get("medium", 0)
+        low_count = severity_summary.get("low", 0)
+        total_issues = open_issues.get("count", 0)
+
+        framework_data = {}
+        for fw in frameworks:
+            fw_name = fw.get("name", "UNKNOWN")
+            framework_data[fw_name] = {
+                "score": fw.get("score"),
+                "status": fw.get("status"),
+                "last_checked": fw.get("last_checked"),
+                "details": fw.get("details", ""),
+            }
+            details = fw.get("details", "")
+            match = re.search(r"(\d+)\s+of\s+(\d+)", details)
+            if match:
+                framework_data[fw_name]["passed"] = int(match.group(1))
+                framework_data[fw_name]["total"] = int(match.group(2))
+
+        top_issues = []
+        for i, issue in enumerate(issues[:3]):
+            top_issues.append({
+                "issue": issue.get("issue"),
+                "framework": issue.get("framework"),
+                "severity": issue.get("severity"),
+                "dataset": issue.get("dataset"),
+                "assignee": issue.get("assignee"),
+                "due_date": issue.get("due_date"),
+            })
+
+        trend_datasets = trends.get("datasets", [])
+        trend_labels = trends.get("labels", [])
+
+        insights_text = ai_insights.get("text", "")
+        insights_beta = ai_insights.get("beta", False)
 
         sql = """
             INSERT INTO compliance_snapshots (
-                recorded_at, overall_score, overall_health_status,
-                gdpr_score, soc2_score, hipaa_score,
-                open_issues_count, critical_issues_count,
-                high_issues_count, medium_issues_count, low_issues_count,
+                recorded_at,
+                overall_score,
+                overall_health_status,
+                overall_change_from_last_month,
+
+                gdpr_score, gdpr_status, gdpr_rules_passed, gdpr_rules_total, gdpr_last_checked,
+                soc2_score, soc2_status, soc2_rules_passed, soc2_rules_total, soc2_last_checked,
+                hipaa_score, hipaa_status, hipaa_rules_passed, hipaa_rules_total, hipaa_last_checked,
+                dpa_score, dpa_status, dpa_rules_passed, dpa_rules_total, dpa_last_checked,
+                irr_score, irr_status, irr_rules_passed, irr_rules_total, irr_last_checked,
+                psa_score, psa_status, psa_rules_passed, psa_rules_total, psa_last_checked,
+
+                open_issues_count,
+                critical_issues_count,
+                high_issues_count,
+                medium_issues_count,
+                low_issues_count,
+
+                compliance_health_score,
+                compliance_health_trend_label,
+
+                top_issue_1_issue, top_issue_1_framework, top_issue_1_severity, 
+                top_issue_1_dataset, top_issue_1_assignee, top_issue_1_due_date,
+                top_issue_2_issue, top_issue_2_framework, top_issue_2_severity,
+                top_issue_2_dataset, top_issue_2_assignee, top_issue_2_due_date,
+                top_issue_3_issue, top_issue_3_framework, top_issue_3_severity,
+                top_issue_3_dataset, top_issue_3_assignee, top_issue_3_due_date,
+
+                ai_insights_text,
+                ai_insights_beta,
+
+                trend_month_label,
+                trend_overall_data, trend_gdpr_data, trend_soc2_data, trend_hipaa_data,
+                trend_dpa_data, trend_irr_data, trend_psa_data,
+
+                scan_duration_seconds,
                 snapshot_json
             ) VALUES (
-                %(recorded_at)s, %(overall_score)s, %(overall_health_status)s,
-                %(gdpr_score)s, %(soc2_score)s, %(hipaa_score)s,
-                %(open_issues_count)s, %(critical_issues_count)s,
-                %(high_issues_count)s, %(medium_issues_count)s, %(low_issues_count)s,
+                %(recorded_at)s,
+                %(overall_score)s,
+                %(overall_health_status)s,
+                %(overall_change)s,
+
+                %(gdpr_score)s, %(gdpr_status)s, %(gdpr_passed)s, %(gdpr_total)s, %(gdpr_checked)s,
+                %(soc2_score)s, %(soc2_status)s, %(soc2_passed)s, %(soc2_total)s, %(soc2_checked)s,
+                %(hipaa_score)s, %(hipaa_status)s, %(hipaa_passed)s, %(hipaa_total)s, %(hipaa_checked)s,
+                %(dpa_score)s, %(dpa_status)s, %(dpa_passed)s, %(dpa_total)s, %(dpa_checked)s,
+                %(irr_score)s, %(irr_status)s, %(irr_passed)s, %(irr_total)s, %(irr_checked)s,
+                %(psa_score)s, %(psa_status)s, %(psa_passed)s, %(psa_total)s, %(psa_checked)s,
+
+                %(total_issues)s,
+                %(critical_count)s,
+                %(high_count)s,
+                %(medium_count)s,
+                %(low_count)s,
+
+                %(compliance_score)s,
+                %(trend_label)s,
+
+                %(top_issue_1_issue)s, %(top_issue_1_framework)s, %(top_issue_1_severity)s,
+                %(top_issue_1_dataset)s, %(top_issue_1_assignee)s, %(top_issue_1_due_date)s,
+                %(top_issue_2_issue)s, %(top_issue_2_framework)s, %(top_issue_2_severity)s,
+                %(top_issue_2_dataset)s, %(top_issue_2_assignee)s, %(top_issue_2_due_date)s,
+                %(top_issue_3_issue)s, %(top_issue_3_framework)s, %(top_issue_3_severity)s,
+                %(top_issue_3_dataset)s, %(top_issue_3_assignee)s, %(top_issue_3_due_date)s,
+
+                %(insights_text)s,
+                %(insights_beta)s,
+
+                %(trend_month_label)s,
+                %(trend_overall)s, %(trend_gdpr)s, %(trend_soc2)s, %(trend_hipaa)s,
+                %(trend_dpa)s, %(trend_irr)s, %(trend_psa)s,
+
+                %(scan_duration)s,
                 %(snapshot_json)s
             )
         """
+
+        trend_overall, trend_gdpr, trend_soc2, trend_hipaa = [], [], [], []
+        trend_dpa, trend_irr, trend_psa = [], [], []
+
+        for dataset in trend_datasets:
+            label = dataset.get("label")
+            data = dataset.get("data", [])
+            if label == "Overall":
+                trend_overall = data
+            elif label == "GDPR":
+                trend_gdpr = data
+            elif label == "SOC2":
+                trend_soc2 = data
+            elif label == "HIPAA":
+                trend_hipaa = data
+            elif label == "DPA":
+                trend_dpa = data
+            elif label == "IRR":
+                trend_irr = data
+            elif label == "PSA":
+                trend_psa = data
+
         try:
             with self._get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(sql, {
-                        "recorded_at":           dashboard.get("timestamp"),
-                        "overall_score":         dashboard["overall_compliance"]["score"],
-                        "overall_health_status": dashboard["overall_compliance"]["health_status"],
-                        "gdpr_score":            fw_score("GDPR"),
-                        "soc2_score":            fw_score("SOC2"),
-                        "hipaa_score":           fw_score("HIPAA"),
-                        "open_issues_count":     issues.get("count", 0),
-                        "critical_issues_count": sev.get("critical", 0),
-                        "high_issues_count":     sev.get("high", 0),
-                        "medium_issues_count":   sev.get("medium", 0),
-                        "low_issues_count":      sev.get("low", 0),
-                        "snapshot_json":         psycopg2.extras.Json(dashboard),
+                        "recorded_at": timestamp,
+                        "overall_score": overall_score,
+                        "overall_health_status": overall_health_status,
+                        "overall_change": overall_change,
+
+                        "gdpr_score": framework_data.get("GDPR", {}).get("score"),
+                        "gdpr_status": framework_data.get("GDPR", {}).get("status"),
+                        "gdpr_passed": framework_data.get("GDPR", {}).get("passed"),
+                        "gdpr_total": framework_data.get("GDPR", {}).get("total"),
+                        "gdpr_checked": framework_data.get("GDPR", {}).get("last_checked"),
+
+                        "soc2_score": framework_data.get("SOC2", {}).get("score"),
+                        "soc2_status": framework_data.get("SOC2", {}).get("status"),
+                        "soc2_passed": framework_data.get("SOC2", {}).get("passed"),
+                        "soc2_total": framework_data.get("SOC2", {}).get("total"),
+                        "soc2_checked": framework_data.get("SOC2", {}).get("last_checked"),
+
+                        "hipaa_score": framework_data.get("HIPAA", {}).get("score"),
+                        "hipaa_status": framework_data.get("HIPAA", {}).get("status"),
+                        "hipaa_passed": framework_data.get("HIPAA", {}).get("passed"),
+                        "hipaa_total": framework_data.get("HIPAA", {}).get("total"),
+                        "hipaa_checked": framework_data.get("HIPAA", {}).get("last_checked"),
+
+                        "dpa_score": framework_data.get("DPA", {}).get("score"),
+                        "dpa_status": framework_data.get("DPA", {}).get("status"),
+                        "dpa_passed": framework_data.get("DPA", {}).get("passed"),
+                        "dpa_total": framework_data.get("DPA", {}).get("total"),
+                        "dpa_checked": framework_data.get("DPA", {}).get("last_checked"),
+
+                        "irr_score": framework_data.get("IRR", {}).get("score"),
+                        "irr_status": framework_data.get("IRR", {}).get("status"),
+                        "irr_passed": framework_data.get("IRR", {}).get("passed"),
+                        "irr_total": framework_data.get("IRR", {}).get("total"),
+                        "irr_checked": framework_data.get("IRR", {}).get("last_checked"),
+
+                        "psa_score": framework_data.get("PSA", {}).get("score"),
+                        "psa_status": framework_data.get("PSA", {}).get("status"),
+                        "psa_passed": framework_data.get("PSA", {}).get("passed"),
+                        "psa_total": framework_data.get("PSA", {}).get("total"),
+                        "psa_checked": framework_data.get("PSA", {}).get("last_checked"),
+
+                        "total_issues": total_issues,
+                        "critical_count": critical_count,
+                        "high_count": high_count,
+                        "medium_count": medium_count,
+                        "low_count": low_count,
+
+                        "compliance_score": compliance_score,
+                        "trend_label": trend_label,
+
+                        "top_issue_1_issue": top_issues[0].get("issue") if len(top_issues) > 0 else None,
+                        "top_issue_1_framework": top_issues[0].get("framework") if len(top_issues) > 0 else None,
+                        "top_issue_1_severity": top_issues[0].get("severity") if len(top_issues) > 0 else None,
+                        "top_issue_1_dataset": top_issues[0].get("dataset") if len(top_issues) > 0 else None,
+                        "top_issue_1_assignee": top_issues[0].get("assignee") if len(top_issues) > 0 else None,
+                        "top_issue_1_due_date": top_issues[0].get("due_date") if len(top_issues) > 0 else None,
+
+                        "top_issue_2_issue": top_issues[1].get("issue") if len(top_issues) > 1 else None,
+                        "top_issue_2_framework": top_issues[1].get("framework") if len(top_issues) > 1 else None,
+                        "top_issue_2_severity": top_issues[1].get("severity") if len(top_issues) > 1 else None,
+                        "top_issue_2_dataset": top_issues[1].get("dataset") if len(top_issues) > 1 else None,
+                        "top_issue_2_assignee": top_issues[1].get("assignee") if len(top_issues) > 1 else None,
+                        "top_issue_2_due_date": top_issues[1].get("due_date") if len(top_issues) > 1 else None,
+
+                        "top_issue_3_issue": top_issues[2].get("issue") if len(top_issues) > 2 else None,
+                        "top_issue_3_framework": top_issues[2].get("framework") if len(top_issues) > 2 else None,
+                        "top_issue_3_severity": top_issues[2].get("severity") if len(top_issues) > 2 else None,
+                        "top_issue_3_dataset": top_issues[2].get("dataset") if len(top_issues) > 2 else None,
+                        "top_issue_3_assignee": top_issues[2].get("assignee") if len(top_issues) > 2 else None,
+                        "top_issue_3_due_date": top_issues[2].get("due_date") if len(top_issues) > 2 else None,
+
+                        "insights_text": insights_text,
+                        "insights_beta": insights_beta,
+
+                        "trend_month_label": trend_labels[-1] if trend_labels else None,
+                        "trend_overall": trend_overall,
+                        "trend_gdpr": trend_gdpr,
+                        "trend_soc2": trend_soc2,
+                        "trend_hipaa": trend_hipaa,
+                        "trend_dpa": trend_dpa,
+                        "trend_irr": trend_irr,
+                        "trend_psa": trend_psa,
+
+                        "scan_duration": None,
+                        "snapshot_json": psycopg2.extras.Json(dashboard),
                     })
                 conn.commit()
-            logger.info("persist_snapshot: saved to compliance_snapshots.")
+            logger.info("persist_snapshot: saved all dashboard data to columns + snapshot_json backup.")
             return True
         except psycopg2.Error as exc:
             logger.error("persist_snapshot [pgcode=%s]: %s", exc.pgcode, exc.pgerror)
@@ -574,7 +1373,10 @@ class DatabaseManager:
                 MAX(overall_score)                AS overall,
                 MAX(gdpr_score)                   AS gdpr,
                 MAX(soc2_score)                   AS soc2,
-                MAX(hipaa_score)                  AS hipaa
+                MAX(hipaa_score)                  AS hipaa,
+                MAX(dpa_score)                    AS dpa,
+                MAX(irr_score)                    AS irr,
+                MAX(psa_score)                    AS psa
             FROM compliance_snapshots
             WHERE recorded_at >= NOW() - (%(months)s || ' months')::INTERVAL
             GROUP BY DATE_TRUNC('month', recorded_at)
@@ -588,7 +1390,7 @@ class DatabaseManager:
         return rows
 
     def get_previous_overall_score(self) -> Optional[float]:
-        """Score from the second-most-recent snapshot (for change calculation)."""
+        """Score from the second-most-recent snapshot."""
         sql = """
             SELECT overall_score FROM compliance_snapshots
             ORDER BY recorded_at DESC LIMIT 2
@@ -612,14 +1414,14 @@ class DatabaseManager:
 class LLMEvaluator:
     def __init__(self):
         self.llm = AzureChatOpenAI(
-        openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
-        model_name=os.getenv("AZURE_OPENAI_API_MODEL_NAME"),
-        temperature=0.1
-    )
-        logger.info("LLMEvaluator: ChatGroq ready.")
+            openai_api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+            api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+            deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+            model_name=os.getenv("AZURE_OPENAI_API_MODEL_NAME"),
+            temperature=0.1
+        )
+        logger.info("LLMEvaluator: AzureChatOpenAI ready.")
 
     def evaluate_rule(self, rule: dict, query_results: list) -> dict:
         if not query_results:
@@ -783,7 +1585,6 @@ class ComplianceEngine:
         logger.info("=" * 60)
         return dashboard
 
-    # -------------------------------------------------------------------------
     def _build_dashboard(self, state: ComplianceState, run_ts: datetime) -> dict:
         """Build the exact dashboard response format from LangGraph final state."""
 
@@ -791,44 +1592,46 @@ class ComplianceEngine:
         issues   = state["issues"]
         fw_data  = state["frameworks"]
 
-        # Severity counts
         sev_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for issue in issues:
             key = issue.get("severity", "low").lower()
             sev_counts[key] = sev_counts.get(key, 0) + 1
 
-        # Change vs previous snapshot
         prev_score = self.db.get_previous_overall_score()
         change     = round(overall - prev_score, 1) if prev_score is not None else 0.0
 
-        # Trend data — 6 months history from DB + current run
         trend_rows    = self.db.load_trend_history(months=6)
         labels        = [r.get("month_label", "?") for r in trend_rows]
         overall_data  = [float(r.get("overall") or 0) for r in trend_rows]
         gdpr_data     = [float(r.get("gdpr")    or 0) for r in trend_rows]
         soc2_data     = [float(r.get("soc2")    or 0) for r in trend_rows]
         hipaa_data    = [float(r.get("hipaa")   or 0) for r in trend_rows]
+        dpa_data      = [float(r.get("dpa")     or 0) for r in trend_rows]
+        irr_data      = [float(r.get("irr")     or 0) for r in trend_rows]
+        psa_data      = [float(r.get("psa")     or 0) for r in trend_rows]
 
         cur_month = month_label(run_ts)
-        # Avoid duplicate month label if last DB row is same month
         if not labels or labels[-1] != cur_month:
             labels.append(cur_month)
             overall_data.append(overall)
             gdpr_data.append(fw_data.get("GDPR",  {}).get("score", 0))
             soc2_data.append(fw_data.get("SOC2",  {}).get("score", 0))
             hipaa_data.append(fw_data.get("HIPAA", {}).get("score", 0))
+            dpa_data.append(fw_data.get("DPA",   {}).get("score", 0))
+            irr_data.append(fw_data.get("IRR",   {}).get("score", 0))
+            psa_data.append(fw_data.get("PSA",   {}).get("score", 0))
         else:
-            # Update the last entry for the current month
             overall_data[-1] = overall
             gdpr_data[-1]    = fw_data.get("GDPR",  {}).get("score", 0)
             soc2_data[-1]    = fw_data.get("SOC2",  {}).get("score", 0)
             hipaa_data[-1]   = fw_data.get("HIPAA", {}).get("score", 0)
+            dpa_data[-1]     = fw_data.get("DPA",   {}).get("score", 0)
+            irr_data[-1]     = fw_data.get("IRR",   {}).get("score", 0)
+            psa_data[-1]     = fw_data.get("PSA",   {}).get("score", 0)
 
-        # Trend label: change since previous data point
         trend_pct  = round(overall_data[-1] - (overall_data[-2] if len(overall_data) >= 2 else overall_data[-1]), 1)
         trend_sign = "+" if trend_pct >= 0 else ""
 
-        # Framework indicators: one entry per rule, success/error based on pass/fail
         def build_indicators(fw_name: str) -> list:
             failed_ids = {i["rule_id"] for i in fw_data.get(fw_name, {}).get("issues", [])}
             return [
@@ -848,7 +1651,6 @@ class ComplianceEngine:
                 return f"{passed} of {total} Policies ({len(failed)} issue(s))"
             return f"{passed} of {total} Policies"
 
-        # Final response — exact format requested (without colors)
         return {
             "timestamp": run_ts.isoformat(),
 
@@ -867,22 +1669,13 @@ class ComplianceEngine:
             "trends": {
                 "labels": labels,
                 "datasets": [
-                    {
-                        "label": "Overall",
-                        "data":  overall_data,
-                    },
-                    {
-                        "label": "GDPR",
-                        "data":  gdpr_data,
-                    },
-                    {
-                        "label": "SOC2",
-                        "data":  soc2_data,
-                    },
-                    {
-                        "label": "HIPAA",
-                        "data":  hipaa_data,
-                    },
+                    {"label": "Overall", "data":  overall_data},
+                    {"label": "GDPR",    "data":  gdpr_data},
+                    {"label": "SOC2",    "data":  soc2_data},
+                    {"label": "HIPAA",   "data":  hipaa_data},
+                    {"label": "DPA",     "data":  dpa_data},
+                    {"label": "IRR",     "data":  irr_data},
+                    {"label": "PSA",     "data":  psa_data},
                 ],
             },
 
@@ -928,30 +1721,25 @@ class ComplianceEngine:
 # FASTAPI APP
 # =============================================================================
 
-_db:     Optional[DatabaseManager]  = None
-_llm:    Optional[LLMEvaluator]     = None
+# In services/compliance.py
+router = APIRouter()  # Remove lifespan parameter
+
+# Global variables for compliance engine
+_db: Optional[DatabaseManager] = None
+_llm: Optional[LLMEvaluator] = None
 _engine: Optional[ComplianceEngine] = None
 
-
-def get_engine() -> ComplianceEngine:
-    """Lazily initialise the compliance engine on first use."""
+# Define lifespan function (not as decorator on router)
+async def init_compliance_engine():
     global _db, _llm, _engine
-    if _engine is None:
-        logger.info("Compliance: initialising engine...")
-        _db     = DatabaseManager(min_conn=1, max_conn=10)
-        _llm    = LLMEvaluator()
-        _engine = ComplianceEngine(db=_db, llm=_llm)
-        logger.info("Compliance: engine ready.")
-    return _engine
+    _db = DatabaseManager(min_conn=1, max_conn=10)
+    _llm = LLMEvaluator()
+    _engine = ComplianceEngine(db=_db, llm=_llm)
 
-
-# CORS is handled globally in app.py — no middleware needed here
-
-# ── FastAPI Router ─────────────────────────────────────────────────────────────
-router = APIRouter(
-    prefix="/api/compliance",
-    tags=["Compliance"]
-)
+async def shutdown_compliance_engine():
+    global _db
+    if _db:
+        _db.close()
 
 
 # ── GET /health ───────────────────────────────────────────────────────────────
@@ -966,29 +1754,33 @@ def health_check():
     }
 
 
-# ── GET /api/compliance/overview ───────────────────────────────────────────────────
+# ── GET /api/compliance/run ───────────────────────────────────────────────────
 
-@router.get("/overview", tags=["Compliance"])
+@router.get("/api/compliance/run", tags=["Compliance"])
 def run_compliance_scan():
     """
     Trigger a **full compliance scan**.
 
-    Runs GDPR, SOC2, and HIPAA rules against your database, generates AI insights,
-    persists the result to `compliance_snapshots`, and returns the dashboard response.
+    Runs GDPR, SOC2, HIPAA, DPA, IRR, and PSA rules against your database,
+    generates AI insights, persists the result to `compliance_snapshots`,
+    and returns the dashboard response.
 
     This endpoint may take **15–60 seconds** depending on LLM latency.
     """
+    if _engine is None:
+        raise HTTPException(status_code=503, detail="Compliance engine not initialised.")
+
     try:
-        engine = get_engine()
-        result = engine.run()
+        result = _engine.run()
         return JSONResponse(content=result)
     except Exception as exc:
         logger.exception("Compliance scan failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"Scan failed: {exc}")
 
+
 # ── GET /api/compliance/summary ───────────────────────────────────────────────
 
-@router.get("/summary", tags=["Compliance"])
+@router.get("/api/compliance/summary", tags=["Compliance"])
 def get_compliance_summary():
     """
     Returns a summary card from the latest compliance_snapshots row:
@@ -997,7 +1789,8 @@ def get_compliance_summary():
       - policies_checked    → parsed from details string "X of Y Policies"
       - overall_score       → overall_score column
     """
-    engine = get_engine()
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Database not initialised.")
 
     sql = """
         SELECT
@@ -1009,7 +1802,7 @@ def get_compliance_summary():
         LIMIT 1
     """
 
-    rows = engine.db.execute_query(sql)
+    rows = _db.execute_query(sql)
 
     if not rows:
         raise HTTPException(
@@ -1021,9 +1814,7 @@ def get_compliance_summary():
     snapshot   = row["snapshot_json"]
     frameworks = snapshot.get("frameworks", [])
 
-    # Count of distinct frameworks
     frameworks_scanned = len(frameworks)
-    # Build issue_summary sentence from live data
     issue_summary = (
         f"Compliance scan finished. {row['open_issues_count']} issue"
         f"{'s' if row['open_issues_count'] != 1 else ''} found across "
@@ -1033,36 +1824,16 @@ def get_compliance_summary():
     )
 
     REASONING_STEPS = [
-    {
-        "title": "Initializing compliance engine",
-        "description": "Loading policy definitions and rule sets"
-    },
-    {
-        "title": "Scanning GDPR policies",
-        "description": "Checking 24 policies across EU data regulations"
-    },
-    {
-        "title": "Scanning SOC 2 controls",
-        "description": "Verifying 32 security and availability controls"
-    },
-    {
-        "title": "Scanning HIPAA requirements",
-        "description": "Auditing PHI handling and access controls"
-    },
-    {
-        "title": "Scanning DPDPA regulations",
-        "description": "Reviewing India data protection compliance"
-    },
-    {
-        "title": "Scanning EU AI Act",
-        "description": "Evaluating AI model governance requirements"
-    },
-    {
-        "title": "Generating compliance report",
-        "description": "Compiling findings and recommendations"
-    },
-]
-    # Parse "X of Y Policies" from each framework's details string
+        {"title": "Initializing compliance engine", "description": "Loading policy definitions and rule sets"},
+        {"title": "Scanning GDPR policies", "description": "Checking 24 policies across EU data regulations"},
+        {"title": "Scanning SOC 2 controls", "description": "Verifying 32 security and availability controls"},
+        {"title": "Scanning HIPAA requirements", "description": "Auditing PHI handling and access controls"},
+        {"title": "Scanning Data Privacy Act", "description": "Reviewing Philippine RA 10173 compliance"},
+        {"title": "Scanning DPA IRR", "description": "Evaluating implementing rules and regulations"},
+        {"title": "Scanning Philippine Statistical Act", "description": "Checking statistical data confidentiality requirements"},
+        {"title": "Generating compliance report", "description": "Compiling findings and recommendations"},
+    ]
+
     policies_checked = 0
     for fw in frameworks:
         details = fw.get("details", "")
@@ -1079,425 +1850,60 @@ def get_compliance_summary():
             "overall_score":      float(row["overall_score"]),
             "issue_summary":      issue_summary,
         },
-        "reasoning":REASONING_STEPS
+        "reasoning": REASONING_STEPS
     })
 
-@router.get("/loading", tags=["Compliance"])
+
+# ── GET /api/compliance/loading ───────────────────────────────────────────────
+
+@router.get("/api/compliance/loading", tags=["Compliance"])
 def get_loading_compliance():
+    """Get loading state for compliance scan."""
     REASONING_LOAD = [
         "Initializing compliance engine",
         "Scanning GDPR policies",
         "Scanning SOC 2 controls",
         "Scanning HIPAA requirements",
-        "Scanning DPDPA regulations",
-        "Scanning EU AI Act",
+        "Scanning Data Privacy Act",
+        "Scanning DPA IRR",
+        "Scanning Philippine Statistical Act",
         "Generating compliance report"
-]
-    return {
-        "reasoning_loads":REASONING_LOAD
-    }
-
-
-
-
-# ── Colour palette ─────────────────────────────────────────────────────────────
-DARK_BLUE   = colors.HexColor("#1A2B4A")
-MID_BLUE    = colors.HexColor("#2563EB")
-LIGHT_BLUE  = colors.HexColor("#EFF6FF")
-GREEN       = colors.HexColor("#16A34A")
-GREEN_BG    = colors.HexColor("#F0FDF4")
-RED         = colors.HexColor("#DC2626")
-RED_BG      = colors.HexColor("#FEF2F2")
-ORANGE      = colors.HexColor("#D97706")
-ORANGE_BG   = colors.HexColor("#FFFBEB")
-GREY_TEXT   = colors.HexColor("#6B7280")
-GREY_LIGHT  = colors.HexColor("#F3F4F6")
-GREY_BORDER = colors.HexColor("#E5E7EB")
-WHITE       = colors.white
-BLACK       = colors.HexColor("#111827")
-
-
-# ── PDF Styles ─────────────────────────────────────────────────────────────────
-def _styles():
-    return {
-        "title": ParagraphStyle("title", fontSize=22, textColor=WHITE,
-                                fontName="Helvetica-Bold", alignment=TA_LEFT, leading=28),
-        "subtitle": ParagraphStyle("subtitle", fontSize=10, textColor=colors.HexColor("#BFDBFE"),
-                                   fontName="Helvetica", alignment=TA_LEFT),
-        "section_head": ParagraphStyle("section_head", fontSize=13, textColor=DARK_BLUE,
-                                       fontName="Helvetica-Bold", spaceAfter=6, leading=18),
-        "body": ParagraphStyle("body", fontSize=9, textColor=BLACK,
-                               fontName="Helvetica", leading=14),
-        "small": ParagraphStyle("small", fontSize=8, textColor=GREY_TEXT,
-                                fontName="Helvetica", leading=12),
-        "bold_small": ParagraphStyle("bold_small", fontSize=8, textColor=BLACK,
-                                     fontName="Helvetica-Bold", leading=12),
-        "indicator": ParagraphStyle("indicator", fontSize=8.5, textColor=BLACK,
-                                    fontName="Helvetica", leading=13),
-        "insight": ParagraphStyle("insight", fontSize=8.5, textColor=BLACK,
-                                  fontName="Helvetica", leading=14, spaceAfter=4),
-        "insight_bold": ParagraphStyle("insight_bold", fontSize=9, textColor=DARK_BLUE,
-                                       fontName="Helvetica-Bold", leading=14, spaceAfter=2),
-        "footer": ParagraphStyle("footer", fontSize=8, textColor=GREY_TEXT,
-                                 fontName="Helvetica", alignment=TA_CENTER),
-    }
-
-
-def _status_color(status: str):
-    s = (status or "").lower()
-    if s in ("critical", "error"):
-        return RED, RED_BG
-    if s in ("needs_attention", "warning"):
-        return ORANGE, ORANGE_BG
-    if s in ("excellent", "success"):
-        return GREEN, GREEN_BG
-    return MID_BLUE, LIGHT_BLUE
-
-
-def _score_color(score: float):
-    if score >= 90:
-        return GREEN
-    if score >= 60:
-        return ORANGE
-    return RED
-
-
-# ── PDF Sections ───────────────────────────────────────────────────────────────
-def _header_table(snapshot, st):
-    recorded = snapshot.get("recorded_at", datetime.utcnow())
-    ts_str = recorded.strftime("%Y-%m-%d %H:%M UTC") if hasattr(recorded, "strftime") else str(recorded)
-
-    left = [
-        Paragraph("Compliance Report", st["title"]),
-        Spacer(1, 4),
-        Paragraph("Data Governance Health &amp; Activities", st["subtitle"]),
-        Spacer(1, 4),
-        Paragraph(f"Generated: {ts_str}", st["subtitle"]),
     ]
-    right_text = ParagraphStyle("rt", fontSize=9, textColor=colors.HexColor("#BFDBFE"),
-                                fontName="Helvetica", alignment=TA_RIGHT)
-    right = [
-        Paragraph("Report Period: Latest Snapshot", right_text),
-        Paragraph(f"Record ID: {str(snapshot.get('id', ''))[:8]}...", right_text),
-    ]
-    t = Table([[left, right]], colWidths=[110*mm, 70*mm])
-    t.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, -1), DARK_BLUE),
-        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING",  (0, 0), (0,  0),  10*mm),
-        ("RIGHTPADDING", (1, 0), (1,  0),  8*mm),
-        ("TOPPADDING",   (0, 0), (-1, -1), 8*mm),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 8*mm),
-    ]))
-    return t
+    return {"reasoning_loads": REASONING_LOAD}
 
 
-def _overall_score_table(snapshot, st):
-    overall = float(snapshot.get("overall_score", 0))
-    status  = snapshot.get("overall_health_status", "")
-    fg, bg  = _status_color(status)
-    sc      = _score_color(overall)
+# ── GET /api/compliance/report/export ─────────────────────────────────────────
 
-    score_cell = [
-        Paragraph(f'<font color="#{sc.hexval()[2:]}"><b>{overall:.1f}%</b></font>',
-                  ParagraphStyle("sc", fontSize=36, fontName="Helvetica-Bold",
-                                 alignment=TA_CENTER, leading=42)),
-        Paragraph("Overall Compliance Score",
-                  ParagraphStyle("sl", fontSize=10, fontName="Helvetica-Bold",
-                                 textColor=DARK_BLUE, alignment=TA_CENTER)),
-        Spacer(1, 4),
-        Paragraph(status.replace("_", " ").title(),
-                  ParagraphStyle("ss", fontSize=9, fontName="Helvetica-Bold",
-                                 textColor=fg, alignment=TA_CENTER)),
-    ]
+@router.get("/api/compliance/report/export", tags=["Compliance"])
+def export_compliance_report():
+    """
+    Export the latest compliance snapshot as a downloadable PDF.
 
-    sev_data = [
-        [Paragraph("<b>Open Issues Summary</b>", st["bold_small"]), ""],
-        ["Total Open Issues", str(snapshot.get("open_issues_count", 0))],
-        ["Critical",         str(snapshot.get("critical_issues_count", 0))],
-        ["High",             str(snapshot.get("high_issues_count", 0))],
-        ["Medium",           str(snapshot.get("medium_issues_count", 0))],
-        ["Low",              str(snapshot.get("low_issues_count", 0))],
-    ]
-    sev_table = Table(sev_data, colWidths=[55*mm, 20*mm])
-    sev_table.setStyle(TableStyle([
-        ("SPAN",         (0, 0), (1, 0)),
-        ("BACKGROUND",   (0, 0), (1, 0), GREY_LIGHT),
-        ("FONTNAME",     (0, 1), (-1, -1), "Helvetica"),
-        ("FONTSIZE",     (0, 0), (-1, -1), 8.5),
-        ("TEXTCOLOR",    (1, 2), (1, 2),  RED),
-        ("FONTNAME",     (1, 2), (1, 2),  "Helvetica-Bold"),
-        ("GRID",         (0, 0), (-1, -1), 0.5, GREY_BORDER),
-        ("ROWBACKGROUNDS",(0,1), (-1, -1), [WHITE, GREY_LIGHT]),
-        ("LEFTPADDING",  (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-        ("TOPPADDING",   (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 4),
-    ]))
+    Returns a PDF file with:
+      - Header with report metadata
+      - Overall compliance score and issues summary
+      - Framework compliance status cards
+      - Open issues table
+      - AI insights
+    """
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Database not initialised.")
 
-    outer = Table([[score_cell, sev_table]], colWidths=[80*mm, 100*mm])
-    outer.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (0, 0), bg),
-        ("BACKGROUND",   (1, 0), (1, 0), WHITE),
-        ("VALIGN",       (0, 0), (-1, -1), "MIDDLE"),
-        ("BOX",          (0, 0), (-1, -1), 1, GREY_BORDER),
-        ("LINEAFTER",    (0, 0), (0, 0),   1, GREY_BORDER),
-        ("TOPPADDING",   (0, 0), (-1, -1), 6*mm),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 6*mm),
-        ("LEFTPADDING",  (0, 0), (0, 0),   6*mm),
-        ("LEFTPADDING",  (1, 0), (1, 0),   5*mm),
-    ]))
-    return outer
-
-
-def _framework_cards(frameworks, st):
-    elements = []
-    elements.append(Paragraph("Framework Compliance Status", st["section_head"]))
-    elements.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
-
-    for fw in frameworks:
-        name    = fw.get("name", "")
-        score   = float(fw.get("score", 0))
-        status  = fw.get("status", "")
-        details = fw.get("details", "")
-        fg, bg  = _status_color(status)
-        sc      = _score_color(score)
-
-        pill = Table([[Paragraph(f'<b>{score:.1f}%</b>',
-                                 ParagraphStyle("p", fontSize=11, textColor=sc,
-                                                fontName="Helvetica-Bold", alignment=TA_CENTER))]],
-                     colWidths=[22*mm])
-        pill.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0),(-1,-1), GREY_LIGHT),
-            ("BOX",          (0,0),(-1,-1), 1, GREY_BORDER),
-            ("TOPPADDING",   (0,0),(-1,-1), 4),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 4),
-        ]))
-
-        badge = Table([[Paragraph(status.replace("_", " ").title(),
-                                  ParagraphStyle("b", fontSize=8, textColor=fg,
-                                                 fontName="Helvetica-Bold", alignment=TA_CENTER))]],
-                      colWidths=[30*mm])
-        badge.setStyle(TableStyle([
-            ("BACKGROUND",   (0,0),(-1,-1), bg),
-            ("BOX",          (0,0),(-1,-1), 0.5, fg),
-            ("TOPPADDING",   (0,0),(-1,-1), 3),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 3),
-        ]))
-
-        header_row = Table([
-            [Paragraph(f"<b>{name}</b>",
-                       ParagraphStyle("fn", fontSize=12, textColor=DARK_BLUE,
-                                      fontName="Helvetica-Bold")),
-             pill, badge,
-             Paragraph(details, st["small"])]
-        ], colWidths=[35*mm, 25*mm, 33*mm, 87*mm])
-        header_row.setStyle(TableStyle([
-            ("VALIGN", (0,0),(-1,-1), "MIDDLE"),
-            ("LEFTPADDING",  (0,0),(0,0), 0),
-            ("RIGHTPADDING", (0,0),(-1,-1), 4),
-        ]))
-
-        ind_rows = []
-        for ind in fw.get("indicators", []):
-            ist    = ind.get("status", "")
-            ifg, _ = _status_color(ist)
-            icon   = "✓" if ist == "success" else "✗"
-            ind_rows.append([
-                Paragraph(f'<font color="#{ifg.hexval()[2:]}"><b>{icon}</b></font>',
-                          ParagraphStyle("ic", fontSize=10, fontName="Helvetica-Bold",
-                                         alignment=TA_CENTER)),
-                Paragraph(ind.get("text", ""), st["indicator"]),
-                Paragraph(ist.upper(),
-                          ParagraphStyle("is", fontSize=7.5, textColor=ifg,
-                                         fontName="Helvetica-Bold", alignment=TA_CENTER)),
-            ])
-
-        ind_table = Table(ind_rows, colWidths=[8*mm, 148*mm, 24*mm])
-        ind_table.setStyle(TableStyle([
-            ("VALIGN",       (0,0),(-1,-1), "MIDDLE"),
-            ("ROWBACKGROUNDS",(0,0),(-1,-1), [WHITE, GREY_LIGHT]),
-            ("TOPPADDING",   (0,0),(-1,-1), 4),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 4),
-            ("LEFTPADDING",  (1,0),(1,-1),  4),
-            ("BOX",          (0,0),(-1,-1), 0.5, GREY_BORDER),
-            ("LINEBELOW",    (0,0),(-1,-2), 0.3, GREY_BORDER),
-        ]))
-
-        card = Table([[header_row], [Spacer(1, 4)], [ind_table]], colWidths=[180*mm])
-        card.setStyle(TableStyle([
-            ("BOX",          (0,0),(-1,-1), 1, GREY_BORDER),
-            ("BACKGROUND",   (0,0),(-1,-1), WHITE),
-            ("TOPPADDING",   (0,0),(-1,-1), 4*mm),
-            ("BOTTOMPADDING",(0,0),(-1,-1), 4*mm),
-            ("LEFTPADDING",  (0,0),(-1,-1), 4*mm),
-            ("RIGHTPADDING", (0,0),(-1,-1), 4*mm),
-        ]))
-
-        elements.append(KeepTogether(card))
-        elements.append(Spacer(1, 5*mm))
-
-    return elements
-
-
-def _open_issues_table(issues, st):
-    elements = []
-    elements.append(Paragraph("Open Issues", st["section_head"]))
-    elements.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
-
-    if not issues:
-        elements.append(Paragraph("No open issues found.", st["body"]))
-        return elements
-
-    header = [
-        Paragraph("<b>#</b>",         st["bold_small"]),
-        Paragraph("<b>Issue</b>",      st["bold_small"]),
-        Paragraph("<b>Framework</b>",  st["bold_small"]),
-        Paragraph("<b>Severity</b>",   st["bold_small"]),
-        Paragraph("<b>Dataset</b>",    st["bold_small"]),
-        Paragraph("<b>Due Date</b>",   st["bold_small"]),
-    ]
-    rows = [header]
-    for i, issue in enumerate(issues, 1):
-        sev    = issue.get("severity", "")
-        fg, _  = _status_color(sev)
-        dataset = issue.get("dataset", "")
-        rows.append([
-            Paragraph(str(i), st["small"]),
-            Paragraph(issue.get("issue", ""), st["small"]),
-            Paragraph(issue.get("framework", ""), st["small"]),
-            Paragraph(sev, ParagraphStyle("sv", fontSize=7.5, textColor=fg,
-                                          fontName="Helvetica-Bold", alignment=TA_CENTER)),
-            Paragraph(dataset[:120] + ("..." if len(dataset) > 120 else ""), st["small"]),
-            Paragraph(issue.get("due_date", ""), st["small"]),
-        ])
-
-    t = Table(rows, colWidths=[8*mm, 55*mm, 20*mm, 18*mm, 55*mm, 24*mm], repeatRows=1)
-    t.setStyle(TableStyle([
-        ("BACKGROUND",   (0, 0), (-1, 0), DARK_BLUE),
-        ("TEXTCOLOR",    (0, 0), (-1, 0), WHITE),
-        ("ROWBACKGROUNDS",(0,1), (-1,-1), [WHITE, GREY_LIGHT]),
-        ("GRID",         (0, 0), (-1,-1), 0.4, GREY_BORDER),
-        ("VALIGN",       (0, 0), (-1,-1), "TOP"),
-        ("TOPPADDING",   (0, 0), (-1,-1), 4),
-        ("BOTTOMPADDING",(0, 0), (-1,-1), 4),
-        ("LEFTPADDING",  (0, 0), (-1,-1), 4),
-        ("RIGHTPADDING", (0, 0), (-1,-1), 4),
-        ("FONTNAME",     (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE",     (0, 0), (-1, 0), 8),
-    ]))
-    elements.append(t)
-    return elements
-
-
-def _ai_insights_section(ai_text, st):
-    elements = []
-    elements.append(Spacer(1, 4*mm))
-    elements.append(Paragraph("AI Insights", st["section_head"]))
-    elements.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
-
-    inner = []
-    for line in ai_text.split("\n"):
-        line = line.strip()
-        if not line:
-            inner.append(Spacer(1, 3))
-            continue
-        if line.startswith("**") and line.endswith("**"):
-            inner.append(Paragraph(line.replace("**", ""), st["insight_bold"]))
-        elif "**" in line:
-            clean = line.replace("**", "<b>", 1).replace("**", "</b>", 1)
-            inner.append(Paragraph(clean, st["insight"]))
-        else:
-            inner.append(Paragraph(line, st["insight"]))
-
-    box = Table([[inner]], colWidths=[180*mm])
-    box.setStyle(TableStyle([
-        ("BACKGROUND",   (0,0),(-1,-1), LIGHT_BLUE),
-        ("BOX",          (0,0),(-1,-1), 1, MID_BLUE),
-        ("TOPPADDING",   (0,0),(-1,-1), 5*mm),
-        ("BOTTOMPADDING",(0,0),(-1,-1), 5*mm),
-        ("LEFTPADDING",  (0,0),(-1,-1), 5*mm),
-        ("RIGHTPADDING", (0,0),(-1,-1), 5*mm),
-    ]))
-    elements.append(box)
-    return elements
-
-
-def generate_compliance_pdf(snapshot: dict) -> bytes:
-    buf  = io.BytesIO()
-    doc  = SimpleDocTemplate(buf, pagesize=A4,
-                             leftMargin=15*mm, rightMargin=15*mm,
-                             topMargin=12*mm,  bottomMargin=18*mm,
-                             title="Compliance Report",
-                             author="Data Governance Platform")
-    st      = _styles()
-    snap    = snapshot.get("snapshot_json", {})
-    fw_list = snap.get("frameworks", [])
-    issues  = snap.get("open_issues", {}).get("items", [])
-    ai_text = snap.get("ai_insights", {}).get("text", "")
-
-    story = []
-    story.append(_header_table(snapshot, st))
-    story.append(Spacer(1, 6*mm))
-
-    story.append(Paragraph("Executive Summary", st["section_head"]))
-    story.append(HRFlowable(width="100%", thickness=1, color=GREY_BORDER, spaceAfter=6))
-    story.append(_overall_score_table(snapshot, st))
-    story.append(Spacer(1, 6*mm))
-
-    story.extend(_framework_cards(fw_list, st))
-    story.extend(_open_issues_table(issues, st))
-    story.append(Spacer(1, 6*mm))
-
-    if ai_text:
-        story.extend(_ai_insights_section(ai_text, st))
-
-    story.append(Spacer(1, 8*mm))
-    story.append(HRFlowable(width="100%", thickness=0.5, color=GREY_BORDER))
-    story.append(Spacer(1, 3))
-    story.append(Paragraph(
-        f"Generated by Data Governance Platform &nbsp;|&nbsp; "
-        f"{datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')} &nbsp;|&nbsp; Confidential",
-        st["footer"]
-    ))
-
-    doc.build(story)
-    buf.seek(0)
-    return buf.read()
-
-
-
-def fetch_latest_snapshot():
-    rows = get_engine().db.execute_query("""
-        SELECT * FROM public.compliance_snapshots
+    sql = """
+        SELECT * FROM compliance_snapshots
         ORDER BY recorded_at DESC
         LIMIT 1
-    """)
+    """
+
+    rows = _db.execute_query(sql)
     if not rows:
-        return None
-    data = dict(rows[0])
-    if isinstance(data.get("snapshot_json"), str):
-        data["snapshot_json"] = json.loads(data["snapshot_json"])
-    return data
-
-
-@router.get(
-    "/report/export",
-    summary="Export Report",
-    description="Export the latest compliance snapshot as a downloadable PDF.",
-    response_description="Export Report",
-    tags=["Compliance"],
-    responses={
-        200: {
-            "description": "Export Report",
-            "content": {"application/pdf": {}},
-        }
-    },
-)
-def export_compliance_report():
-    snapshot = fetch_latest_snapshot()
-    if not snapshot:
         raise HTTPException(status_code=404, detail="No compliance snapshot found in database.")
+
+    row = rows[0]
+    snapshot = dict(row)
+    
+    if isinstance(snapshot.get("snapshot_json"), str):
+        snapshot["snapshot_json"] = json.loads(snapshot["snapshot_json"])
 
     pdf_bytes = generate_compliance_pdf(snapshot)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1508,3 +1914,4 @@ def export_compliance_report():
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+

@@ -13,9 +13,9 @@ load_dotenv()
 DB_CONFIG = {
     "host": os.getenv("PG_HOST", "postgres_ig"),
     "port": int(os.getenv("PG_PORT", "5432")),
-    "dbname": os.getenv("PG_NAME", "semantic_search"),
-    "user": os.getenv("PG_USER", "semantic_user"),
-    "password": os.getenv("PG_PASSWORD", "semantic_pass"),
+    "dbname": os.getenv("PG_NAME", "ig_database"),
+    "user": os.getenv("PG_USER", "ig_user"),
+    "password": os.getenv("PG_PASSWORD", "ig_pass"),
 }
 
 
@@ -133,7 +133,25 @@ def get_compliance_overview():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def format_time_ago(timestamp):
+    now = datetime.now(timezone.utc)
+    diff = now - timestamp
 
+    seconds = diff.total_seconds()
+
+    if seconds < 60:
+        return "just now"
+
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{int(minutes)} min ago"
+
+    hours = minutes // 60
+    if hours < 24:
+        return f"{int(hours)} hr ago"
+
+    days = hours // 24
+    return f"{int(days)} days ago"
 @router.get("/recently-viewed")
 def get_recently_viewed():
     try:

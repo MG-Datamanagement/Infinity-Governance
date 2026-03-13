@@ -143,6 +143,7 @@ class DataSourceCreateDynamoDB(BaseModel):
         description="Optional glob-like patterns to filter which tables to ingest (e.g. ['prod_*', 'analytics_orders'])"
     )
     schedule: Optional[str] = Field("00:00 GMT+5:30")
+    # advanced: Optional[dict] = None
 
 class DataSourceCreateGlue(BaseModel):
     """Create request for Glue data source."""
@@ -175,6 +176,10 @@ class DataSourceCreateMSSQL(BaseModel):
     connection_details: MSSQLConnectionDetails
     owner_id: str
     description: Optional[str] = None
+    include_views: bool = True
+    include_tables: bool = True
+    schema_pattern: Optional[List[str]] = None
+    table_pattern: Optional[List[str]] = None
     schedule: Optional[str] = Field("00:00 GMT+5:30", description="Ingestion schedule")
 
 class DataSourceCreateRedshift(BaseModel):

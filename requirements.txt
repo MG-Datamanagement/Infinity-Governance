@@ -6,7 +6,7 @@ pydantic==1.10.13  # Changed to v1 for DataHub compatibility
 asyncpg==0.29.0
 psycopg2-binary==2.9.9
 # DataHub SDK with specific extras for all your sources
-acryl-datahub[postgres,mysql,mongodb,snowflake]==0.12.1.2
+acryl-datahub[postgres,mysql,mongodb,snowflake,athena,dynamodb,glue,mssql]==0.12.1.2
 # Utilities
 python-dotenv==1.0.0
 python-multipart==0.0.6
