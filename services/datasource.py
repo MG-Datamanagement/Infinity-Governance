@@ -475,8 +475,6 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
             source.schedule or "00:00 GMT+5:30",
             source.owner_id
             # json.dumps(advanced_dict) if advanced_dict else None
-            source.owner_id
-            # json.dumps(advanced_dict) if advanced_dict else None
         )
 
         # Format response (same pattern as Athena)

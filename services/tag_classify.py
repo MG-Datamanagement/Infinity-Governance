@@ -155,18 +155,18 @@ class BulkClassifyRequest(BaseModel):
 
     Fields
     ------
-    source_id      : UUID of the ingested data source
-    save_to_db     : when True the suggested tags are persisted to
-                     tag_catalog_assignments; when False (default)
-                     the response is preview-only
-    assigned_by    : label stored in assigned_by column (default 'ai-auto')
-    min_confidence : only save assignments whose confidence_score is at or
-                     above this threshold (default 0.0 → save everything)
+    source_id              : UUID of the ingested data source
+    Require_human_approval : when True the suggested tags are persisted to
+                             tag_catalog_assignments; when False (default)
+                             the response is preview-only
+    assigned_by            : label stored in assigned_by column (default 'ai-auto')
+    min_confidence         : only save assignments whose confidence_score is at or
+                             above this threshold (default 0.0 → save everything)
     """
     source_id: str
-    save_to_db: bool = True
+    Require_human_approval: bool = False
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.7
+    min_confidence: float = 0.0
 
 
 class CatalogClassificationResult(BaseModel):
@@ -202,7 +202,10 @@ async def _fetch_available_tags(db) -> List[dict]:
 
 
 async def _fetch_catalogs_for_source(db, source_id: str) -> List[dict]:
-    """Return all catalogs belonging to source_id."""
+    """
+    Return catalogs for source_id where column_count > 0, deduplicated by table_name.
+    When the same table_name appears more than once, keeps the one with the most columns.
+    """
     rows = await db.fetch_all(
         """
         SELECT
@@ -220,6 +223,8 @@ async def _fetch_catalogs_for_source(db, source_id: str) -> List[dict]:
         """,
         source_id,
     )
+
+    # Deduplicate by table_name — keep entry with highest column_count
     seen: dict = {}
     for r in rows:
         name = r["table_name"]
@@ -231,7 +236,7 @@ async def _fetch_catalogs_for_source(db, source_id: str) -> List[dict]:
                 "description": r["description"] or "",
                 "column_count": r["column_count"],
             }
- 
+
     return list(seen.values())
 
 
@@ -309,7 +314,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
     2. Fetch all catalogs for that source.
     3. Fetch all existing tags from the DB.
     4. For each catalog, call the LLM to suggest a tag (from the known tag list).
-    5. If save_to_db=True AND confidence >= min_confidence, persist to
+    5. If Require_human_approval=True AND confidence >= min_confidence, persist to
        tag_catalog_assignments.
     6. Return a preview/summary of every classification result.
     """
@@ -364,7 +369,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
             # -- 5. Optionally save to DB ----------------------------------
             saved = False
             if (
-                request.save_to_db
+                request.Require_human_approval
                 and tag_id is not None
                 and confidence >= request.min_confidence
             ):
@@ -553,9 +558,10 @@ class BulkColumnClassifyRequest(BaseModel):
     min_confidence  : only save assignments at or above this threshold (default 0.0)
     """
     source_id: str
-    save_to_db: bool = True
+    catalog_id: Optional[str] = None
+    save_to_db: bool = False
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.7
+    min_confidence: float = 0.0
 
 
 class ColumnClassificationResult(BaseModel):
@@ -577,6 +583,7 @@ class ColumnClassificationResult(BaseModel):
 
 class BulkColumnClassifyResponse(BaseModel):
     source_id: str
+    catalog_id: Optional[str]
     total_columns: int
     classified: int
     saved: int
@@ -593,8 +600,12 @@ async def _fetch_columns_for_source(
     catalog_id: Optional[str] = None,
 ) -> List[dict]:
     """
-    Return all columns that belong to the given source_id.
-    Optionally filter down to a single catalog.
+    Return columns for the given source_id, restricted to catalogs that:
+      - have at least one column (column_count > 0)
+      - are the canonical catalog for their table_name (highest column_count
+        wins when duplicates exist — same dedup rule as _fetch_catalogs_for_source)
+
+    When catalog_id is given, that single catalog is used directly (no dedup needed).
     """
     if catalog_id:
         rows = await db.fetch_all(
@@ -616,19 +627,36 @@ async def _fetch_columns_for_source(
             catalog_id,
         )
     else:
+        # Restrict to the canonical catalog per table_name:
+        # the one catalog_id per table_name that has the most columns.
         rows = await db.fetch_all(
             """
+            WITH ranked_catalogs AS (
+                SELECT
+                    c.id                        AS catalog_id,
+                    c.table_name,
+                    COUNT(DISTINCT col2.id)     AS column_count,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY c.table_name
+                        ORDER BY COUNT(DISTINCT col2.id) DESC
+                    )                           AS rn
+                FROM   catalogs c
+                JOIN   columns  col2 ON col2.catalog_id = c.id
+                WHERE  c.source_id = $1
+                GROUP  BY c.id, c.table_name
+                HAVING COUNT(DISTINCT col2.id) > 0
+            )
             SELECT col.id,
                    col.name         AS column_name,
                    col.description,
                    col.is_nullable,
                    col.data_type    AS column_data_type,
                    col.catalog_id,
-                   cat.table_name
-            FROM   columns  col
-            JOIN   catalogs cat ON cat.id = col.catalog_id
-            WHERE  cat.source_id = $1
-            ORDER  BY cat.table_name, col.ordinal_position
+                   rc.table_name
+            FROM   ranked_catalogs rc
+            JOIN   columns col ON col.catalog_id = rc.catalog_id
+            WHERE  rc.rn = 1
+            ORDER  BY rc.table_name, col.ordinal_position
             """,
             source_id,
         )
@@ -776,7 +804,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
     Flow
     ----
     1. Validate the source_id exists in data_sources.
-    2. Fetch all columns for that source (across all its catalogs).
+    2. Fetch all columns for that source (optionally filtered by catalog_id).
     3. Fetch all existing tags from the tags table.
     4. For each column, call the LLM to suggest the best tag from the known list.
     5. If save_to_db=True AND confidence >= min_confidence, upsert into
@@ -798,12 +826,14 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
         )
 
     # -- 2. Fetch columns --------------------------------------------------
-    columns = await _fetch_columns_for_source(db, request.source_id)
+    columns = await _fetch_columns_for_source(db, request.source_id, request.catalog_id)
     if not columns:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No columns found for source '{request.source_id}'. Run ingestion first.",
+        detail = (
+            f"No columns found for catalog '{request.catalog_id}'."
+            if request.catalog_id
+            else f"No columns found for source '{request.source_id}'. Run ingestion first."
         )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
     # -- 3. Fetch available tags -------------------------------------------
     tags = await _fetch_available_tags(db)
@@ -899,6 +929,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
     # -- 6. Return summary -------------------------------------------------
     return BulkColumnClassifyResponse(
         source_id=request.source_id,
+        catalog_id=request.catalog_id,
         total_columns=len(columns),
         classified=sum(1 for r in results if r.suggested_tag != "Error"),
         saved=saved_count,
@@ -906,167 +937,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
     )
 
 
-class BulkColumnClassifyByCatalogRequest(BaseModel):
-    """
-    Bulk-classify all columns that belong to a given catalog (table).
 
-    Fields
-    ------
-    catalog_id      : UUID of the catalog (table) to classify
-    save_to_db      : when True, persist suggested tags to tag_column_assignments
-    assigned_by     : label stored in the assigned_by column (default 'ai-auto')
-    min_confidence  : only save assignments at or above this threshold (default 0.7)
-    """
-    catalog_id: str
-    save_to_db: bool = True
-    assigned_by: str = "ai-auto"
-    min_confidence: float = 0.7
-
-
-@column_router.post(
-    "/classify-column/catalog",
-    response_model=BulkColumnClassifyResponse,
-    status_code=status.HTTP_200_OK,
-    responses={
-        200: {"description": "Bulk classification completed"},
-        404: {"description": "Catalog / columns not found"},
-        422: {"description": "No tags in database"},
-        500: {"description": "Internal server error"},
-    },
-)
-async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
-    """
-    Bulk-classify ALL columns belonging to a specific catalog (table).
-
-    Flow
-    ----
-    1. Validate the catalog_id exists and fetch its parent source_id.
-    2. Fetch all columns for that catalog.
-    3. Fetch all existing tags from the tags table.
-    4. For each column, call the LLM to suggest the best tag from the known list.
-    5. If save_to_db=True AND confidence >= min_confidence, upsert into
-       tag_column_assignments (confidence_score is also stored).
-    6. Return a full preview/summary — including which rows were saved.
-    """
-    from app import db, logger
-
-    # -- 1. Validate catalog -----------------------------------------------
-    catalog = await db.fetch_one(
-        "SELECT id, source_id, table_name FROM catalogs WHERE id = $1",
-        request.catalog_id,
-    )
-    if not catalog:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Catalog '{request.catalog_id}' not found.",
-        )
-
-    source_id: str = str(catalog["source_id"])
-
-    # -- 2. Fetch columns --------------------------------------------------
-    columns = await _fetch_columns_for_source(db, source_id, catalog_id=request.catalog_id)
-    if not columns:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No columns found for catalog '{request.catalog_id}'. Run ingestion first.",
-        )
-
-    # -- 3. Fetch available tags -------------------------------------------
-    tags = await _fetch_available_tags(db)
-    if not tags:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="No tags found in the database. Please create tags first.",
-        )
-
-    tag_name_to_id = {t["name"].lower(): t["id"] for t in tags}
-    tag_id_to_name = {t["id"]: t["name"] for t in tags}
-    available_tags_str = ", ".join(t["name"] for t in tags)
-
-    # -- 4. Classify each column -------------------------------------------
-    results: List[ColumnClassificationResult] = []
-    saved_count = 0
-
-    for col in columns:
-        try:
-            llm_result = column_classification_agent.invoke({
-                "column_name": col["column_name"],
-                "column_description": col["description"] or col["column_name"],
-                "available_tags": available_tags_str,
-            })
-
-            suggested_tag: str = llm_result.get("tag", "Unknown")
-            confidence: float  = float(llm_result.get("confidence_score", 0.0))
-            is_sensitive: bool = bool(llm_result.get("is_sensitive", False))
-            reasoning: str     = llm_result.get("reasoning", "No reasoning provided")
-
-            tag_id: Optional[str] = tag_name_to_id.get(suggested_tag.lower())
-
-            # -- 5. Optionally save to DB ----------------------------------
-            saved = False
-            if (
-                request.save_to_db
-                and tag_id is not None
-                and confidence >= request.min_confidence
-            ):
-                saved = await _save_tag_column_assignment(
-                    db,
-                    tag_id,
-                    col["id"],
-                    col["catalog_id"],
-                    confidence,
-                    request.assigned_by,
-                )
-                if saved:
-                    saved_count += 1
-
-            results.append(ColumnClassificationResult(
-                column_id=col["id"],
-                column_name=col["column_name"],
-                description=col["description"],
-                is_nullable=col["is_nullable"],
-                column_data_type=col["column_data_type"],
-                catalog_id=col["catalog_id"],
-                table_name=col["table_name"],
-                suggested_tag=suggested_tag,
-                tag_id=tag_id,
-                tag_name=tag_id_to_name.get(tag_id) if tag_id else None,
-                is_sensitive=is_sensitive,
-                confidence_score=confidence,
-                reasoning=reasoning,
-                saved=saved,
-            ))
-
-        except Exception as e:
-            logger.error(
-                f"Classification failed for column '{col['column_name']}' "
-                f"(catalog {col['catalog_id']}): {e}"
-            )
-            results.append(ColumnClassificationResult(
-                column_id=col["id"],
-                column_name=col["column_name"],
-                description=col["description"],
-                is_nullable=col["is_nullable"],
-                column_data_type=col["column_data_type"],
-                catalog_id=col["catalog_id"],
-                table_name=col["table_name"],
-                suggested_tag="Error",
-                tag_id=None,
-                tag_name=None,
-                is_sensitive=False,
-                confidence_score=0.0,
-                reasoning=f"Classification error: {str(e)}",
-                saved=False,
-            ))
-
-    # -- 6. Return summary -------------------------------------------------
-    return BulkColumnClassifyResponse(
-        source_id=source_id,
-        total_columns=len(columns),
-        classified=sum(1 for r in results if r.suggested_tag != "Error"),
-        saved=saved_count,
-        results=results,
-    )
 
 # ===========================================================================
 # FULL SCAN  (prefix: /scan)
@@ -1098,7 +969,7 @@ class FullScanRequest(BaseModel):
     source_id: str
     save_to_db: bool = True
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.7
+    min_confidence: float = 0.0
 
 
 class TableScanResult(BaseModel):
