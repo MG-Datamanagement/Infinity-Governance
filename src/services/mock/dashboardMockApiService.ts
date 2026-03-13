@@ -504,6 +504,13 @@ export interface TagInfo {
   tag_name: string;
 }
 
+export interface ReclassificationActionWithAiRequest {
+  catalog_id: string;
+  save_to_db: boolean;
+  assigned_by: string;
+  min_confidence: number;
+}
+
 const BASE_DEV_API_URL = process.env.NEXT_PUBLIC_DEV_API_URL;
 
 export const dataSourcesService = {
@@ -762,6 +769,34 @@ export const dataSourcesService = {
     } catch (error) {
       console.error(
         `Failed to trigger ReClassification with Ai for source ${reClassifyPayload?.source_id}:`,
+        error,
+      );
+      throw error;
+    }
+  },
+
+  async reclassificationActionWithAi(
+    reClassificationActionPayload: ReclassificationActionWithAiRequest,
+  ): Promise<ReClassifyWithAiResponse> {
+    const url = `${BASE_DEV_API_URL}/columns/classify-column/catalog`;
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(reClassificationActionPayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `ReClassification Action with Ai API error: ${response.statusText}`,
+        );
+      }
+      return await response.json();
+    } catch (error) {
+      console.error(
+        `Failed to trigger ReClassification with Ai for source ${reClassificationActionPayload?.catalog_id}:`,
         error,
       );
       throw error;

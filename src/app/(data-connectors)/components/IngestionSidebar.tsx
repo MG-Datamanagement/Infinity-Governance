@@ -47,12 +47,13 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
     const eventSourceRef = useRef<EventSource | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const [streamStatus, setStreamStatus] = useState<"connecting" | "connected" | "completed" | "error">("connecting");
-    const { addDsConfig } = useAppStore();
+    const { addDsConfig, setAddDsConfig } = useAppStore();
     const router = useRouter();
 
     const [sourceAiSummary, setSourceAiSummary] = useState<SourceAiSummaryResponse | null>(null);
     const [isSourceAiSummaryLoading, setIsSourceAiSummaryLoading] = useState<boolean>(false);
 
+    const mainScrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -216,6 +217,14 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
         setSteps(prev => prev.map(s => s.label === label ? { ...s, status } : s));
     };
 
+    const onCloseReset = (viewIngestedDataset: boolean = false) => {
+        onClose(viewIngestedDataset)
+        setStreamStatus("connecting")
+        setIsSourceAiSummaryLoading(false)
+        setSourceAiSummary(null)
+        setAddDsConfig({})
+    } 
+
     if (!isOpen) return null;
 
     return (
@@ -223,11 +232,14 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
             {/* Overlay */}
             <div
                 className="fixed inset-0 backdrop-blur-[1px] z-[60] transition-opacity duration-300"
-                onClick={() => onClose(false)}
+                onClick={() => onCloseReset(false)}
             />
 
             {/* Sidebar Container */}
-            <div className={`fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl z-[70] transform transition-transform duration-500 ease-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div 
+                ref={mainScrollRef}
+                className={`fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl z-[70] transform transition-transform duration-500 ease-out flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+            >
 
                 {/* Header */}
                 <div className="bg-indigo-600 p-4 text-white relative flex-shrink-0">
@@ -248,7 +260,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             <div className="bg-white/10 hover:bg-white/20 p-1 rounded-xl transition-colors cursor-pointer">
                                 <History className="w-4 h-4" />
                             </div>
-                            <div onClick={() => onClose(false)} className="bg-white/10 hover:bg-white/20 p-1 rounded-xl transition-colors cursor-pointer">
+                            <div onClick={() => onCloseReset(false)} className="bg-white/10 hover:bg-white/20 p-1 rounded-xl transition-colors cursor-pointer">
                                 <X className="w-4 h-4" />
                             </div>
                         </div>
@@ -382,7 +394,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     {/* Require Apporval for PII Scan Actions */}
                     {(streamStatus === "completed" && addDsConfig?.piiApproval && !isSourceAiSummaryLoading && !sourceAiSummary) ? <div className='w-full flex justify-between items-center gap-2 transition-all'>
                         <div>
-                            <Button onClick={() => onClose(false)} variant="outline" className='disabled:opacity-50'>
+                            <Button onClick={() => onCloseReset(false)} variant="outline" className='disabled:opacity-50'>
                                 <ArrowRight />
                                 Complete, skip PII
                             </Button>
@@ -400,7 +412,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                     <div className='bg-gray-50 border border-gray-200 px-4 py-2 rounded-lg transition-all space-y-3'>
                         <div className='text-indigo-600 flex items-center gap-2'>
                             {isSourceAiSummaryLoading ? <Loader2 size={14} className='animate-spin' />  : <RiRobot2Fill size={14} />}
-                            <span className='text-xs font-medium'>Summary</span>
+                            {isSourceAiSummaryLoading ? <span className='text-xs font-medium'>PII Detection In-Progress</span> : <span className='text-xs font-medium'>Summary</span> }
                         </div>
                         {(sourceAiSummary?.ai_summary) && 
                         <div className='space-y-3 flex flex-col items-center'>
@@ -409,7 +421,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                                 variant="primary" 
                                 className='text-white w-full gap-2 flex justify-center items-center' 
                                 onClick={() => {
-                                    onClose(true)
+                                    onCloseReset(true)
                                 }}
                             >
                                 <Database size={14} />
