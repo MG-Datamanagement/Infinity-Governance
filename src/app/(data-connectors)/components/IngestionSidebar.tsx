@@ -378,6 +378,8 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             </div>
                         </div>
                     </div>
+
+                    {/* Require Apporval for PII Scan Actions */}
                     {(streamStatus === "completed" && addDsConfig?.piiApproval && !isSourceAiSummaryLoading && !sourceAiSummary) ? <div className='w-full flex justify-between items-center gap-2 transition-all'>
                         <div>
                             <Button onClick={() => onClose(false)} variant="outline" className='disabled:opacity-50'>
@@ -392,6 +394,8 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                             </Button>
                        </div>
                     </div> : null}
+                    
+                    {/* {} */}
                     {(isSourceAiSummaryLoading || sourceAiSummary?.ai_summary) &&
                     <div className='bg-gray-50 border border-gray-200 px-4 py-2 rounded-lg transition-all space-y-3'>
                         <div className='text-indigo-600 flex items-center gap-2'>
@@ -400,10 +404,7 @@ const IngestionSidebar: React.FC<IngestionSidebarProps> = ({ jobId, sourceName, 
                         </div>
                         {(sourceAiSummary?.ai_summary) && 
                         <div className='space-y-3 flex flex-col items-center'>
-                            <p className='text-gray-600 leading-relaxed text-xs'>
-                                {sourceAiSummary?.ai_summary}
-                                {/* ⚡ Force-completed with PII detection. All 5 datasets ingested, PII scanned (5 sensitive columns found), classified and compliance-checked. */}
-                                </p>
+                            <p className='text-gray-600 leading-relaxed text-xs'>{sourceAiSummary?.ai_summary}</p>
                             <Button 
                                 variant="primary" 
                                 className='text-white w-full gap-2 flex justify-center items-center' 

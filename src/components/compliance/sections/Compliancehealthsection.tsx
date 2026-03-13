@@ -25,7 +25,7 @@ export function AIInsightsCard({ text }: { text?: string }) {
             </span>
           </div>
           <p className="text-xs text-gray-600 leading-relaxed max-w-4xl whitespace-pre-wrap">
-            {text || "Generating AI insights based on your compliance data..."}
+            {text?.replace(/\*\*/g, "") || "Generating AI insights based on your compliance data..."}
           </p>
         </div>
       </div>
@@ -96,6 +96,9 @@ export function ComplianceHealthSection({ complianceRunQuery }: Props) {
           </div>
         </div>
 
+        {insights?.text && (
+          <AIInsightsCard text={insights.text} />
+        )}
       </div>
     </div>
   );

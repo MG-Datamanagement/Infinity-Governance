@@ -1,3 +1,5 @@
+import { SourceCatalogResponse } from "../dashboardApiServices";
+
 export interface Connector {
   id: string;
   name: string;
@@ -579,7 +581,7 @@ export const dataSourcesService = {
         throw new Error(`API error: ${response.statusText}`);
       }
       const data = await response.json();
-      return data as ApiSourceStats;
+      return data as SourceCatalogResponse;
     } catch (error) {
       console.error(`Failed to fetch stats for source ${id}:`, error);
       throw error;

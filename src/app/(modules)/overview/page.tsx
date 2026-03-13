@@ -51,15 +51,12 @@ function OverviewContent() {
       <OverviewHeader />
 
       {/* Main two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-rows-7 gap-5">
+      <div className="flex flex-col gap-5">
         <OverviewStatsGrid
           stats={stats.data!}
-          pendingReviewCount={pendingReviewCount.data?.pending_review}
-          openIssuesCount={openIssues.data?.open_issues}
-          governanceScore={governanceScore.data?.governance_score}
         />
 
-        <div className="grid row-span-4 lg:grid-cols-12 gap-5">
+        <div className="grid lg:grid-cols-12 gap-5">
           <ComplianceSection query={frameworks} overviewQuery={complianceOverview} />
           <AIGovernanceSection aiQuery={aiSnapshot} trendsQuery={riskTrends} />
           <ActivitySection
@@ -68,7 +65,7 @@ function OverviewContent() {
           />
         </div>
 
-        <div className="grid row-span-2 grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <DomainsSection query={domains} />
           <PlatformsSection query={platforms} />
         </div>

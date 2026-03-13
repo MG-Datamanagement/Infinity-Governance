@@ -138,7 +138,9 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
 
       const map: any = {};
       response?.results?.forEach((r: any) => {
-        map[r.column_name] = r;
+        map[r.column_name] = ["pii", "phi"].includes(r)
+          ? "pii"
+          : r
       });
 
       setAiResults(map);
@@ -903,7 +905,11 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                         </td>
                         <td className="py-4 px-6">
                           <span className="px-2 py-0.5 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-bold border border-gray-200">
-                            {(col.type || col.data_type || "UNKNOWN").toUpperCase()}
+                            {(
+                              col.type ||
+                              col.data_type ||
+                              "UNKNOWN"
+                            ).toUpperCase()}
                           </span>
                         </td>
                         <td className="py-4 px-6 text-sm text-gray-500 italic max-w-xs truncate">
@@ -961,6 +967,15 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                                   </span>
                                 </div>
                               </>
+                            ) : col.tags?.length ? (
+                              col.tags.map((tag: any) => (
+                                <span
+                                  key={tag.id}
+                                  className="px-2 py-0.5 rounded-xl bg-gray-100 text-gray-600 text-[10px] font-bold border border-gray-200 capitalize"
+                                >
+                                  {tag.name}
+                                </span>
+                              ))
                             ) : (
                               <span className="text-[10px] text-gray-300">
                                 —
@@ -975,7 +990,7 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                       </td> */}
                         <td className="py-2 px-6">
                           <div className="flex flex-wrap gap-1">
-                            {ai ? (
+                            {/* {ai ? (
                               <span className="px-2 py-0.5 rounded-xl bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
                                 {ai.tag_name}
                               </span>
@@ -988,11 +1003,9 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
                                   {tag.name}
                                 </span>
                               ))
-                            ) : (
-                              <span className="text-[10px] text-gray-300">
-                                —
-                              </span>
-                            )}
+                            ) : ( */}
+                            <span className="text-[10px] text-gray-300">—</span>
+                            {/* )} */}
                           </div>
                         </td>
                       </tr>

@@ -1,3 +1,4 @@
+import { CatalogTag } from "@/services/dashboardApiServices";
 import { IconType } from "react-icons/lib";
 
 export type InlineStateType = "loading" | "empty" | "error";
@@ -139,6 +140,7 @@ export interface DashboardStats {
   aiRiskDomains?: number;
   activeDomains: number;
   activeTables: number;
+  openIssues?: number;
 }
 
 export interface AIGovernanceSnapshot {
@@ -209,6 +211,10 @@ export interface DashboardEntityMetricsResponse extends BaseApiResponse {
   total_datasets: number;
   total_domains: number;
   total_tags: number;
+  pending_review?: number;
+  open_issues?: number;
+  governance_score?: number;
+  at_risk_domains?: number;
 }
 
 export type EntityCounts = Record<EntityType, number>;
@@ -340,8 +346,8 @@ export interface ApiColumn {
 
 // ─── Dataset & Catalog ────────────────────────────────────────────────────────
 
-export type DatasetType = "Table" | "View" | "Materialized View";
-export type DatasetStatus = "Healthy" | "Warning" | "Error";
+export type DatasetType = "table" | "view" | "Materialized View";
+export type DatasetStatus = "healthy" | "warning" | "error";
 
 export interface Dataset {
   id: string;
@@ -353,6 +359,7 @@ export interface Dataset {
   size: string | null;
   lastSync: string;
   status: DatasetStatus;
+  tags: CatalogTag[]
 }
 
 export interface DatasetsBySource {

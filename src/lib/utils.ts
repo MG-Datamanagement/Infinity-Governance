@@ -73,9 +73,13 @@ export function getSeverityColor(severity: string): string {
  *  - "3 days ago"
  */
 export function formatTimeAgo(timeString: string): string {
-  const now = new Date();
   const past = new Date(timeString);
 
+  if (isNaN(past.getTime())) {
+    return timeString;
+  }
+
+  const now = new Date();
   const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
 
   if (diffInSeconds < 60) {
