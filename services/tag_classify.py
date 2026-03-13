@@ -937,6 +937,168 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
     )
 
 
+class BulkColumnClassifyByCatalogRequest(BaseModel):
+    """
+    Bulk-classify all columns that belong to a given catalog (table).
+
+    Fields
+    ------
+    catalog_id      : UUID of the catalog (table) to classify
+    save_to_db      : when True, persist suggested tags to tag_column_assignments
+    assigned_by     : label stored in the assigned_by column (default 'ai-auto')
+    min_confidence  : only save assignments at or above this threshold (default 0.7)
+    """
+    catalog_id: str
+    save_to_db: bool = True
+    assigned_by: str = "ai-auto"
+    min_confidence: float = 0.7
+
+
+@column_router.post(
+    "/classify-column/catalog",
+    response_model=BulkColumnClassifyResponse,
+    status_code=status.HTTP_200_OK,
+    responses={
+        200: {"description": "Bulk classification completed"},
+        404: {"description": "Catalog / columns not found"},
+        422: {"description": "No tags in database"},
+        500: {"description": "Internal server error"},
+    },
+)
+async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
+    """
+    Bulk-classify ALL columns belonging to a specific catalog (table).
+
+    Flow
+    ----
+    1. Validate the catalog_id exists and fetch its parent source_id.
+    2. Fetch all columns for that catalog.
+    3. Fetch all existing tags from the tags table.
+    4. For each column, call the LLM to suggest the best tag from the known list.
+    5. If save_to_db=True AND confidence >= min_confidence, upsert into
+       tag_column_assignments (confidence_score is also stored).
+    6. Return a full preview/summary — including which rows were saved.
+    """
+    from app import db, logger
+
+    # -- 1. Validate catalog -----------------------------------------------
+    catalog = await db.fetch_one(
+        "SELECT id, source_id, table_name FROM catalogs WHERE id = $1",
+        request.catalog_id,
+    )
+    if not catalog:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Catalog '{request.catalog_id}' not found.",
+        )
+
+    source_id: str = str(catalog["source_id"])
+
+    # -- 2. Fetch columns --------------------------------------------------
+    columns = await _fetch_columns_for_source(db, source_id, catalog_id=request.catalog_id)
+    if not columns:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No columns found for catalog '{request.catalog_id}'. Run ingestion first.",
+        )
+
+    # -- 3. Fetch available tags -------------------------------------------
+    tags = await _fetch_available_tags(db)
+    if not tags:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No tags found in the database. Please create tags first.",
+        )
+
+    tag_name_to_id = {t["name"].lower(): t["id"] for t in tags}
+    tag_id_to_name = {t["id"]: t["name"] for t in tags}
+    available_tags_str = ", ".join(t["name"] for t in tags)
+
+    # -- 4. Classify each column -------------------------------------------
+    results: List[ColumnClassificationResult] = []
+    saved_count = 0
+
+    for col in columns:
+        try:
+            llm_result = column_classification_agent.invoke({
+                "column_name": col["column_name"],
+                "column_description": col["description"] or col["column_name"],
+                "available_tags": available_tags_str,
+            })
+
+            suggested_tag: str = llm_result.get("tag", "Unknown")
+            confidence: float  = float(llm_result.get("confidence_score", 0.0))
+            is_sensitive: bool = bool(llm_result.get("is_sensitive", False))
+            reasoning: str     = llm_result.get("reasoning", "No reasoning provided")
+
+            tag_id: Optional[str] = tag_name_to_id.get(suggested_tag.lower())
+
+            # -- 5. Optionally save to DB ----------------------------------
+            saved = False
+            if (
+                request.save_to_db
+                and tag_id is not None
+                and confidence >= request.min_confidence
+            ):
+                saved = await _save_tag_column_assignment(
+                    db,
+                    tag_id,
+                    col["id"],
+                    col["catalog_id"],
+                    confidence,
+                    request.assigned_by,
+                )
+                if saved:
+                    saved_count += 1
+
+            results.append(ColumnClassificationResult(
+                column_id=col["id"],
+                column_name=col["column_name"],
+                description=col["description"],
+                is_nullable=col["is_nullable"],
+                column_data_type=col["column_data_type"],
+                catalog_id=col["catalog_id"],
+                table_name=col["table_name"],
+                suggested_tag=suggested_tag,
+                tag_id=tag_id,
+                tag_name=tag_id_to_name.get(tag_id) if tag_id else None,
+                is_sensitive=is_sensitive,
+                confidence_score=confidence,
+                reasoning=reasoning,
+                saved=saved,
+            ))
+
+        except Exception as e:
+            logger.error(
+                f"Classification failed for column '{col['column_name']}' "
+                f"(catalog {col['catalog_id']}): {e}"
+            )
+            results.append(ColumnClassificationResult(
+                column_id=col["id"],
+                column_name=col["column_name"],
+                description=col["description"],
+                is_nullable=col["is_nullable"],
+                column_data_type=col["column_data_type"],
+                catalog_id=col["catalog_id"],
+                table_name=col["table_name"],
+                suggested_tag="Error",
+                tag_id=None,
+                tag_name=None,
+                is_sensitive=False,
+                confidence_score=0.0,
+                reasoning=f"Classification error: {str(e)}",
+                saved=False,
+            ))
+
+    # -- 6. Return summary -------------------------------------------------
+    return BulkColumnClassifyResponse(
+        source_id=source_id,
+        total_columns=len(columns),
+        classified=sum(1 for r in results if r.suggested_tag != "Error"),
+        saved=saved_count,
+        results=results,
+    )
+
 
 
 # ===========================================================================
