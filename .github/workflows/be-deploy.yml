@@ -42,8 +42,8 @@ jobs:
             echo "Stopping and removing old containers..."
             docker compose down --remove-orphans || true
 
-            # Force remove conflicting containers
-            for container in datahub-postgres-ig ig-solr sql_agent_redis; do
+            # Force remove all containers that may conflict
+            for container in datahub-postgres-ig ig-solr sql_agent_redis datahub-pgadmin-ig datahub-unified-api; do
               if [ "$(docker ps -aq -f name=$container)" ]; then
                 echo "Removing existing container $container..."
                 docker rm -f $container
@@ -53,11 +53,11 @@ jobs:
             echo "Building and starting containers..."
             docker compose up -d --build
 
-            echo "Configuring Solr schema..."
-            bash configure_solr_schema.sh
+            # echo "Configuring Solr schema..."
+            # bash configure_solr_schema.sh
 
-            echo "Running indexing script..."
-            docker exec datahub-unified-api python index_to_solr.py
+            # echo "Running indexing script..."
+            # docker exec datahub-unified-api python index_to_solr.py
 
             echo "Cleaning unused Docker images..."
             docker image prune -f
