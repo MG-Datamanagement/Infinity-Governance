@@ -39,8 +39,16 @@ jobs:
               git clone -b main-be $AUTH_URL .
             fi
 
-            echo "Stopping old containers..."
-            docker compose down || true
+            echo "Stopping and removing old containers..."
+            docker compose down --remove-orphans || true
+
+            # Force remove conflicting containers
+            for container in datahub-postgres-ig ig-solr sql_agent_redis; do
+              if [ "$(docker ps -aq -f name=$container)" ]; then
+                echo "Removing existing container $container..."
+                docker rm -f $container
+              fi
+            done
 
             echo "Building and starting containers..."
             docker compose up -d --build
