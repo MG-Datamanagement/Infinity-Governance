@@ -353,31 +353,129 @@ CREATE INDEX IF NOT EXISTS idx_catalog_stats_source  ON catalog_stats(source_id)
 -- TAGS
 -- ============================================================================
 
+
+-- Base table
 CREATE TABLE IF NOT EXISTS tags (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name        VARCHAR(255) NOT NULL,
+    name        VARCHAR(255) NOT NULL UNIQUE,
     description TEXT,
     color       VARCHAR(20),
     owner_id    UUID REFERENCES owners(id) ON DELETE SET NULL,
     created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(name)
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Idempotent migration
-DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='tags' AND column_name='owner_id') THEN
-        ALTER TABLE tags ADD COLUMN owner_id UUID REFERENCES owners(id) ON DELETE SET NULL;
+----------------------------------------------------
+-- Ensure owner_id exists (safe migration)
+----------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='tags' AND column_name='owner_id'
+    ) THEN
+        ALTER TABLE tags
+        ADD COLUMN owner_id UUID REFERENCES owners(id) ON DELETE SET NULL;
     END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS idx_tags_name  ON tags(name);
-CREATE INDEX IF NOT EXISTS idx_tags_owner ON tags(owner_id);  -- added
+----------------------------------------------------
+-- Add tag_type
+----------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='tags' AND column_name='tag_type'
+    ) THEN
+        ALTER TABLE tags
+        ADD COLUMN tag_type VARCHAR(50);
+    END IF;
+END $$;
+
+----------------------------------------------------
+-- Add security_policy
+----------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='tags' AND column_name='security_policy'
+    ) THEN
+        ALTER TABLE tags
+        ADD COLUMN security_policy VARCHAR(50);
+    END IF;
+END $$;
+
+----------------------------------------------------
+-- Add status
+----------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name='tags' AND column_name='status'
+    ) THEN
+        ALTER TABLE tags
+        ADD COLUMN status VARCHAR(20) DEFAULT 'active';
+    END IF;
+END $$;
+
+----------------------------------------------------
+-- Add constraints (only if not exists)
+----------------------------------------------------
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_tag_type'
+    ) THEN
+        ALTER TABLE tags
+        ADD CONSTRAINT check_tag_type
+        CHECK (tag_type IN ('privacy','classification','retention','general'));
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'check_tag_status'
+    ) THEN
+        ALTER TABLE tags
+        ADD CONSTRAINT check_tag_status
+        CHECK (status IN ('active','inactive'));
+    END IF;
+END $$;
+
+----------------------------------------------------
+-- Indexes
+----------------------------------------------------
+
+CREATE INDEX IF NOT EXISTS idx_tags_name   ON tags(name);
+CREATE INDEX IF NOT EXISTS idx_tags_owner  ON tags(owner_id);
+CREATE INDEX IF NOT EXISTS idx_tags_type   ON tags(tag_type);
+CREATE INDEX IF NOT EXISTS idx_tags_status ON tags(status);
+
+----------------------------------------------------
+-- Auto update timestamp trigger
+----------------------------------------------------
 
 DROP TRIGGER IF EXISTS update_tags_updated_at ON tags;
+
 CREATE TRIGGER update_tags_updated_at
-    BEFORE UPDATE ON tags
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+BEFORE UPDATE ON tags
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+
 
 -- ============================================================================
 -- TAG <-> CATALOG ASSIGNMENTS
@@ -616,32 +714,150 @@ CREATE INDEX IF NOT EXISTS idx_job_logs_level
 
 
 ----------------------------------------------------------
+--compliance snapshot
+----------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS compliance_snapshots (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     recorded_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
 
-    overall_score           NUMERIC(5,2) NOT NULL,
-    overall_health_status   VARCHAR(20)  NOT NULL,
+    -- Overall Compliance Metrics
+    overall_score                   NUMERIC(5,2) NOT NULL,
+    overall_health_status           VARCHAR(20)  NOT NULL,
+    overall_change_from_last_month  NUMERIC(5,2),
 
-    gdpr_score              NUMERIC(5,2),
-    soc2_score              NUMERIC(5,2),
-    hipaa_score             NUMERIC(5,2),
+    -- Framework Scores
+    gdpr_score          NUMERIC(5,2),
+    gdpr_status         VARCHAR(20),
+    gdpr_rules_passed   INTEGER,
+    gdpr_rules_total    INTEGER,
+    gdpr_last_checked   TEXT,
 
+    soc2_score          NUMERIC(5,2),
+    soc2_status         VARCHAR(20),
+    soc2_rules_passed   INTEGER,
+    soc2_rules_total    INTEGER,
+    soc2_last_checked   TEXT,
+
+    hipaa_score         NUMERIC(5,2),
+    hipaa_status        VARCHAR(20),
+    hipaa_rules_passed  INTEGER,
+    hipaa_rules_total   INTEGER,
+    hipaa_last_checked  TEXT,
+
+    dpa_score           NUMERIC(5,2),
+    dpa_status          VARCHAR(20),
+    dpa_rules_passed    INTEGER,
+    dpa_rules_total     INTEGER,
+    dpa_last_checked    TEXT,
+
+    irr_score           NUMERIC(5,2),
+    irr_status          VARCHAR(20),
+    irr_rules_passed    INTEGER,
+    irr_rules_total     INTEGER,
+    irr_last_checked    TEXT,
+
+    psa_score           NUMERIC(5,2),
+    psa_status          VARCHAR(20),
+    psa_rules_passed    INTEGER,
+    psa_rules_total     INTEGER,
+    psa_last_checked    TEXT,
+
+    -- Issue Counts
     open_issues_count       INTEGER DEFAULT 0,
     critical_issues_count   INTEGER DEFAULT 0,
     high_issues_count       INTEGER DEFAULT 0,
     medium_issues_count     INTEGER DEFAULT 0,
     low_issues_count        INTEGER DEFAULT 0,
 
+    -- Compliance Health
+    compliance_health_score         NUMERIC(5,2),
+    compliance_health_trend_label   TEXT,
+
+    -- Top Issues
+    top_issue_1_issue       TEXT,
+    top_issue_1_framework   VARCHAR(20),
+    top_issue_1_severity    VARCHAR(20),
+    top_issue_1_dataset     TEXT,
+    top_issue_1_assignee    TEXT,
+    top_issue_1_due_date    TEXT,
+
+    top_issue_2_issue       TEXT,
+    top_issue_2_framework   VARCHAR(20),
+    top_issue_2_severity    VARCHAR(20),
+    top_issue_2_dataset     TEXT,
+    top_issue_2_assignee    TEXT,
+    top_issue_2_due_date    TEXT,
+
+    top_issue_3_issue       TEXT,
+    top_issue_3_framework   VARCHAR(20),
+    top_issue_3_severity    VARCHAR(20),
+    top_issue_3_dataset     TEXT,
+    top_issue_3_assignee    TEXT,
+    top_issue_3_due_date    TEXT,
+
+    -- AI Insights
+    ai_insights_text        TEXT,
+    ai_insights_beta        BOOLEAN DEFAULT TRUE,
+
+    -- Trend Data
+    trend_month_label       TEXT,
+    trend_overall_data      NUMERIC(5,2)[],
+    trend_gdpr_data         NUMERIC(5,2)[],
+    trend_soc2_data         NUMERIC(5,2)[],
+    trend_hipaa_data        NUMERIC(5,2)[],
+    trend_dpa_data          NUMERIC(5,2)[],
+    trend_irr_data          NUMERIC(5,2)[],
+    trend_psa_data          NUMERIC(5,2)[],
+
+    -- Performance Metrics
+    scan_duration_seconds   NUMERIC(8,2),
+
+    -- Full Snapshot Backup
     snapshot_json           JSONB NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_snapshots_recorded_at 
+CREATE INDEX IF NOT EXISTS idx_snapshots_recorded_at
     ON compliance_snapshots (recorded_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_snapshots_overall 
+CREATE INDEX IF NOT EXISTS idx_snapshots_overall
     ON compliance_snapshots (overall_score);
 
-CREATE INDEX IF NOT EXISTS idx_snapshots_health 
+CREATE INDEX IF NOT EXISTS idx_snapshots_health
     ON compliance_snapshots (overall_health_status);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_gdpr
+    ON compliance_snapshots (gdpr_score);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_soc2
+    ON compliance_snapshots (soc2_score);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_hipaa
+    ON compliance_snapshots (hipaa_score);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_dpa
+    ON compliance_snapshots (dpa_score);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_irr
+    ON compliance_snapshots (irr_score);
+
+CREATE INDEX IF NOT EXISTS idx_snapshots_psa
+    ON compliance_snapshots (psa_score);
+
+
+-----------------------------------------------------------------
+---DATA CARD----
+-----------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS datacards (
+    id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    catalog_id   TEXT NOT NULL,
+    table_name   TEXT,
+    full_name    TEXT,
+    data_card    TEXT NOT NULL,
+    generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status       TEXT NOT NULL DEFAULT 'generated',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_datacards_catalog UNIQUE (catalog_id)
+);

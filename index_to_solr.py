@@ -26,9 +26,9 @@ log = logging.getLogger(__name__)
 PG_DSN = (
     f"host={os.getenv('PG_HOST', 'localhost')} "
     f"port={os.getenv('PG_PORT', '5432')} "
-    f"dbname={os.getenv('PG_DB', 'semantic_search')} "
-    f"user={os.getenv('PG_USER', 'semantic_user')} "
-    f"password={os.getenv('PG_PASS', 'semantic_pass')}"
+    f"dbname={os.getenv('PG_DB', 'ig_database')} "
+    f"user={os.getenv('PG_USER', 'ig_user')} "
+    f"password={os.getenv('PG_PASS', 'ig_pass')}"
 )
 SOLR_URL = os.getenv("SOLR_URL", "http://localhost:8983/solr/app_search_core")
 

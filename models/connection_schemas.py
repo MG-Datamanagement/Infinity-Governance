@@ -251,16 +251,12 @@ class MSSQLConnectionDetails(BaseModel):
     """Connection details for Microsoft SQL Server"""
     host_port: str = Field(
         ...,
-        description="Host and port (e.g. 'mssql-server:1433' or 'mssql-server5432')"
+        description="Host and port (e.g. 'mssql-server:1433')"
     )
     username: str = Field(..., description="Database username")
-    password: SecretStr = Field(..., description="Database password (stored as secret)")
-    database: str = Field(
-        ...,
-        description="Specific database name. Use empty string or null in recipe if ingesting multiple DBs (advanced)"
-    )
+    password: str = Field(..., description="Database password")  # ← changed from SecretStr
+    database: str = Field(..., description="Specific database name")
 
-    # Optional filters (allow/deny patterns) - stored as lists
     schema_allow_patterns: Optional[List[str]] = Field(None, alias="schema_allow")
     schema_deny_patterns: Optional[List[str]] = Field(None, alias="schema_deny")
     table_allow_patterns: Optional[List[str]] = Field(None, alias="table_allow")
@@ -268,16 +264,13 @@ class MSSQLConnectionDetails(BaseModel):
     view_allow_patterns: Optional[List[str]] = Field(None, alias="view_allow")
     view_deny_patterns: Optional[List[str]] = Field(None, alias="view_deny")
 
-    # Common ingestion toggles
     include_tables: bool = True
     include_views: bool = True
-
-    # Profiling block
     profiling: MSSQLProfilingConfig = Field(default_factory=MSSQLProfilingConfig)
 
     class Config:
         extra = "forbid"
-        allow_population_by_field_name = True   # support aliases
+        allow_population_by_field_name = True
 
     @validator("host_port")
     def validate_host_port(cls, v: str) -> str:

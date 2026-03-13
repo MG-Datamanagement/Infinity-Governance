@@ -37,12 +37,18 @@ from typing import Any, Optional
 # Re-use the classification helpers 
 # ---------------------------------------------------------------------------
 
-from services.tag_classify import classification_agent as catalog_agent
+from services.tag_classify import table_classification_agent as catalog_agent
 from services.tag_classify import _fetch_available_tags, _fetch_catalogs_for_source, _save_tag_assignment
 
-from services.tag_column_assignment import classification_agent as column_agent
-from services.tag_column_assignment import _fetch_columns_for_source, _save_tag_column_assignment
-
+from services.tag_classify import column_classification_agent as column_agent
+from services.tag_classify import _fetch_columns_for_source, _save_tag_column_assignment
+from services.tag_classify import (
+    _fetch_available_tags,
+    _fetch_catalogs_for_source,
+    _fetch_columns_for_source,
+    _save_tag_assignment,
+    _save_tag_column_assignment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +179,7 @@ async def _classify_catalogs(
             logger.info(f"[AutoPII]    Analyzing table '{catalog['table_name']}' ...")
             result = catalog_agent.invoke({
                 "table_name": catalog["table_name"],
-                "table_description": catalog["description"] or catalog["table_name"],
+                "table_description": catalog.get("description") or catalog["table_name"], 
                 "available_tags": available_tags_str,
             })
 
@@ -253,7 +259,7 @@ async def _classify_columns(
             )
             result = column_agent.invoke({
                 "column_name":        col["column_name"],
-                "column_description": col["description"] or col["column_name"],
+                "column_description":  col.get("description") or col.get("column_name") or col.get("name", ""),
                 "available_tags":     available_tags_str,
             })
 

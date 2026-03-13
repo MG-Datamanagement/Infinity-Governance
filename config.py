@@ -12,9 +12,9 @@ class Settings:
     # Database
     PG_HOST: str = os.getenv("PG_HOST", "postgres_ig")
     PG_PORT: int = int(os.getenv("PG_PORT", "5432"))
-    PG_DB: str = os.getenv("PG_DB", "semantic_search")
-    PG_USER: str = os.getenv("PG_USER", "semantic_user")
-    PG_PASS: str = os.getenv("PG_PASS", "semantic_pass")
+    PG_DB: str = os.getenv("PG_DB", "ig_database")
+    PG_USER: str = os.getenv("PG_USER", "ig_user")
+    PG_PASS: str = os.getenv("PG_PASS", "ig_pass")
   
     # API
     API_HOST: str = os.getenv("API_HOST")

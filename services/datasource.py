@@ -444,21 +444,20 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
 
         # Prepare nested JSON blobs
         conn_details_dict = source.connection_details.dict(exclude_none=True)
-        advanced_dict = source.advanced.dict(exclude_none=True) if source.advanced else {}
+        # advanced_dict = source.advanced.dict(exclude_none=True) if source.advanced else {}
+        # advanced_dict = source.advanced if source.advanced else {}
 
         # For DynamoDB we usually set include_views=False (no views concept)
         result = await db.fetch_one("""
             INSERT INTO data_sources (
                 name, source_type, connection_details, description,
                 include_views, include_tables, schema_pattern, table_pattern,
-                schedule, owner_id,
-                advanced_options  -- extra column if you added it to the table
+                schedule, owner_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id, name, source_type, connection_details, description,
                       include_views, include_tables, schema_pattern, table_pattern,
-                      status, schedule, owner_id, created_at, updated_at, last_ingested_at,
-                      advanced_options
+                      status, schedule, owner_id, created_at, updated_at, last_ingested_at
         """,
             source.name,
             source.source_type.value,
@@ -469,8 +468,8 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
             None,   # schema_pattern – rarely used for DynamoDB
             json.dumps(source.table_pattern) if source.table_pattern else None,
             source.schedule or "00:00 GMT+5:30",
-            source.owner_id,
-            json.dumps(advanced_dict) if advanced_dict else None
+            source.owner_id
+            # json.dumps(advanced_dict) if advanced_dict else None
         )
 
         # Format response (same pattern as Athena)
@@ -479,7 +478,7 @@ async def create_source_dynamodb(source: DataSourceCreateDynamoDB):
         data['owner_id'] = str(data['owner_id']) if data.get('owner_id') else None
         data['connection_details'] = json.loads(data['connection_details']) if data['connection_details'] else {}
         data['table_pattern'] = json.loads(data['table_pattern']) if data['table_pattern'] else None
-        data['advanced_options'] = json.loads(data['advanced_options']) if data.get('advanced_options') else {}
+        # data['advanced_options'] = json.loads(data['advanced_options']) if data.get('advanced_options') else {}
 
         await log_api_action(
             endpoint="/sources/dynamodb", method="POST",
@@ -562,40 +561,31 @@ async def create_source_glue(source: DataSourceCreateGlue):
 async def create_source_mssql(source: DataSourceCreateMSSQL):
     """Register a new Microsoft SQL Server data source"""
     from app import db, log_api_action, logger
-    import json
 
     try:
         existing = await db.fetch_one("SELECT id FROM data_sources WHERE name = $1", source.name)
         if existing:
             raise HTTPException(status_code=400, detail=f"Source with name '{source.name}' already exists")
 
-        # Prepare nested JSON structures
-        conn_dict = source.connection_details.dict(exclude_none=True)
-
-        # Flatten patterns if you prefer, or keep nested — here we keep as-is
-        profiling_json = json.dumps(conn_dict.pop("profiling", {}))
-
-        # Optional: you could flatten patterns into top-level schema_pattern / table_pattern like Athena
-        # But for MSSQL we keep separate view/table/schema allow/deny to match UI
-        # So we store the whole connection_details as JSON
-
         result = await db.fetch_one("""
             INSERT INTO data_sources (
                 name, source_type, connection_details, description,
-                include_tables, include_views,         -- top-level for quick query
+                include_views, include_tables, schema_pattern, table_pattern,
                 schedule, owner_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id, name, source_type, connection_details, description,
-                      include_tables, include_views, status,
-                      schedule, owner_id, created_at, updated_at, last_ingested_at
+                      include_views, include_tables, schema_pattern, table_pattern,
+                      status, schedule, owner_id, created_at, updated_at, last_ingested_at
         """,
             source.name,
             source.source_type.value,
-            json.dumps(conn_dict),  # contains host_port, username, password (secret), patterns, profiling...
+            json.dumps(source.connection_details.dict(exclude_none=True)),
             source.description,
-            source.connection_details.include_tables,
-            source.connection_details.include_views,
+            source.include_views,
+            source.include_tables,
+            json.dumps(source.schema_pattern) if source.schema_pattern else None,
+            json.dumps(source.table_pattern) if source.table_pattern else None,
             source.schedule or "00:00 GMT+5:30",
             source.owner_id
         )
@@ -604,10 +594,8 @@ async def create_source_mssql(source: DataSourceCreateMSSQL):
         data['id'] = str(data['id'])
         data['owner_id'] = str(data['owner_id']) if data.get('owner_id') else None
         data['connection_details'] = json.loads(data['connection_details']) if data['connection_details'] else {}
-
-        # Optional: enrich response with parsed profiling if you want
-        if "profiling" in data['connection_details']:
-            data['profiling_enabled'] = data['connection_details']["profiling"].get("enabled", False)
+        data['schema_pattern'] = json.loads(data['schema_pattern']) if data['schema_pattern'] else None
+        data['table_pattern'] = json.loads(data['table_pattern']) if data['table_pattern'] else None
 
         await log_api_action(
             endpoint="/sources/mssql", method="POST",
@@ -687,7 +675,6 @@ async def create_source_redshift(source: DataSourceCreateRedshift):
     except Exception as e:
         logger.error(f"Error creating redshift source: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/api/v1/sources-list", response_model=List[SimpleDataSource])
 async def list_sources(
@@ -1026,6 +1013,9 @@ async def get_job(job_id: str):
         logger.error(f"Error getting job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
 @router.get("/api/v1/sources/{source_id}/stats")
 async def get_source_stats(
     source_id: str,
@@ -1033,69 +1023,74 @@ async def get_source_stats(
     status: Optional[str] = Query(None, description="Filter by status: healthy, warning, risk"),
 ):
     from app import db
-
+ 
     try:
         source = await db.fetch_one("SELECT id, name, source_type FROM data_sources WHERE id = $1", source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
-
-        total_tables = await db.fetch_val(
-            "SELECT COUNT(*) FROM catalogs WHERE source_id = $1", source_id
-        )
-
+ 
         filters = ["c.source_id = $1"]
         params = [source_id]
-
+ 
         if type and type.lower() != "all":
             params.append(type.lower())
             filters.append(f"c.type = ${len(params)}")
-
+ 
         if status:
             params.append(status.lower())
             filters.append(f"c.status = ${len(params)}")
-
+ 
+        source_type = source['source_type']
+ 
+        # Athena: emits multiple MCP aspects per table; filter out intermediate/duplicate
+        # rows that have no columns ingested yet.
+        # MongoDB: collections always have at least one field; rows with 0 columns are
+        # incomplete ingestion artifacts and should be excluded.
+        needs_column_filter = source_type in ("athena", "mongodb","glue","snowflake","postgres")
+        if needs_column_filter:
+            filters.append(
+                "c.id IN ("
+                "  SELECT DISTINCT catalog_id FROM columns"
+                "  WHERE catalog_id IS NOT NULL"
+                "  GROUP BY catalog_id HAVING COUNT(*) > 0"
+                ")"
+            )
+ 
         where_clause = "WHERE " + " AND ".join(filters)
-
+        having_clause = "HAVING COUNT(DISTINCT col.id) > 0" if needs_column_filter else ""
+ 
         catalogs = await db.fetch_all(f"""
-            SELECT 
+            SELECT
                 c.id, c.full_name, c.table_name,
                 c.row_count,
                 c.type,
                 c.status,
                 c.last_seen_at AS last_sync,
-                COUNT(DISTINCT col.id) AS column_count
+                COUNT(DISTINCT col.id) AS column_count,
+                COALESCE(
+                    JSON_AGG(
+                        DISTINCT JSONB_BUILD_OBJECT(
+                            'tag_id', t.id,
+                            'name',   t.name,
+                            'color',  t.color
+                        )
+                    ) FILTER (WHERE t.id IS NOT NULL),
+                    '[]'
+                ) AS tags
             FROM catalogs c
             LEFT JOIN columns col ON c.id = col.catalog_id
+            LEFT JOIN tag_catalog_assignments tca ON c.id = tca.catalog_id
+            LEFT JOIN tags t ON tca.tag_id = t.id
             {where_clause}
             GROUP BY c.id, c.full_name, c.table_name, c.row_count, c.type, c.status, c.last_seen_at
+            {having_clause}
             ORDER BY c.table_name
         """, *params)
-
-        # Fetch tags for all catalogs in one query
-        catalog_ids = [r['id'] for r in catalogs]
-        tags_by_catalog = {}
-        if catalog_ids:
-            tag_rows = await db.fetch_all("""
-                SELECT 
-                    tca.catalog_id,
-                    t.id   AS tag_id,
-                    t.name AS tag_name,
-                    t.color
-                FROM tag_catalog_assignments tca
-                JOIN tags t ON t.id = tca.tag_id
-                WHERE tca.catalog_id = ANY($1)
-            """, catalog_ids)
-
-            for row in tag_rows:
-                tags_by_catalog.setdefault(row['catalog_id'], []).append({
-                    "tag_id": str(row['tag_id']),
-                    "name": row['tag_name'],
-                    "color": row['color'],
-                })
-
+ 
         total_row_count = sum(r['row_count'] or 0 for r in catalogs)
         total_column_count = sum(r['column_count'] for r in catalogs)
-
+        total_tables = len(catalogs)
+ 
         return {
             "source_id": source_id,
             "source_name": source['name'],
@@ -1117,7 +1112,7 @@ async def get_source_stats(
                     "type": r['type'],
                     "status": r['status'],
                     "last_sync": r['last_sync'].isoformat() if r['last_sync'] else None,
-                    "tags": tags_by_catalog.get(r['id'], []),
+                    "tags": json.loads(r['tags']) if isinstance(r['tags'], str) else (r['tags'] or []),
                 }
                 for r in catalogs
             ],
@@ -1126,6 +1121,118 @@ async def get_source_stats(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+# @router.get("/api/v1/sources/{source_id}/stats")
+# async def get_source_stats(
+#     source_id: str,
+#     type: Optional[str] = Query(None, description="Filter by type: table or view or all"),
+#     status: Optional[str] = Query(None, description="Filter by status: healthy, warning, risk"),
+# ):
+#     from app import db
+ 
+#     try:
+#         source = await db.fetch_one("SELECT id, name, source_type FROM data_sources WHERE id = $1", source_id)
+#         if not source:
+#             raise HTTPException(status_code=404, detail="Source not found")
+ 
+#         total_tables = await db.fetch_val(
+#             "SELECT COUNT(*) FROM catalogs WHERE source_id = $1", source_id
+#         )
+ 
+#         filters = ["c.source_id = $1"]
+#         params = [source_id]
+ 
+#         if type and type.lower() != "all":
+#             params.append(type.lower())
+#             filters.append(f"c.type = ${len(params)}")
+ 
+#         if status:
+#             params.append(status.lower())
+#             filters.append(f"c.status = ${len(params)}")
+ 
+#         source_type = source['source_type']
+ 
+#         # Athena: emits multiple MCP aspects per table; filter out intermediate/duplicate
+#         # rows that have no columns ingested yet.
+#         # MongoDB: collections always have at least one field; rows with 0 columns are
+#         # incomplete ingestion artifacts and should be excluded.
+#         needs_column_filter = source_type in ("athena", "mongodb")
+#         if needs_column_filter:
+#             filters.append(
+#                 "c.id IN ("
+#                 "  SELECT DISTINCT catalog_id FROM columns"
+#                 "  WHERE catalog_id IS NOT NULL"
+#                 "  GROUP BY catalog_id HAVING COUNT(*) > 0"
+#                 ")"
+#             )
+ 
+#         where_clause = "WHERE " + " AND ".join(filters)
+#         having_clause = "HAVING COUNT(DISTINCT col.id) > 0" if needs_column_filter else ""
+ 
+#         catalogs = await db.fetch_all(f"""
+#             SELECT
+#                 c.id, c.full_name, c.table_name,
+#                 c.row_count,
+#                 c.type,
+#                 c.status,
+#                 c.last_seen_at AS last_sync,
+#                 COUNT(DISTINCT col.id) AS column_count,
+#                 COALESCE(
+#                     JSON_AGG(
+#                         DISTINCT JSONB_BUILD_OBJECT(
+#                             'tag_id', t.id,
+#                             'name',   t.name,
+#                             'color',  t.color
+#                         )
+#                     ) FILTER (WHERE t.id IS NOT NULL),
+#                     '[]'
+#                 ) AS tags
+#             FROM catalogs c
+#             LEFT JOIN columns col ON c.id = col.catalog_id
+#             LEFT JOIN tag_catalog_assignments tca ON c.id = tca.catalog_id
+#             LEFT JOIN tags t ON tca.tag_id = t.id
+#             {where_clause}
+#             GROUP BY c.id, c.full_name, c.table_name, c.row_count, c.type, c.status, c.last_seen_at
+#             {having_clause}
+#             ORDER BY c.table_name
+#         """, *params)
+ 
+#         total_row_count = sum(r['row_count'] or 0 for r in catalogs)
+#         total_column_count = sum(r['column_count'] for r in catalogs)
+ 
+#         return {
+#             "source_id": source_id,
+#             "source_name": source['name'],
+#             "source_type": source['source_type'],
+#             "total_tables_ingested": total_tables,
+#             "total_row_count": total_row_count,
+#             "total_column_count": total_column_count,
+#             "filters": {
+#                 "type": type,
+#                 "status": status,
+#             },
+#             "catalogs": [
+#                 {
+#                     "catalog_id": str(r['id']),
+#                     "full_name": r['full_name'],
+#                     "table_name": r['table_name'],
+#                     "row_count": r['row_count'],
+#                     "column_count": r['column_count'],
+#                     "type": r['type'],
+#                     "status": r['status'],
+#                     "last_sync": r['last_sync'].isoformat() if r['last_sync'] else None,
+#                     "tags": json.loads(r['tags']) if isinstance(r['tags'], str) else (r['tags'] or []),
+#                 }
+#                 for r in catalogs
+#             ],
+#         }
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
+    
+
 
 @router.get("/api/v1/sources/{source_id}/summary")
 async def get_source_summary(source_id: str):
