@@ -10,9 +10,9 @@ services:
     image: postgres:16
     container_name: datahub-postgres-ig
     environment:
-      POSTGRES_USER: semantic_user
-      POSTGRES_PASSWORD: semantic_pass
-      POSTGRES_DB: semantic_search
+      POSTGRES_USER: ig_user
+      POSTGRES_PASSWORD: ig_pass
+      POSTGRES_DB: ig_database
     ports:
       - "5432:5432"
     volumes:
@@ -21,7 +21,7 @@ services:
     # networks:
     #   - default
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U semantic_user"]
+      test: ["CMD-SHELL", "pg_isready -U ig_user"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -54,9 +54,9 @@ services:
     environment:
       PG_HOST: postgres_ig
       PG_PORT: 5432
-      PG_DB: semantic_search
-      PG_USER: semantic_user
-      PG_PASS: semantic_pass
+      PG_DB: ig_database
+      PG_USER: ig_user
+      PG_PASS: ig_pass
       AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY}
       AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION}
