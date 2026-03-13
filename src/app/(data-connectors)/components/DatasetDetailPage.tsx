@@ -15,7 +15,7 @@ import { CONSTANTS } from "@/lib/constants";
 import { ClassifyScanPhase } from "@/types/datasourcesTypes";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, Loader2 } from "lucide-react";
-
+import DatasetLineage from "@/app/(data-connectors)/components/DatasetLineage";
 const TABS = [
   "DataCard",
   "Columns",
@@ -1029,7 +1029,13 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
         )}
 
         {/* Other tabs — placeholder */}
-        {activeTab !== "DataCard" && activeTab !== "Columns" && (
+        {activeTab === "Lineage" && (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" style={{ height: "600px" }}>
+            <DatasetLineage datasetId={datasetId} datasetName={detail.name} />
+          </div>
+        )}
+
+        {activeTab !== "DataCard" && activeTab !== "Columns" && activeTab !== "Lineage" && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-16 text-center">
             <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center mx-auto mb-3">
               <svg
@@ -1057,3 +1063,4 @@ const DatasetDetailPage: React.FC<DatasetDetailPageProps> = ({
 };
 
 export default DatasetDetailPage;
+

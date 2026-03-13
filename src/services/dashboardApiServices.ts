@@ -583,4 +583,68 @@ export const dashboardApiServices = {
       `/api/v1/sources/${sourceId}/ai-summary`,
     );
   },
+
+  // ─── Lineage Visual Types ─────────────────────────────────────────────────────
+
+  async fetchLineageVisual(
+    catalogId: string,
+    depth: number = 2,
+    direction: "upstream" | "downstream" | "both" = "both",
+  ): Promise<LineageVisualResponse> {
+    return dashboardApiClient.get<LineageVisualResponse>(
+      `/api/v1/lineage-visual/${catalogId}`,
+      { params: { depth, direction } },
+    );
+  },
 };
+
+export interface LineageApiColumn {
+  id: string;
+  name: string;
+  data_type: string;
+  is_primary_key: boolean;
+  is_foreign_key: boolean;
+  is_nullable: boolean;
+}
+
+export interface LineageApiTag {
+  id: string;
+  name: string;
+  color: string | null;
+  tag_type: string;
+}
+
+export interface LineageApiSource {
+  id: string;
+  name: string;
+  source_type: string;
+}
+
+export interface LineageApiColumnMapping {
+  source_column: string;
+  target_column: string;
+}
+
+export interface LineageApiNode {
+  id: string;
+  table_name: string;
+  full_name: string;
+  schema_name: string;
+  database_name: string;
+  type: "table" | "view" | "dashboard";
+  status: "healthy" | "warning" | "error";
+  source: LineageApiSource;
+  columns: LineageApiColumn[];
+  tags: LineageApiTag[];
+  lineage_id: string | null;
+  transformation_query: string | null;
+  column_mappings: LineageApiColumnMapping[];
+  depth: number;
+}
+
+export interface LineageVisualResponse {
+  root: LineageApiNode;
+  upstreams: LineageApiNode[];
+  downstreams: LineageApiNode[];
+}
+
