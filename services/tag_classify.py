@@ -22,7 +22,7 @@ llm = AzureChatOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     deployment_name=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
     model_name=os.getenv("AZURE_OPENAI_API_MODEL_NAME"),
-    temperature=0.1,
+    temperature=0.5,
 )
 
 
@@ -72,7 +72,7 @@ def create_table_classification_chain():
     Output:
     {{
         "tag": "PII",
-        "confidence_score": 0.97,
+        "confidence_score": 0.78,
         "reasoning": "Contains direct personal identifiers including name, email, and phone."
     }}
 
@@ -100,7 +100,7 @@ def create_table_classification_chain():
     Output:
     {{
         "tag": "Operational",
-        "confidence_score": 0.95,
+        "confidence_score": 0.65,
         "reasoning": "Contains system-generated logs for monitoring and operations."
     }}
 
@@ -166,7 +166,7 @@ class BulkClassifyRequest(BaseModel):
     source_id: str
     Require_human_approval: bool = False
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.0
+    min_confidence: float = 0.1
 
 
 class CatalogClassificationResult(BaseModel):
@@ -294,7 +294,7 @@ async def classify_table(data: TableInfo):
         return {
             "table_name": data.table_name,
             "tag": result.get("tag", "Unknown"),
-            "confidence_score": result.get("confidence_score", 0.0),
+            "confidence_score": result.get("confidence_score", 0.1),
             "reasoning": result.get("reasoning", "No reasoning provided"),
         }
     except HTTPException:
@@ -360,7 +360,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
             })
 
             suggested_tag_name: str = llm_result.get("tag", "Unknown")
-            confidence: float = float(llm_result.get("confidence_score", 0.0))
+            confidence: float = float(llm_result.get("confidence_score", 0.1))
             reasoning: str = llm_result.get("reasoning", "No reasoning provided")
 
             # Resolve tag_id (case-insensitive match)
@@ -398,7 +398,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
                 full_name=catalog["full_name"],
                 suggested_tag="Error",
                 tag_id=None,
-                confidence_score=0.0,
+                confidence_score=0.1,
                 reasoning=f"Classification error: {str(e)}",
                 saved=False,
             ))
@@ -555,13 +555,13 @@ class BulkColumnClassifyRequest(BaseModel):
     save_to_db      : when True, persist suggested tags to tag_column_assignments;
                       when False (default) return a preview only
     assigned_by     : label stored in the assigned_by column  (default 'ai-auto')
-    min_confidence  : only save assignments at or above this threshold (default 0.0)
+    min_confidence  : only save assignments at or above this threshold (default 0.1)
     """
     source_id: str
     catalog_id: Optional[str] = None
     save_to_db: bool = False
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.0
+    min_confidence: float = 0.1
 
 
 class ColumnClassificationResult(BaseModel):
@@ -759,7 +759,7 @@ async def classify_column(data: ColumnInfo):
             "column_name": data.column_name,
             "tag": result.get("tag", "Unknown"),
             "is_sensitive": result.get("is_sensitive", False),
-            "confidence_score": result.get("confidence_score", 0.0),
+            "confidence_score": result.get("confidence_score", 0.1),
             "reasoning": result.get("reasoning", "No reasoning provided"),
         }
 
@@ -862,7 +862,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
             })
 
             suggested_tag: str  = llm_result.get("tag", "Unknown")
-            confidence: float   = float(llm_result.get("confidence_score", 0.0))
+            confidence: float   = float(llm_result.get("confidence_score", 0.1))
             is_sensitive: bool  = bool(llm_result.get("is_sensitive", False))
             reasoning: str      = llm_result.get("reasoning", "No reasoning provided")
 
@@ -921,7 +921,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
                 tag_id=None,
                 tag_name=None,
                 is_sensitive=False,
-                confidence_score=0.0,
+                confidence_score=0.1,
                 reasoning=f"Classification error: {str(e)}",
                 saved=False,
             ))
@@ -946,12 +946,12 @@ class BulkColumnClassifyByCatalogRequest(BaseModel):
     catalog_id      : UUID of the catalog (table) to classify
     save_to_db      : when True, persist suggested tags to tag_column_assignments
     assigned_by     : label stored in the assigned_by column (default 'ai-auto')
-    min_confidence  : only save assignments at or above this threshold (default 0.7)
+    min_confidence  : only save assignments at or above this threshold (default 0.1)
     """
     catalog_id: str
     save_to_db: bool = True
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.7
+    min_confidence: float = 0.1
 
 
 @column_router.post(
@@ -1027,7 +1027,7 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
             })
 
             suggested_tag: str = llm_result.get("tag", "Unknown")
-            confidence: float  = float(llm_result.get("confidence_score", 0.0))
+            confidence: float  = float(llm_result.get("confidence_score", 0.1))
             is_sensitive: bool = bool(llm_result.get("is_sensitive", False))
             reasoning: str     = llm_result.get("reasoning", "No reasoning provided")
 
@@ -1085,7 +1085,7 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
                 tag_id=None,
                 tag_name=None,
                 is_sensitive=False,
-                confidence_score=0.0,
+                confidence_score=0.1,
                 reasoning=f"Classification error: {str(e)}",
                 saved=False,
             ))
@@ -1126,12 +1126,12 @@ class FullScanRequest(BaseModel):
     source_id      : UUID of the ingested data source
     save_to_db     : persist all assignments (default True)
     assigned_by    : label stored in assigned_by columns (default 'ai-auto')
-    min_confidence : skip saving assignments below this threshold (default 0.0)
+    min_confidence : skip saving assignments below this threshold (default 0.1)
     """
     source_id: str
     save_to_db: bool = True
     assigned_by: str = "ai-auto"
-    min_confidence: float = 0.0
+    min_confidence: float = 0.1
 
 
 class TableScanResult(BaseModel):
@@ -1270,7 +1270,7 @@ async def full_scan_source(request: FullScanRequest):
         # ---- 4. Table classification ------------------------------------
         table_tag = "Error"
         table_tag_id: Optional[str] = None
-        table_confidence = 0.0
+        table_confidence = 0.1
         table_reasoning = "Classification error"
         table_tag_saved = False
 
@@ -1281,7 +1281,7 @@ async def full_scan_source(request: FullScanRequest):
                 "available_tags": available_tags_str,
             })
             table_tag       = tbl_result.get("tag", "Unknown")
-            table_confidence = float(tbl_result.get("confidence_score", 0.0))
+            table_confidence = float(tbl_result.get("confidence_score", 0.1))
             table_reasoning  = tbl_result.get("reasoning", "No reasoning provided")
             table_tag_id     = tag_name_to_id.get(table_tag.lower())
 
@@ -1322,7 +1322,7 @@ async def full_scan_source(request: FullScanRequest):
                 })
 
                 suggested_tag: str = col_result.get("tag", "Unknown")
-                confidence: float  = float(col_result.get("confidence_score", 0.0))
+                confidence: float  = float(col_result.get("confidence_score", 0.1))
                 is_sensitive: bool = bool(col_result.get("is_sensitive", False))
                 col_tag_id: Optional[str] = tag_name_to_id.get(suggested_tag.lower())
 

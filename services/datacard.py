@@ -85,14 +85,11 @@ its primary purpose, and who typically uses it.
 ### 3. Schema & Column Details
 Brief explanation of what the schema represents, followed by notable columns and their business meaning.
 
-### 4. Data Quality Indicators
-Highlight any nullable columns, presence/absence of primary keys, foreign-key relationships, 
-and what this implies about data integrity.
 
-### 5. Business Value & Use Cases
+### 4. Business Value & Use Cases
 2-3 concrete use cases or analytical questions this dataset can answer.
 
-### 6. Governance Notes
+### 5. Governance Notes
 Domain classification, assigned tags, ownership, and any data sensitivity considerations 
 inferred from column names or types.
 ---
