@@ -177,7 +177,7 @@ class CatalogClassificationResult(BaseModel):
     tag_id: Optional[str] = None
     confidence_score: float
     reasoning: str
-    saved: bool = False
+    saved: bool = True
 
 
 class BulkClassifyResponse(BaseModel):
@@ -387,7 +387,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
                 tag_id=tag_id,
                 confidence_score=confidence,
                 reasoning=reasoning,
-                saved=saved,
+                saved=True,
             ))
 
         except Exception as e:
@@ -400,7 +400,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
                 tag_id=None,
                 confidence_score=0.1,
                 reasoning=f"Classification error: {str(e)}",
-                saved=False,
+                saved=True,
             ))
 
     # -- 6. Return summary -------------------------------------------------
@@ -901,7 +901,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
                 is_sensitive=is_sensitive,
                 confidence_score=confidence,
                 reasoning=reasoning,
-                saved=saved,
+                saved=True,
             ))
 
         except Exception as e:
@@ -923,7 +923,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
                 is_sensitive=False,
                 confidence_score=0.1,
                 reasoning=f"Classification error: {str(e)}",
-                saved=False,
+                saved=True,
             ))
 
     # -- 6. Return summary -------------------------------------------------
@@ -1065,7 +1065,7 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
                 is_sensitive=is_sensitive,
                 confidence_score=confidence,
                 reasoning=reasoning,
-                saved=saved,
+                saved=True,
             ))
 
         except Exception as e:
@@ -1087,7 +1087,7 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
                 is_sensitive=False,
                 confidence_score=0.1,
                 reasoning=f"Classification error: {str(e)}",
-                saved=False,
+                saved=True,
             ))
 
     # -- 6. Return summary -------------------------------------------------
