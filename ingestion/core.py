@@ -1640,6 +1640,21 @@ class IngestionManager:
                     sink.close()
                     records_ingested = sink.records_written
 
+                # ── 7.5. Cleanup zero-column catalogs ────────────────────────
+                try:
+                    # Some sources emit duplicate or empty catalog entries without any columns.
+                    if source_type in {"athena", "mongodb", "glue", "snowflake", "postgres"}:
+                        await self.db.execute("""
+                            DELETE FROM catalogs
+                            WHERE source_id = $1
+                              AND id NOT IN (
+                                  SELECT DISTINCT catalog_id FROM columns WHERE catalog_id IS NOT NULL
+                              )
+                        """, source_id)
+                        logger.info(f"[Ingestion] Cleaned up zero-column catalogs for {source_type}")
+                except Exception as cleanup_err:
+                    logger.warning(f"[Ingestion] Failed to clean up catalogs for {source_type}: {cleanup_err}")
+
                 # ── 8. Mark job success ──────────────────────────────────────
                 await self.update_job(job_id, 'success', records_ingested)
                 # ── 9. Snowflake fallback lineage via QUERY_HISTORY ──────────
