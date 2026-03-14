@@ -371,7 +371,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
             if (
                 request.Require_human_approval
                 and tag_id is not None
-                and confidence >= request.min_confidence
+                and confidence >= 0.1
             ):
                 saved = await _save_tag_assignment(
                     db, tag_id, catalog["id"], request.assigned_by
@@ -874,7 +874,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
             if (
                 request.save_to_db
                 and tag_id is not None
-                and confidence >= request.min_confidence
+                and confidence >= 0.1
             ):
                 saved = await _save_tag_column_assignment(
                     db,
@@ -1038,7 +1038,7 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
             if (
                 request.save_to_db
                 and tag_id is not None
-                and confidence >= request.min_confidence
+                and confidence >= 0.1
             ):
                 saved = await _save_tag_column_assignment(
                     db,
@@ -1288,7 +1288,7 @@ async def full_scan_source(request: FullScanRequest):
             if (
                 request.save_to_db
                 and table_tag_id is not None
-                and table_confidence >= request.min_confidence
+                and table_confidence >= 0.1
             ):
                 table_tag_saved = await _save_tag_assignment(
                     db, table_tag_id, catalog_id, request.assigned_by
@@ -1337,7 +1337,7 @@ async def full_scan_source(request: FullScanRequest):
                 if (
                     request.save_to_db
                     and col_tag_id is not None
-                    and confidence >= request.min_confidence
+                    and confidence >= 0.1
                 ):
                     saved = await _save_tag_column_assignment(
                         db,
