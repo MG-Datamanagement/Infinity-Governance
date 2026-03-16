@@ -1917,178 +1917,173 @@ def export_compliance_report():
 
 
 
-@router.get("/api/compliance/dataset/{dataset_id}", tags=["Compliance"])
-def get_dataset_compliance_report(dataset_id: str):
+def generate_rule_name(issue: str) -> str:
+    words = issue.split()
+    return " ".join(words[:2]) if len(words) >= 2 else issue
+
+@router.get("/api/compliance/dataset/{catalog_id}", tags=["Compliance"])
+def get_dataset_compliance_report(catalog_id: str):
 
     if _db is None:
-        raise HTTPException(status_code=503, detail="Database not initialised.")
+        raise HTTPException(status_code=503, detail="Database not initialised")
 
-    # ---------------------------------------------------
-    # 1️⃣ Get dataset info
-    # ---------------------------------------------------
+    # --------------------------------------------------
+    # 1️⃣ Fetch dataset metadata
+    # --------------------------------------------------
 
     dataset_sql = """
-    SELECT
-        c.id,
-        c.table_name,
-        c.full_name,
-        c.schema_name,
-        c.database_name,
-        o.name AS owner
-    FROM catalogs c
-    LEFT JOIN owners o ON o.id = c.owner_id
-    WHERE c.id = %(dataset_id)s
+        SELECT id, table_name, full_name, owner_id
+        FROM catalogs
+        WHERE id = %(catalog_id)s
     """
 
-    dataset_rows = _db.execute_query(dataset_sql, {"dataset_id": dataset_id})
+    dataset_rows = _db.execute_query(dataset_sql, {"catalog_id": catalog_id})
 
     if not dataset_rows:
         raise HTTPException(status_code=404, detail="Dataset not found")
 
     dataset = dataset_rows[0]
 
-    # ---------------------------------------------------
-    # 2️⃣ Get columns + tags
-    # ---------------------------------------------------
+    dataset_full_name = dataset["full_name"]
 
-    column_sql = """
-    SELECT
-        col.id,
-        col.name,
-        col.data_type,
-        t.name AS tag,
-        tca.confidence_score
-    FROM columns col
-    LEFT JOIN tag_column_assignments tca ON tca.column_id = col.id
-    LEFT JOIN tags t ON t.id = tca.tag_id
-    WHERE col.catalog_id = %(dataset_id)s
+    # --------------------------------------------------
+    # 2️⃣ Fetch latest compliance snapshot
+    # --------------------------------------------------
+
+    snapshot_sql = """
+        SELECT snapshot_json
+        FROM compliance_snapshots
+        ORDER BY recorded_at DESC
+        LIMIT 1
     """
 
-    columns = _db.execute_query(column_sql, {"dataset_id": dataset_id})
+    rows = _db.execute_query(snapshot_sql)
 
-    # ---------------------------------------------------
-    # 3️⃣ Build Rule Checks
-    # ---------------------------------------------------
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="No compliance snapshot found. Run compliance scan first."
+        )
+
+    snapshot = rows[0]["snapshot_json"]
+
+    # --------------------------------------------------
+    # 3️⃣ Extract open issues
+    # --------------------------------------------------
+
+    issues = snapshot.get("open_issues", {}).get("items", [])
+
+    dataset_issues = [
+        i for i in issues
+        if dataset_full_name in (i.get("dataset") or "")
+    ]
+
+    # --------------------------------------------------
+    # 4️⃣ Build framework lookup map (optimization)
+    # --------------------------------------------------
+
+    frameworks = snapshot.get("frameworks", [])
+
+    framework_map = {
+        f["name"]: f for f in frameworks
+    }
+
+    # --------------------------------------------------
+    # 5️⃣ Build rules list
+    # --------------------------------------------------
 
     rules = []
 
-    # ---------------------------
-    # Rule 1 — PII Encryption
-    # ---------------------------
+    for idx, issue in enumerate(dataset_issues, start=1):
 
-    pii_columns = [c for c in columns if c.get("tag") == "pii"]
+        issue_text = issue.get("issue", "")
 
-    rules.append({
-        "rule_id": "RULE_001",
-        "rule_name": "PII Encryption",
-        "description": "All columns tagged as PII must have encryption at rest enabled.",
-        "status": "COMPLIANT",
-        "severity": "LOW",
-        "evidence": [
-            {
-                "column": c["name"],
-                "protection": "Encrypted",
-                "algorithm": "AES-256"
-            }
-            for c in pii_columns
-        ]
-    })
+        rule_name = generate_rule_name(issue_text)
 
-    # ---------------------------
-    # Rule 2 — Financial Access Control
-    # ---------------------------
+        framework_name = issue.get("framework")
+        framework = framework_map.get(framework_name)
 
-    financial_columns = [c for c in columns if c.get("tag") == "financial"]
+        description = issue_text
+        status = "VIOLATION"
 
-    rules.append({
-        "rule_id": "RULE_002",
-        "rule_name": "Financial Access Control",
-        "description": "Columns tagged as Financial must have Row-Level Security policies.",
-        "status": "VIOLATION",
-        "severity": "CRITICAL",
-        "requires_human_approval": True,
-        "violations": [
-            {
-                "column": c["name"],
-                "issue": "No RLS Policy Found",
-                "recommended_action": "Apply Default RLS Policy"
-            }
-            for c in financial_columns
-        ]
-    })
+        if framework:
+            for indicator in framework.get("indicators", []):
+                if indicator.get("text") == issue_text:
 
-    # ---------------------------
-    # Rule 3 — Data Retention
-    # ---------------------------
+                    description = indicator.get("text")
 
-    rules.append({
-        "rule_id": "RULE_003",
-        "rule_name": "Data Retention",
-        "description": "Regulated data must have a defined retention period.",
-        "status": "COMPLIANT",
-        "severity": "MEDIUM",
-        "evidence": [
-            {
-                "column": "ssn",
-                "regulation": "HIPAA",
-                "retention_period": "7 Years"
-            }
-        ]
-    })
+                    status = (
+                        "VIOLATION"
+                        if indicator.get("status") == "error"
+                        else "COMPLIANT"
+                    )
 
-    # ---------------------------
-    # Rule 4 — AI Classification Quality
-    # ---------------------------
+                    break
 
-    low_confidence = [
-        c for c in columns
-        if c.get("confidence_score") and c["confidence_score"] < 0.80
-    ]
+        rules.append({
+            "rule_id": f"RULE-{idx}",
+            "rule_name": rule_name,
+            "description": description,
+            "status": status,
+            "severity": issue.get("severity"),
+            "violations": [
+                {
+                    "dataset": issue.get("dataset"),
+                    "assignee": issue.get("assignee"),
+                    "due_date": issue.get("due_date"),
+                    "action_url": issue.get("action_url")
+                }
+            ]
+        })
 
-    rules.append({
-        "rule_id": "RULE_004",
-        "rule_name": "AI Classification Quality",
-        "description": "All AI classification tags must exceed 80% confidence.",
-        "status": "VIOLATION",
-        "severity": "MEDIUM",
-        "violations": [
-            {
-                "column": c["name"],
-                "tag": c["tag"],
-                "confidence": float(c["confidence_score"]) * 100,
-                "threshold": 80,
-                "issue": "Low classification confidence"
-            }
-            for c in low_confidence
-        ]
-    })
+    # --------------------------------------------------
+    # 6️⃣ Fetch dataset column count (protected assets)
+    # --------------------------------------------------
 
-    # ---------------------------------------------------
-    # 4️⃣ Calculate summary
-    # ---------------------------------------------------
+    column_sql = """
+        SELECT COUNT(*) AS column_count
+        FROM columns
+        WHERE catalog_id = %(catalog_id)s
+    """
 
-    violation_count = sum(
-        1 for r in rules if r["status"] == "VIOLATION"
+    column_result = _db.execute_query(column_sql, {"catalog_id": catalog_id})
+
+    column_count = column_result[0]["column_count"] if column_result else 0
+
+    # --------------------------------------------------
+    # 7️⃣ Extract overall compliance info
+    # --------------------------------------------------
+
+    overall = snapshot.get("overall_compliance", {})
+
+    compliance_score = overall.get("score")
+    health_status = overall.get("health_status")
+
+    # --------------------------------------------------
+    # 8️⃣ Count critical violations
+    # --------------------------------------------------
+
+    critical_violations = sum(
+        1 for r in rules if r.get("severity") == "CRITICAL"
     )
 
-    compliance_score = max(0, 100 - (violation_count * 15))
-
-    # ---------------------------------------------------
-    # 5️⃣ Response
-    # ---------------------------------------------------
+    # --------------------------------------------------
+    # 9️⃣ Final API response
+    # --------------------------------------------------
 
     return {
         "dataset": {
-            "dataset_id": dataset["id"],
+            "catalog_id": dataset["id"],
             "name": dataset["table_name"],
             "full_name": dataset["full_name"],
-            "owner": dataset["owner"]
+            "owner": dataset["owner_id"]
         },
         "summary": {
             "compliance_score": compliance_score,
+            "status": health_status,
             "policies_checked": len(rules),
-            "protected_assets": len(columns),
-            "critical_violations": violation_count
+            "protected_assets": column_count,
+            "critical_violations": critical_violations
         },
         "rules": rules
     }

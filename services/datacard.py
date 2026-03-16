@@ -901,3 +901,135 @@ async def bulk_generate_datacards(
         results=results,
     )
  
+ 
+# ============================================================================
+# GET  /api/v1/catalogs/{catalog_id}/properties
+# ============================================================================
+ 
+class CatalogPropertiesResponse(BaseModel):
+    full_name:    Optional[str]
+    database:     Optional[str]
+    schema_name:  Optional[str]
+    source:       Optional[str]
+    source_type:  Optional[str]
+    column_count: int
+    domains:      str          # comma-separated or "None"
+    tags:         str          # comma-separated or "None"
+    owner:        str          # "Name (role) – email" or "Unassigned"
+    last_updated: Optional[str]
+ 
+ 
+@router.get(
+    "/api/v1/catalogs/{catalog_id}/properties",
+    response_model=CatalogPropertiesResponse,
+    summary="Get Key Metadata properties for a catalog entry",
+)
+async def get_catalog_properties(catalog_id: str):
+    """
+    Returns only the **Key Metadata** block for the given catalog_id:
+    Full Name, Database, Schema, Source, Source Type, Column Count,
+    Domain(s), Tags, Owner, and Last Updated.
+    """
+    from app import db, logger
+ 
+    endpoint = f"/api/v1/catalogs/{catalog_id}/properties"
+ 
+    # ── Fetch core catalog row ───────────────────────────────────────────────
+    catalog = await db.fetch_one(
+        """
+        SELECT
+            c.full_name,
+            c.database_name,
+            c.schema_name,
+            c.updated_at,
+            ds.name        AS source_name,
+            ds.source_type AS source_type,
+            o.name         AS owner_name,
+            o.role         AS owner_role,
+            o.email        AS owner_email
+        FROM catalogs c
+        LEFT JOIN data_sources ds ON c.source_id = ds.id
+        LEFT JOIN owners o        ON c.owner_id  = o.id
+        WHERE c.id = $1
+        """,
+        catalog_id,
+    )
+ 
+    if not catalog:
+        await _log(
+            db, logger,
+            endpoint=endpoint, method="GET",
+            action_summary=f"Properties GET failed – catalog '{catalog_id}' not found",
+            entity_id=catalog_id, status_code=404,
+        )
+        raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
+ 
+    # ── Column count ─────────────────────────────────────────────────────────
+    col_count_row = await db.fetch_one(
+        "SELECT COUNT(*) AS cnt FROM columns WHERE catalog_id = $1",
+        catalog_id,
+    )
+    column_count = col_count_row["cnt"] if col_count_row else 0
+ 
+    # ── Domains ──────────────────────────────────────────────────────────────
+    domain_rows = await db.fetch_all(
+        """
+        SELECT d.name
+        FROM domain_catalog_assignments dca
+        JOIN domains d ON dca.domain_id = d.id
+        WHERE dca.catalog_id = $1
+        ORDER BY d.name
+        """,
+        catalog_id,
+    )
+    domains_str = ", ".join(r["name"] for r in domain_rows) or "None"
+ 
+    # ── Tags ─────────────────────────────────────────────────────────────────
+    tag_rows = await db.fetch_all(
+        """
+        SELECT t.name
+        FROM tag_catalog_assignments tca
+        JOIN tags t ON tca.tag_id = t.id
+        WHERE tca.catalog_id = $1
+        ORDER BY t.name
+        """,
+        catalog_id,
+    )
+    tags_str = ", ".join(r["name"] for r in tag_rows) or "None"
+ 
+    # ── Owner string ─────────────────────────────────────────────────────────
+    if catalog["owner_name"]:
+        owner_str = f"{catalog['owner_name']} ({catalog['owner_role']}) – {catalog['owner_email'] or 'no email'}"
+    else:
+        owner_str = "Unassigned"
+ 
+    # ── Last updated (dd/mm/yyyy HH:MM:SS) ───────────────────────────────────
+    last_updated = (
+        catalog["updated_at"].strftime("%d/%m/%Y %H:%M:%S")
+        if catalog["updated_at"] else None
+    )
+ 
+    # ── Audit log ─────────────────────────────────────────────────────────────
+    await _log(
+        db, logger,
+        endpoint=endpoint, method="GET",
+        action_summary=f"Properties retrieved for catalog '{catalog_id}'",
+        entity_type="catalog",
+        entity_id=catalog_id,
+        status_code=200,
+        response_summary=f"columns={column_count} | domains={domains_str} | tags={tags_str}",
+    )
+ 
+    return CatalogPropertiesResponse(
+        full_name=catalog["full_name"],
+        database=catalog["database_name"],
+        schema_name=catalog["schema_name"],
+        source=catalog["source_name"],
+        source_type=catalog["source_type"],
+        column_count=column_count,
+        domains=domains_str,
+        tags=tags_str,
+        owner=owner_str,
+        last_updated=last_updated,
+    )
+ 
