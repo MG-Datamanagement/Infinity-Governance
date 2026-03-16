@@ -134,4 +134,4 @@ for src in name display_name description full_name table_name schema_name \
 done
 
 echo ""
-echo "✅ Solr schema configuration complete for core: ${CORE}"
+echo " Solr schema configuration complete for core: ${CORE}"

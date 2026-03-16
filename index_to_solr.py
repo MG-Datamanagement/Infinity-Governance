@@ -2,12 +2,6 @@
 index_to_solr.py
 Reads all searchable entities from Postgres and indexes them into Solr.
 
-Run manually or hook into your ingestion pipeline:
-    python index_to_solr.py
-
-Reads from .env (via python-dotenv) or environment:
-    PG_HOST, PG_PORT, PG_DB, PG_USER, PG_PASS
-    SOLR_URL
 """
 
 import logging
@@ -315,7 +309,7 @@ def reindex():
     for i in range(0, len(all_docs), batch_size):
         solr.add(all_docs[i : i + batch_size])
 
-    log.info("✅ Indexing complete.")
+    log.info(" Indexing complete.")
 
 
 if __name__ == "__main__":

@@ -229,21 +229,21 @@ CREATE INDEX IF NOT EXISTS idx_columns_primary_key  ON columns(is_primary_key)
 CREATE INDEX IF NOT EXISTS idx_columns_foreign_key  ON columns(is_foreign_key)
     WHERE is_foreign_key = TRUE;                                                    -- added: partial index for FKs
 
--- ============================================================================
--- RELATIONSHIPS (legacy lineage)
--- ============================================================================
+-- -- ============================================================================
+-- -- RELATIONSHIPS (legacy lineage)
+-- -- ============================================================================
 
-CREATE TABLE IF NOT EXISTS relationships (
-    id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    source_catalog_id  UUID REFERENCES catalogs(id) ON DELETE CASCADE,
-    target_catalog_id  UUID REFERENCES catalogs(id) ON DELETE CASCADE,
-    relationship_type  VARCHAR(50) DEFAULT 'dependency',
-    metadata           JSONB,
-    created_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- CREATE TABLE IF NOT EXISTS relationships (
+--     id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+--     source_catalog_id  UUID REFERENCES catalogs(id) ON DELETE CASCADE,
+--     target_catalog_id  UUID REFERENCES catalogs(id) ON DELETE CASCADE,
+--     relationship_type  VARCHAR(50) DEFAULT 'dependency',
+--     metadata           JSONB,
+--     created_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+-- );
 
-CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_catalog_id);  -- added
-CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_catalog_id);  -- added
+-- CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_catalog_id);  -- added
+-- CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_catalog_id);  -- added
 
 -- ============================================================================
 -- CUSTOM PROPERTIES

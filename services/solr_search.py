@@ -2,9 +2,6 @@
 routers/search.py
 Global search endpoint backed by Apache Solr.
 
-Mount in your main app:
-    from routers.search import router as search_router
-    app.include_router(search_router, prefix="/api/v1", tags=["Search"])
 
 Environment variables:
     SOLR_URL  – defaults to http://localhost:8983/solr/app_search_core
