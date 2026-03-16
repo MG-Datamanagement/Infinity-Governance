@@ -703,7 +703,7 @@ const AddDataSourceModal: React.FC<AddDataSourceModalProps> = ({ onClose, onSucc
     enabled: true, frequency: "Daily" as Frequency, hour: "00", minute: "00", timezone: "Asia/Calcutta",
   });
   const [finish, setFinish] = useState({
-    name: "", piiEnabled: true, piiApproval: false, failureEmail: "", owner_id: "",
+    name: "", piiEnabled: true, piiApproval: true, failureEmail: "", owner_id: "",
   });
   const [owners, setOwners] = useState<ApiOwner[]>([]);
   const { setAddDsConfig } = useAppStore()
