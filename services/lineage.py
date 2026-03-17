@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
-
+from langchain_openai import AzureChatOpenAI
+import os
 router = APIRouter(tags=["lineage"])
 
 
@@ -52,14 +53,23 @@ class VisualNode(BaseModel):
     transformation_query: Optional[str] = None
     column_mappings: List[ColumnMapping] = []
     depth: int = 1
- 
+    ai_summary: Optional[str] = None
  
 class VisualLineageResponse(BaseModel):
     root: VisualNode
     upstreams: List[VisualNode] = []      # flattened, depth-ordered
     downstreams: List[VisualNode] = []
  
- 
+
+#---------------llm-------------
+llm = AzureChatOpenAI(
+    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    temperature=0.2
+)
+
 # ─── Helpers ─────────────────────────────────────────────────────────────────
  
 async def _fetch_catalog_node(db, catalog_id: str) -> Optional[Dict]:
@@ -143,9 +153,45 @@ async def _fetch_col_mappings(db, lineage_id: str) -> List[ColumnMapping]:
         for r in rows
     ]
  
- 
+async def _generate_ai_summary(llm, node: Dict, upstream: List[str], downstream: List[str]) -> str:
+
+    columns = ", ".join([c["name"] for c in node.get("columns", [])[:10]])
+
+    upstream_str = ", ".join(upstream) if upstream else "None"
+    downstream_str = ", ".join(downstream) if downstream else "None"
+
+    prompt = f"""
+    You are a senior data platform architect.
+
+    Describe the role of this dataset in the data pipeline.
+
+    Dataset:
+    {node.get("full_name")}
+
+    Key Columns:
+    {columns}
+
+    Upstream Tables:
+    {upstream_str}
+
+    Downstream Tables:
+    {downstream_str}
+
+    Explain:
+    • what the dataset represents
+    • where its data originates
+    • how downstream datasets use it
+    • its role in the pipeline
+
+    Respond in 3 concise sentences.
+    """
+    result = await llm.ainvoke(prompt)
+
+    return result.content
+
 async def _build_visual_node(
     db,
+    llm,
     catalog_id: str,
     lineage_id: Optional[str],
     transformation_query: Optional[str],
@@ -158,7 +204,24 @@ async def _build_visual_node(
     columns      = await _fetch_columns(db, catalog_id)
     tags         = await _fetch_tags(db, catalog_id)
     col_mappings = await _fetch_col_mappings(db, lineage_id) if lineage_id else []
- 
+    # determine lineage direction context
+
+    upstream_tables = []
+    downstream_tables = []
+
+    if lineage_id and transformation_query:
+        upstream_tables.append("upstream dependency")
+        downstream_tables.append("downstream dependency")
+
+    ai_summary = await _generate_ai_summary(
+        llm,
+        {
+            "full_name": data.get("full_name"),
+            "columns": [c.dict() for c in columns]
+        },
+        upstream=upstream_tables,
+        downstream=downstream_tables
+    )
     source = None
     if data.get("source_id"):
         source = SourceInfo(
@@ -182,6 +245,7 @@ async def _build_visual_node(
         transformation_query=transformation_query,
         column_mappings=col_mappings,
         depth=depth,
+        ai_summary=ai_summary
     )
  
  
@@ -230,6 +294,7 @@ async def _traverse(
  
         node = await _build_visual_node(
             db,
+            llm,
             catalog_id=next_id,
             lineage_id=str(row["id"]),
             transformation_query=row.get("transformation_query"),
@@ -282,6 +347,18 @@ async def get_visual_lineage(
                 source_type=root_data["source_type"] or "",
             )
  
+        # Generate AI summary for root
+
+        root_summary = await _generate_ai_summary(
+            llm,
+            {
+                "full_name": root_data.get("full_name"),
+                "columns": [c.dict() for c in root_columns]
+            },
+            upstream=[],
+            downstream=[]
+        )
+
         root_node = VisualNode(
             id=str(root_data["id"]),
             table_name=root_data["table_name"],
@@ -294,6 +371,7 @@ async def get_visual_lineage(
             columns=root_columns,
             tags=root_tags,
             depth=0,
+            ai_summary=root_summary
         )
  
         # ── traverse upstreams ────────────────────────────────────────────────

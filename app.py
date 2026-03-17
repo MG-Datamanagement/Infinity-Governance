@@ -231,6 +231,9 @@ app.include_router(compliance_overview_router)
 from services.solr_search import router as solr_router
 app.include_router(solr_router) 
 
+from services.catalog_properties import router as catalog_properties_router
+app.include_router(catalog_properties_router)   
+
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================

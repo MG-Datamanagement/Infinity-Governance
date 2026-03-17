@@ -903,133 +903,225 @@ async def bulk_generate_datacards(
  
  
 # ============================================================================
-# GET  /api/v1/catalogs/{catalog_id}/properties
+# Schemas – catalog properties + custom properties
 # ============================================================================
  
-class CatalogPropertiesResponse(BaseModel):
-    full_name:    Optional[str]
-    database:     Optional[str]
-    schema_name:  Optional[str]
-    source:       Optional[str]
-    source_type:  Optional[str]
-    column_count: int
-    domains:      str          # comma-separated or "None"
-    tags:         str          # comma-separated or "None"
-    owner:        str          # "Name (role) – email" or "Unassigned"
-    last_updated: Optional[str]
+class CustomPropertyItem(BaseModel):
+    id:         str
+    key:        str
+    value:      str
+    value_type: str
  
+ 
+class CatalogPropertiesResponse(BaseModel):
+    full_name:         Optional[str]
+    database:          Optional[str]
+    schema_name:       Optional[str]
+    source:            Optional[str]
+    source_type:       Optional[str]
+    column_count:      int
+    tags:              str
+    owner:             str
+    last_updated:      Optional[str]
+    custom_properties: List[CustomPropertyItem] = []
+ 
+ 
+class CreateCustomPropertyRequest(BaseModel):
+    key:        str
+    value:      str
+    value_type: Optional[str] = "string"
+ 
+ 
+# ============================================================================
+# GET  /api/v1/catalogs/{catalog_id}/properties
+# ============================================================================
  
 @router.get(
     "/api/v1/catalogs/{catalog_id}/properties",
     response_model=CatalogPropertiesResponse,
-    summary="Get Key Metadata properties for a catalog entry",
+    summary="Get key metadata properties for a catalog entry",
+    description=(
+        "Returns core metadata (source, schema, owner, tags, column count) plus all "
+        "custom properties stored for this catalog. Properties with null/empty values "
+        "are excluded from the response."
+    ),
 )
 async def get_catalog_properties(catalog_id: str):
-    """
-    Returns only the **Key Metadata** block for the given catalog_id:
-    Full Name, Database, Schema, Source, Source Type, Column Count,
-    Domain(s), Tags, Owner, and Last Updated.
-    """
     from app import db, logger
- 
-    endpoint = f"/api/v1/catalogs/{catalog_id}/properties"
- 
-    # ── Fetch core catalog row ───────────────────────────────────────────────
-    catalog = await db.fetch_one(
-        """
-        SELECT
-            c.full_name,
-            c.database_name,
-            c.schema_name,
-            c.updated_at,
-            ds.name        AS source_name,
-            ds.source_type AS source_type,
-            o.name         AS owner_name,
-            o.role         AS owner_role,
-            o.email        AS owner_email
-        FROM catalogs c
-        LEFT JOIN data_sources ds ON c.source_id = ds.id
-        LEFT JOIN owners o        ON c.owner_id  = o.id
-        WHERE c.id = $1
-        """,
-        catalog_id,
-    )
- 
-    if not catalog:
-        await _log(
-            db, logger,
-            endpoint=endpoint, method="GET",
-            action_summary=f"Properties GET failed – catalog '{catalog_id}' not found",
-            entity_id=catalog_id, status_code=404,
+    try:
+        catalog = await db.fetch_one(
+            """
+            SELECT
+                c.full_name, c.database_name, c.schema_name, c.updated_at,
+                ds.name        AS source_name,
+                ds.source_type AS source_type,
+                o.name         AS owner_name,
+                o.role         AS owner_role,
+                o.email        AS owner_email
+            FROM catalogs c
+            LEFT JOIN data_sources ds ON c.source_id = ds.id
+            LEFT JOIN owners o        ON c.owner_id  = o.id
+            WHERE c.id = $1
+            """,
+            catalog_id,
         )
-        raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
  
-    # ── Column count ─────────────────────────────────────────────────────────
-    col_count_row = await db.fetch_one(
-        "SELECT COUNT(*) AS cnt FROM columns WHERE catalog_id = $1",
-        catalog_id,
-    )
-    column_count = col_count_row["cnt"] if col_count_row else 0
+        if not catalog:
+            raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
  
-    # ── Domains ──────────────────────────────────────────────────────────────
-    domain_rows = await db.fetch_all(
-        """
-        SELECT d.name
-        FROM domain_catalog_assignments dca
-        JOIN domains d ON dca.domain_id = d.id
-        WHERE dca.catalog_id = $1
-        ORDER BY d.name
-        """,
-        catalog_id,
-    )
-    domains_str = ", ".join(r["name"] for r in domain_rows) or "None"
+        # ── Column count ──────────────────────────────────────────────────────
+        col_count_row = await db.fetch_one(
+            "SELECT COUNT(*) AS cnt FROM columns WHERE catalog_id = $1", catalog_id,
+        )
+        column_count = col_count_row["cnt"] if col_count_row else 0
  
-    # ── Tags ─────────────────────────────────────────────────────────────────
-    tag_rows = await db.fetch_all(
-        """
-        SELECT t.name
-        FROM tag_catalog_assignments tca
-        JOIN tags t ON tca.tag_id = t.id
-        WHERE tca.catalog_id = $1
-        ORDER BY t.name
-        """,
-        catalog_id,
-    )
-    tags_str = ", ".join(r["name"] for r in tag_rows) or "None"
+        # ── Tags ──────────────────────────────────────────────────────────────
+        tag_rows = await db.fetch_all(
+            """
+            SELECT t.name FROM tag_catalog_assignments tca
+            JOIN tags t ON tca.tag_id = t.id
+            WHERE tca.catalog_id = $1 ORDER BY t.name
+            """,
+            catalog_id,
+        )
+        tags_str = ", ".join(r["name"] for r in tag_rows) or "None"
  
-    # ── Owner string ─────────────────────────────────────────────────────────
-    if catalog["owner_name"]:
-        owner_str = f"{catalog['owner_name']} ({catalog['owner_role']}) – {catalog['owner_email'] or 'no email'}"
-    else:
-        owner_str = "Unassigned"
+        # ── Custom properties – exclude null/empty values at DB level ─────────
+        cp_rows = await db.fetch_all(
+            """
+            SELECT id, key, value, value_type
+            FROM   custom_properties
+            WHERE  catalog_id = $1
+              AND  value IS NOT NULL
+              AND  TRIM(value) <> ''
+            ORDER  BY key
+            """,
+            catalog_id,
+        )
+        custom_props = [
+            CustomPropertyItem(
+                id=str(r["id"]),
+                key=r["key"],
+                value=r["value"],
+                value_type=r["value_type"] or "string",
+            )
+            for r in cp_rows
+        ]
  
-    # ── Last updated (dd/mm/yyyy HH:MM:SS) ───────────────────────────────────
-    last_updated = (
-        catalog["updated_at"].strftime("%d/%m/%Y %H:%M:%S")
-        if catalog["updated_at"] else None
-    )
+        # ── Owner ─────────────────────────────────────────────────────────────
+        if catalog["owner_name"]:
+            owner_str = f"{catalog['owner_name']} ({catalog['owner_role']}) – {catalog['owner_email'] or 'no email'}"
+        else:
+            owner_str = "Unassigned"
  
-    # ── Audit log ─────────────────────────────────────────────────────────────
-    await _log(
-        db, logger,
-        endpoint=endpoint, method="GET",
-        action_summary=f"Properties retrieved for catalog '{catalog_id}'",
-        entity_type="catalog",
-        entity_id=catalog_id,
-        status_code=200,
-        response_summary=f"columns={column_count} | domains={domains_str} | tags={tags_str}",
-    )
+        # ── Last updated ──────────────────────────────────────────────────────
+        last_updated = (
+            catalog["updated_at"].strftime("%d/%m/%Y %H:%M:%S")
+            if catalog["updated_at"] else None
+        )
  
-    return CatalogPropertiesResponse(
-        full_name=catalog["full_name"],
-        database=catalog["database_name"],
-        schema_name=catalog["schema_name"],
-        source=catalog["source_name"],
-        source_type=catalog["source_type"],
-        column_count=column_count,
-        domains=domains_str,
-        tags=tags_str,
-        owner=owner_str,
-        last_updated=last_updated,
-    )
+        # ── Strip None/empty scalar fields ────────────────────────────────────
+        def _val(v):
+            return v if v is not None and str(v).strip() != "" else None
  
+        await _log(db, logger, endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
+                   method="GET",
+                   action_summary=f"Properties retrieved for catalog '{catalog_id}'",
+                   entity_type="catalog", entity_id=catalog_id, status_code=200,
+                   response_summary=f"columns={column_count} | tags={tags_str} | custom_props={len(custom_props)}")
+ 
+        return CatalogPropertiesResponse(
+            full_name=_val(catalog["full_name"]),
+            database=_val(catalog["database_name"]),
+            schema_name=_val(catalog["schema_name"]),
+            source=_val(catalog["source_name"]),
+            source_type=_val(catalog["source_type"]),
+            column_count=column_count,
+            tags=tags_str,
+            owner=owner_str,
+            last_updated=last_updated,
+            custom_properties=custom_props,
+        )
+ 
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("get_catalog_properties error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+ 
+ 
+# ============================================================================
+# POST  /api/v1/catalogs/{catalog_id}/properties
+# Add a custom property to a catalog
+# ============================================================================
+ 
+@router.post(
+    "/api/v1/catalogs/{catalog_id}/properties",
+    response_model=CustomPropertyItem,
+    status_code=201,
+    summary="Add a custom property to a catalog",
+    description=(
+        "Inserts a new key/value pair into `custom_properties` for the given catalog. "
+        "Returns 409 if the key already exists (use PATCH to update an existing key). "
+        "Empty key or value is rejected with 400."
+    ),
+)
+async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequest):
+    from app import db, logger
+    try:
+        # ── Validate catalog exists ───────────────────────────────────────────
+        cat = await db.fetch_one("SELECT id FROM catalogs WHERE id = $1", catalog_id)
+        if not cat:
+            raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
+ 
+        # ── Validate inputs ───────────────────────────────────────────────────
+        if not body.key or not body.key.strip():
+            raise HTTPException(status_code=400, detail="Property key must not be empty.")
+        if not body.value or not body.value.strip():
+            raise HTTPException(status_code=400, detail="Property value must not be empty.")
+ 
+        # ── Duplicate key guard ───────────────────────────────────────────────
+        existing = await db.fetch_one(
+            "SELECT id FROM custom_properties WHERE catalog_id = $1 AND key = $2",
+            catalog_id, body.key.strip(),
+        )
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Property key '{body.key}' already exists for this catalog. Use PATCH to update it.",
+            )
+ 
+        # ── Insert ────────────────────────────────────────────────────────────
+        row = await db.fetch_one(
+            """
+            INSERT INTO custom_properties (catalog_id, key, value, value_type)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, key, value, value_type
+            """,
+            catalog_id,
+            body.key.strip(),
+            body.value.strip(),
+            (body.value_type or "string").strip(),
+        )
+ 
+        await _log(db, logger,
+                   endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
+                   method="POST",
+                   action_summary=f"Custom property '{body.key}' added to catalog '{catalog_id}'",
+                   entity_type="catalog", entity_id=catalog_id,
+                   status_code=201,
+                   request_body={"key": body.key, "value": body.value, "value_type": body.value_type},
+                   response_summary=f"property_id={row['id']}")
+ 
+        return CustomPropertyItem(
+            id=str(row["id"]),
+            key=row["key"],
+            value=row["value"],
+            value_type=row["value_type"] or "string",
+        )
+ 
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("create_custom_property error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))

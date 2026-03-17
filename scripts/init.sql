@@ -861,3 +861,28 @@ CREATE TABLE IF NOT EXISTS datacards (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_datacards_catalog UNIQUE (catalog_id)
 );
+
+
+-- ============================================================================
+-- CATALOG QUERIES
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS catalog_queries (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    catalog_id  UUID NOT NULL REFERENCES catalogs(id) ON DELETE CASCADE,
+    title       VARCHAR(255) NOT NULL,
+    description TEXT,
+    query_text  TEXT NOT NULL,
+    owner_id    UUID REFERENCES owners(id) ON DELETE SET NULL,
+    created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_catalog_queries_catalog   ON catalog_queries(catalog_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_queries_owner     ON catalog_queries(owner_id);
+CREATE INDEX IF NOT EXISTS idx_catalog_queries_created   ON catalog_queries(created_at DESC);
+
+DROP TRIGGER IF EXISTS update_catalog_queries_updated_at ON catalog_queries;
+CREATE TRIGGER update_catalog_queries_updated_at
+    BEFORE UPDATE ON catalog_queries
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

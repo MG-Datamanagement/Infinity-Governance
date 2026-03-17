@@ -1683,15 +1683,8 @@ class IngestionManager:
 
                 # ──  AUTO PII DETECTION ────────────────────────────────────
                 # Only runs after data is fully committed to the database.
-                # Triggered only when require_auto_pii_detection=True in the
-                # original ingestion request.
-                #
-                # required_human_approval=True  → results saved to pii_detection_pending
-                #                                  (awaiting human review)
-                # required_human_approval=False → results written directly to
-                #                                  tag_catalog_assignments /
-                #                                  tag_column_assignments
-                # ─────────────────────────────────────────────────────────────
+                # Triggered only when require_auto_pii_detection=True 
+                
                 if config.get("require_auto_pii_detection", False):
                     try:
                         from ingestion.auto_pii_service import run_auto_pii_detection

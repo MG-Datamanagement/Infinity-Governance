@@ -44,7 +44,7 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from itertools import chain
 from typing import Any, Generator, Optional, TypedDict
-
+from langchain.prompts import PromptTemplate
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
@@ -2086,4 +2086,120 @@ def get_dataset_compliance_report(catalog_id: str):
             "critical_violations": critical_violations
         },
         "rules": rules
+    }
+
+
+llm = AzureChatOpenAI(
+    azure_deployment=os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME"),
+    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    temperature=0.2
+)
+
+
+SUMMARY_PROMPT = PromptTemplate(
+    input_variables=[
+        "catalog_name",
+        "columns",
+        "tags"
+    ],
+    template="""
+You are a data governance assistant , who analyses datasets and provides concise summaries for data catalog entries.
+
+Provide a concise  governance summary for the dataset.
+
+Dataset Name:
+{catalog_name}
+
+Columns:
+{columns}
+
+Tags:
+{tags}
+
+Write a short professional summary describing :
+1. What this dataset represents
+2. Provide the upstream and downstream of the provided dataset name :{catalog_name}.
+3. Potential sensitive data
+4. Provide a Short Summary do not exceed 50 words. Be concise and professional.
+5.The response should be in a short paragraph format, suitable for display in a data catalog entry. Avoid technical jargon and focus on key insights about the dataset's content and relevance.
+"""
+)
+
+summary_chain = SUMMARY_PROMPT| llm
+
+@router.get("/api/catalogs/{catalog_id}/summary", tags=["Compliance"])
+def get_catalog_ai_summary(catalog_id: str):
+
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Database not initialised")
+
+    # --------------------------------------------------
+    # 1️⃣ Fetch catalog
+    # --------------------------------------------------
+
+    catalog_sql = """
+        SELECT id, table_name, full_name, description
+        FROM catalogs
+        WHERE id = %(catalog_id)s
+    """
+
+    catalog_rows = _db.execute_query(catalog_sql, {"catalog_id": catalog_id})
+
+    if not catalog_rows:
+        raise HTTPException(status_code=404, detail="Catalog not found")
+
+    catalog = catalog_rows[0]
+
+    # --------------------------------------------------
+    # 2️⃣ Fetch columns
+    # --------------------------------------------------
+
+    column_sql = """
+        SELECT name, data_type
+        FROM columns
+        WHERE catalog_id = %(catalog_id)s
+    """
+
+    columns = _db.execute_query(column_sql, {"catalog_id": catalog_id})
+
+    column_list = [f"{c['name']} ({c['data_type']})" for c in columns]
+
+    # --------------------------------------------------
+    # 3️⃣ Fetch tags
+    # --------------------------------------------------
+
+    tag_sql = """
+        SELECT t.name
+        FROM tag_catalog_assignments tca
+        JOIN tags t ON t.id = tca.tag_id
+        WHERE tca.catalog_id = %(catalog_id)s
+    """
+
+    tags = _db.execute_query(tag_sql, {"catalog_id": catalog_id})
+
+    tag_list = [t["name"] for t in tags]
+
+
+
+    # --------------------------------------------------
+    # 5️⃣ Generate AI Summary
+    # --------------------------------------------------
+
+    result = summary_chain.invoke({
+        "catalog_name": catalog["full_name"],
+        "columns": ", ".join(column_list),
+        "tags": ", ".join(tag_list)
+    })
+    summary=result.content
+
+    # --------------------------------------------------
+    # 6️⃣ Response
+    # --------------------------------------------------
+
+    return {
+        "catalog_id": catalog_id,
+        "catalog_name": catalog["full_name"],
+        "ai_summary": summary
     }

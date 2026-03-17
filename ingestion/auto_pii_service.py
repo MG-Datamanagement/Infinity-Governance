@@ -21,10 +21,6 @@ required_human_approval : bool
     False → classifications are written directly to the assignment tables
             (save_to_db=True with assigned_by="ai-auto").
 
-Dependency
-----------
-Imports the shared helper functions directly from tag_classify and
-tag_column_assignment so there is no HTTP round-trip.
 """
 
 from __future__ import annotations
