@@ -54,6 +54,7 @@ class VisualNode(BaseModel):
     column_mappings: List[ColumnMapping] = []
     depth: int = 1
     ai_summary: Optional[str] = None
+    stats: Optional[str] = None
  
 class VisualLineageResponse(BaseModel):
     root: VisualNode
@@ -178,12 +179,15 @@ async def _generate_ai_summary(llm, node: Dict, upstream: List[str], downstream:
     {downstream_str}
 
     Explain:
-    • what the dataset represents
-    • where its data originates
-    • how downstream datasets use it
-    • its role in the pipeline
+    - what the dataset represents
+    - where its data originates
+    - how downstream datasets use it
+    - its role in the pipeline
 
-    Respond in 3 concise sentences.
+    Respond in only one concise sentences.
+    Note:
+    -- Provide a Short Summary do not exceed 50 words. Be concise and professional.
+    -- The response should be in a short paragraph format, suitable for display in a data catalog entry. Avoid technical jargon and focus on key insights about the dataset's content and relevance.
     """
     result = await llm.ainvoke(prompt)
 
@@ -204,6 +208,8 @@ async def _build_visual_node(
     columns      = await _fetch_columns(db, catalog_id)
     tags         = await _fetch_tags(db, catalog_id)
     col_mappings = await _fetch_col_mappings(db, lineage_id) if lineage_id else []
+    column_count = len(columns)
+    status_text = f"Column {column_count}"
     # determine lineage direction context
 
     upstream_tables = []
@@ -245,7 +251,8 @@ async def _build_visual_node(
         transformation_query=transformation_query,
         column_mappings=col_mappings,
         depth=depth,
-        ai_summary=ai_summary
+        ai_summary=ai_summary,
+        stats=status_text,
     )
  
  
@@ -338,7 +345,8 @@ async def get_visual_lineage(
         # ── build root node (no lineage_id – it is the root) ─────────────────
         root_columns = await _fetch_columns(db, catalog_id)
         root_tags    = await _fetch_tags(db, catalog_id)
- 
+        column_count = len(root_columns)
+        status_text = f"Column {column_count}"
         root_source = None
         if root_data.get("source_id"):
             root_source = SourceInfo(
@@ -371,7 +379,8 @@ async def get_visual_lineage(
             columns=root_columns,
             tags=root_tags,
             depth=0,
-            ai_summary=root_summary
+            ai_summary=root_summary,
+            stats=status_text
         )
  
         # ── traverse upstreams ────────────────────────────────────────────────

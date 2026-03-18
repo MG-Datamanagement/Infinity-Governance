@@ -1,13 +1,63 @@
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, List
 import json
 import re
 from datetime import datetime
+from pydantic import BaseModel
+
 
 from models import CatalogDataCardResponse
 
 router = APIRouter(tags=["datacard"])
 
+
+ 
+ 
+class BulkDataCardResult(BaseModel):
+    catalog_id: str
+    table_name: str
+    full_name: Optional[str]
+    status: str                     # "generated" | "cached" | "failed"
+    error: Optional[str] = None     # populated only when status == "failed"
+    generated_at: Optional[datetime] = None
+ 
+ 
+class BulkDataCardResponse(BaseModel):
+    source_id: str
+    total_catalogs: int
+    generated: int
+    cached: int
+    failed: int
+    results: List[BulkDataCardResult]
+
+# ============================================================================
+# Schemas – catalog properties + custom properties
+# ============================================================================
+ 
+class CustomPropertyItem(BaseModel):
+    id:         str
+    key:        str
+    value:      str
+    value_type: str
+ 
+ 
+class CatalogPropertiesResponse(BaseModel):
+    full_name:         Optional[str]
+    database:          Optional[str]
+    schema_name:       Optional[str]
+    source:            Optional[str]
+    source_type:       Optional[str]
+    column_count:      int
+    tags:              str
+    owner:             str
+    last_updated:      Optional[str]
+    custom_properties: List[CustomPropertyItem] = []
+ 
+ 
+class CreateCustomPropertyRequest(BaseModel):
+    key:        str
+    value:      str
+    value_type: Optional[str] = "string"
 
 # ============================================================================
 # SQL – run once at startup (or via your migration tool) to create the table
@@ -558,28 +608,6 @@ async def get_catalog_datacard(catalog_id: str):
         status=row["status"],
     )
 
-
-
-from pydantic import BaseModel
-from typing import List
- 
- 
-class BulkDataCardResult(BaseModel):
-    catalog_id: str
-    table_name: str
-    full_name: Optional[str]
-    status: str                     # "generated" | "cached" | "failed"
-    error: Optional[str] = None     # populated only when status == "failed"
-    generated_at: Optional[datetime] = None
- 
- 
-class BulkDataCardResponse(BaseModel):
-    source_id: str
-    total_catalogs: int
-    generated: int
-    cached: int
-    failed: int
-    results: List[BulkDataCardResult]
  
  
 @router.post(
@@ -900,36 +928,7 @@ async def bulk_generate_datacards(
         failed=failed_count,
         results=results,
     )
- 
- 
-# ============================================================================
-# Schemas – catalog properties + custom properties
-# ============================================================================
- 
-class CustomPropertyItem(BaseModel):
-    id:         str
-    key:        str
-    value:      str
-    value_type: str
- 
- 
-class CatalogPropertiesResponse(BaseModel):
-    full_name:         Optional[str]
-    database:          Optional[str]
-    schema_name:       Optional[str]
-    source:            Optional[str]
-    source_type:       Optional[str]
-    column_count:      int
-    tags:              str
-    owner:             str
-    last_updated:      Optional[str]
-    custom_properties: List[CustomPropertyItem] = []
- 
- 
-class CreateCustomPropertyRequest(BaseModel):
-    key:        str
-    value:      str
-    value_type: Optional[str] = "string"
+
  
  
 # ============================================================================
