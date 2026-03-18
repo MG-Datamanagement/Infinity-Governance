@@ -433,10 +433,11 @@ class PostgresSink:
                     field_path = getattr(field, 'fieldPath', 'unknown')
                     field_type = str(getattr(field, 'type', 'unknown'))
                     column_name = field_path.split('.')[-1] if field_path else 'unknown'
+                    description = getattr(field, 'description', None)
                     cur.execute("""
-                        INSERT INTO columns (catalog_id, name, ordinal_position, data_type, metadata)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (catalog_id, column_name, idx + 1, field_type, json.dumps({})))
+                        INSERT INTO columns (catalog_id, name, ordinal_position, data_type, description, metadata)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (catalog_id, column_name, idx + 1, field_type, description, json.dumps({})))
                     column_count = idx + 1
 
             if column_count > 0:
@@ -452,6 +453,14 @@ class PostgresSink:
     def _process_properties(self, cur, catalog_id: str, properties: DatasetPropertiesClass):
         """Process and store custom properties synchronously"""
         try:
+
+            table_description = getattr(properties, 'description', None)
+            if table_description:
+                cur.execute("""
+                    UPDATE catalogs SET description = %s WHERE id = %s
+                """, (table_description, catalog_id))
+
+
             cur.execute("DELETE FROM custom_properties WHERE catalog_id = %s", (catalog_id,))
             if hasattr(properties, 'customProperties') and properties.customProperties:
                 for key, value in properties.customProperties.items():
@@ -901,21 +910,30 @@ class IngestionManager:
                 catalog_id = sink_cursor.fetchone()[0]
 
                 src_cursor.execute("""
-                    SELECT column_name, ordinal_position, data_type, is_nullable
-                    FROM information_schema.columns
-                    WHERE table_catalog = %s AND table_schema = %s AND table_name = %s
-                    ORDER BY ordinal_position
+                    SELECT 
+                        c.column_name, 
+                        c.ordinal_position, 
+                        c.data_type, 
+                        c.is_nullable,
+                        pgd.description
+                    FROM information_schema.columns c
+                    LEFT JOIN pg_catalog.pg_statio_all_tables st 
+                        ON st.schemaname = c.table_schema AND st.relname = c.table_name
+                    LEFT JOIN pg_catalog.pg_description pgd 
+                        ON pgd.objoid = st.relid AND pgd.objsubid = c.ordinal_position
+                    WHERE c.table_catalog = %s AND c.table_schema = %s AND c.table_name = %s
+                    ORDER BY c.ordinal_position
                 """, (conn_details['database'], schema_name, table_name))
 
                 columns = src_cursor.fetchall()
 
                 sink_cursor.execute("DELETE FROM columns WHERE catalog_id = %s", (catalog_id,))
 
-                for col_name, ord_pos, data_type, is_nullable in columns:
+                for col_name, ord_pos, data_type, is_nullable, col_description in columns:
                     sink_cursor.execute("""
-                        INSERT INTO columns (catalog_id, name, ordinal_position, data_type, metadata)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (catalog_id, col_name, ord_pos, data_type, json.dumps({"is_nullable": is_nullable})))
+                        INSERT INTO columns (catalog_id, name, ordinal_position, data_type, description, metadata)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (catalog_id, col_name, ord_pos, data_type, col_description, json.dumps({"is_nullable": is_nullable})))
 
                 records_written += 1
 
@@ -1341,7 +1359,105 @@ class IngestionManager:
         except Exception as e:
             logger.exception(f"[Lineage][Athena] Extraction failed: {e}")
             return 0
+    
 
+    async def _sync_athena_descriptions(self, source_id: str):
+        """
+        Directly fetch table and column descriptions from AWS Glue API
+        and update catalogs/columns tables.
+        """
+        import boto3
+
+        logger.info(f"[Description] Starting Glue description sync for source={source_id}")
+
+        try:
+            source = await self.db.fetch_one(
+                "SELECT connection_details FROM data_sources WHERE id = $1", source_id
+            )
+            if not source:
+                return
+
+            conn_details          = json.loads(source['connection_details'])
+            aws_region            = conn_details.get("aws_region") or os.environ.get("AWS_DEFAULT_REGION")
+            aws_access_key_id     = os.environ.get("AWS_ACCESS_KEY_ID")
+            aws_secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+            glue = boto3.client(
+                "glue",
+                region_name           = aws_region,
+                aws_access_key_id     = aws_access_key_id,
+                aws_secret_access_key = aws_secret_access_key,
+            )
+
+            catalogs = await self.db.fetch_all(
+                "SELECT id, table_name, schema_name FROM catalogs WHERE source_id = $1",
+                source_id
+            )
+
+            sink_conn = psycopg2.connect(
+                host     = self.settings.PG_HOST,
+                port     = self.settings.PG_PORT,
+                database = self.settings.PG_DB,
+                user     = self.settings.PG_USER,
+                password = self.settings.PG_PASS
+            )
+            cur = sink_conn.cursor()
+
+            tables_updated  = 0
+            columns_updated = 0
+
+            for catalog in catalogs:
+                catalog_id  = str(catalog['id'])
+                table_name  = catalog['table_name']
+                schema_name = catalog['schema_name']
+
+                try:
+                    response = glue.get_table(
+                        DatabaseName=schema_name,
+                        Name=table_name
+                    )
+                    table = response.get('Table', {})
+
+                    # ── Table description ──────────────────────────────────
+                    table_description = table.get('Description', '').strip()
+                    if table_description:
+                        cur.execute("""
+                            UPDATE catalogs SET description = %s WHERE id = %s
+                        """, (table_description, catalog_id))
+                        logger.info(f"[Description] ✓ Table '{table_name}': {table_description[:60]}")
+                        tables_updated += 1
+
+                    # ── Column descriptions ────────────────────────────────
+                    glue_columns = table.get('StorageDescriptor', {}).get('Columns', [])
+                    for glue_col in glue_columns:
+                        col_name    = glue_col.get('Name', '')
+                        col_comment = glue_col.get('Comment', '').strip()
+                        if col_name and col_comment:
+                            cur.execute("""
+                                UPDATE columns
+                                SET description = %s
+                                WHERE catalog_id = %s AND LOWER(name) = LOWER(%s)
+                            """, (col_comment, catalog_id, col_name))
+                            columns_updated += 1
+
+                except Exception as e:
+                    logger.warning(f"[Description] Failed for '{table_name}': {e}")
+                    continue
+
+            sink_conn.commit()
+            cur.close()
+            sink_conn.close()
+
+            logger.info(
+                f"[Description] ✓ Sync complete — "
+                f"{tables_updated} tables updated, {columns_updated} columns updated"
+            )
+
+        except Exception as e:
+            logger.error(f"[Description] Glue description sync failed (non-fatal): {e}")
+
+    async def _extract_csv_metadata(self, source_id: str, job_id: str, conn_details: dict) -> int:
+        return await asyncio.to_thread(self._extract_csv_metadata_sync, source_id, job_id, conn_details)
 
     async def _extract_csv_metadata(self, source_id: str, job_id: str, conn_details: dict) -> int:
         return await asyncio.to_thread(self._extract_csv_metadata_sync, source_id, job_id, conn_details)
@@ -1654,6 +1770,13 @@ class IngestionManager:
                         logger.info(f"[Ingestion] Cleaned up zero-column catalogs for {source_type}")
                 except Exception as cleanup_err:
                     logger.warning(f"[Ingestion] Failed to clean up catalogs for {source_type}: {cleanup_err}")
+
+
+                if source_type in {"athena", "glue"}:
+                    try:
+                        await self._sync_athena_descriptions(source_id)
+                    except Exception as desc_err:
+                        logger.warning(f"[Description] Sync failed (non-fatal): {desc_err}")
 
                 # ── 8. Mark job success ──────────────────────────────────────
                 await self.update_job(job_id, 'success', records_ingested)
