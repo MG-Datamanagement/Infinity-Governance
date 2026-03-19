@@ -1791,7 +1791,7 @@ Top-level error message: {job['error_message'] or 'none'}
         "write a single concise sentence (max 30 words) summarising the pipeline result. "
         "Format: start with an emoji (⚡ for success, ⚠️ for warnings, ❌ for failure), "
         "then state: datasets ingested, PII scanned with sensitive column count, and classification status. "
-        "Example: '⚡ All 5 datasets ingested, PII scanned (3 sensitive columns found), classified and compliance-checked.' "
+        "Example: '⚡ All 5 datasets ingested successfully, classified and compliance-checked.' "
         "Be factual. No markdown. One sentence only."
     )
 
@@ -1843,3 +1843,34 @@ Top-level error message: {job['error_message'] or 'none'}
         },
         "ai_summary": ai_summary,   # → one-line prose for the Summary card
     }
+
+
+
+@router.get("/api/v1/sources/ingestion/loading", tags=["Data Sources"])
+def get_ingestion_loading_steps():
+    """Get ordered loading steps for ingestion progress display."""
+    INGESTION_LOAD = [
+        "Establishing connection",
+        "Schema discovery: found tables and views",
+        "Ingesting tables started",
+        "Ingestion completed for all tables",
+        "Lineage extraction successful",
+        "Metadata extraction completed successfully"
+    ]
+    return {"ingestion_loads": INGESTION_LOAD}
+
+
+@router.get("/api/v1/sources/post-ingestion/loading", tags=["Data Sources"])
+def get_ingestion_loading_steps():
+    """Get ordered loading steps for post- ingestion progress display.
+     after clicking complete with PII scan"""
+    POST_INGESTION_LOAD = [
+        "PII detection scan started",
+        "Tag assignment running",
+        "Confidence scoring",
+        "Tag assignment successful",
+        "Compliance policy checking",
+        "Policy check successful",
+        "Metadata summary"
+    ]
+    return {"reasoning_loads": {POST_INGESTION_LOAD}}
