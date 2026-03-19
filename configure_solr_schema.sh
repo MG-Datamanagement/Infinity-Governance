@@ -92,13 +92,6 @@ add_or_replace_field "is_nullable"     "boolean"       true  false
 # ── TAG-specific ───────────────────────────────────────────────────────────────
 add_or_replace_field "tag_color"       "string"        true  false
 
-# ── DOMAIN-specific ────────────────────────────────────────────────────────────
-add_or_replace_field "domain_color"    "string"        true  false
-add_or_replace_field "parent_id"       "string"        true  false   # parent domain / group
-
-# ── GLOSSARY TERM-specific ─────────────────────────────────────────────────────
-add_or_replace_field "group_id"        "string"        true  false
-add_or_replace_field "group_name"      "string"        true  false
 
 # ── SOURCE-specific ────────────────────────────────────────────────────────────
 add_or_replace_field "source_type"     "string"        true  false   # postgres, mysql …
@@ -115,8 +108,7 @@ add_or_replace_field "owner_name"      "string"        true  false
 # ── Multi-value association fields (tags / domains on catalogs) ────────────────
 add_or_replace_field "tag_ids"         "string"        true  true
 add_or_replace_field "tag_names"       "string"        true  true
-add_or_replace_field "domain_ids"      "string"        true  true
-add_or_replace_field "domain_names"    "string"        true  true
+
 
 # ── Timestamps ────────────────────────────────────────────────────────────────
 add_or_replace_field "created_at"      "pdate"         true  false
@@ -127,7 +119,7 @@ add_or_replace_field "search_text"     "text_general"  true  true
 
 # ── Copy fields → search_text ─────────────────────────────────────────────────
 for src in name display_name description full_name table_name schema_name \
-           database_name data_type owner_name source_name tag_names domain_names \
+           database_name data_type owner_name source_name tag_names  \
            group_name owner_email; do
   echo "Copy field: ${src} → search_text"
   add_copy_field "${src}" "search_text"

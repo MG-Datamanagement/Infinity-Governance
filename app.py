@@ -153,8 +153,13 @@ async def lifespan(app: FastAPI):
     ingestion_manager.set_db(db)
     ingestion_manager.set_settings(settings)
 
-    from services.compliance import init_compliance_engine
-    await init_compliance_engine()
+    try:
+        from services.compliance import init_compliance_engine
+        await init_compliance_engine()
+        logger.info("Compliance engine initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize compliance engine: {e}")
+ 
     
     yield
     
@@ -196,14 +201,10 @@ app.include_router(datasource_router)
 from services.owner import router as owner_router
 app.include_router(owner_router)
 
-from services.domain import router as domain_router
-app.include_router(domain_router)
 
 from services.tag import router as tag_router
 app.include_router(tag_router)
 
-from services.glossary import router as glossary_router
-app.include_router(glossary_router)
 
 from services.lineage import router as lineage_router
 app.include_router(lineage_router)
@@ -233,6 +234,9 @@ app.include_router(solr_router)
 
 from services.catalog_properties import router as catalog_properties_router
 app.include_router(catalog_properties_router)   
+
+from services.line_of_business import router as line_of_business_router
+app.include_router(line_of_business_router) 
 
 # ============================================================================
 # MAIN ENTRY POINT

@@ -58,16 +58,13 @@ def build_catalog_docs(cur) -> list[dict]:
             -- aggregated tags
             ARRAY_REMOVE(ARRAY_AGG(DISTINCT t.id::text),   NULL) AS tag_ids,
             ARRAY_REMOVE(ARRAY_AGG(DISTINCT t.name),       NULL) AS tag_names,
-            -- aggregated domains
-            ARRAY_REMOVE(ARRAY_AGG(DISTINCT d.id::text),   NULL) AS domain_ids,
-            ARRAY_REMOVE(ARRAY_AGG(DISTINCT d.name),       NULL) AS domain_names
+            
         FROM catalogs c
         LEFT JOIN data_sources          ds  ON ds.id  = c.source_id
         LEFT JOIN owners                o   ON o.id   = c.owner_id
         LEFT JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
         LEFT JOIN tags                  t   ON t.id   = tca.tag_id
-        LEFT JOIN domain_catalog_assignments dca ON dca.catalog_id = c.id
-        LEFT JOIN domains               d   ON d.id   = dca.domain_id
+
         GROUP BY c.id, ds.name, o.name
     """)
     docs = []
@@ -92,8 +89,6 @@ def build_catalog_docs(cur) -> list[dict]:
             "owner_name":     r["owner_name"],
             "tag_ids":        r["tag_ids"] or [],
             "tag_names":      r["tag_names"] or [],
-            "domain_ids":     r["domain_ids"] or [],
-            "domain_names":   r["domain_names"] or [],
             "created_at":     _ts(r["created_at"]),
             "updated_at":     _ts(r["updated_at"]),
         })
@@ -140,35 +135,6 @@ def build_column_docs(cur) -> list[dict]:
     return docs
 
 
-def build_domain_docs(cur) -> list[dict]:
-    cur.execute("""
-        SELECT
-            d.id, d.name, d.description, d.color,
-            d.parent_domain_id, d.owner_id,
-            d.created_at, d.updated_at,
-            o.name AS owner_name,
-            pd.name AS parent_name
-        FROM domains d
-        LEFT JOIN owners  o  ON o.id = d.owner_id
-        LEFT JOIN domains pd ON pd.id = d.parent_domain_id
-    """)
-    docs = []
-    for r in fetchall_dict(cur):
-        docs.append({
-            "id":           f"domain::{r['id']}",
-            "entity_type":  "DOMAIN",
-            "entity_id":    str(r["id"]),
-            "name":         r["name"],
-            "display_name": r["name"],
-            "description":  r["description"],
-            "domain_color": r["color"],
-            "parent_id":    str(r["parent_domain_id"]) if r["parent_domain_id"] else None,
-            "owner_id":     str(r["owner_id"]) if r["owner_id"] else None,
-            "owner_name":   r["owner_name"],
-            "created_at":   _ts(r["created_at"]),
-            "updated_at":   _ts(r["updated_at"]),
-        })
-    return docs
 
 
 def build_tag_docs(cur) -> list[dict]:
@@ -279,7 +245,6 @@ def build_owner_docs(cur) -> list[dict]:
 BUILDERS = [
     ("CATALOG",       build_catalog_docs),
     ("COLUMN",        build_column_docs),
-    ("DOMAIN",        build_domain_docs),
     ("TAG",           build_tag_docs),
     ("GLOSSARY_TERM", build_glossary_term_docs),
     ("SOURCE",        build_source_docs),

@@ -334,20 +334,7 @@ async def get_catalog_detail(catalog_id: str):
                 "description": row["term_description"],
             })
 
-        # Domains (multiple possible)
-        domains = await db.fetch_all("""
-            SELECT
-                d.id,
-                d.name,
-                d.description,
-                d.color,
-                dca.assigned_at,
-                dca.assigned_by
-            FROM domain_catalog_assignments dca
-            JOIN domains d ON dca.domain_id = d.id
-            WHERE dca.catalog_id = $1
-            ORDER BY d.name
-        """, catalog_id)
+    
 
         # Catalog-level tags
         tags = await db.fetch_all("""
@@ -386,17 +373,6 @@ async def get_catalog_detail(catalog_id: str):
                 "role":  catalog["owner_role"],
             } if catalog["owner_id"] else None,
 
-            "domains": [
-                {
-                    "id":          str(d["id"]),
-                    "name":        d["name"],
-                    "description": d["description"],
-                    "color":       d["color"],
-                    "assigned_at": d["assigned_at"].isoformat() if d["assigned_at"] else None,
-                    "assigned_by": d["assigned_by"],
-                }
-                for d in domains
-            ],
 
             "tags": [
                 {
@@ -610,7 +586,6 @@ async def get_recent_activity_minimal(
     ]}
 
 
-
 def format_time_ago(timestamp):
     now = datetime.now(timezone.utc)
     diff = now - timestamp
@@ -630,6 +605,8 @@ def format_time_ago(timestamp):
 
     days = hours // 24
     return f"{int(days)} days ago"
+
+
 @router.get("/api/v1/recently-viewed" , tags=["Overview"])
 def get_recently_viewed():
     try:

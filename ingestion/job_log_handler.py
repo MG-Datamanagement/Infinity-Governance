@@ -64,7 +64,7 @@ def _map_level(levelname: str) -> str:
 _TRACEBACK_START = re.compile(r"Traceback \(most recent call last\)", re.IGNORECASE)
 _EXCEPTION_LINE  = re.compile(r"^(\w*Error|\w*Exception|Exception):\s*(.+)$", re.MULTILINE)
 
-# Known error patterns → short 6-7 word labels (checked in order)
+# Known error patterns 
 _ERROR_PATTERNS = [
     (re.compile(r"duplicate key.+unique constraint", re.I), "Duplicate key, unique constraint violated"),
     (re.compile(r"unique constraint",                re.I), "Unique constraint violated"),

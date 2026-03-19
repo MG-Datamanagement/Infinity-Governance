@@ -30,7 +30,7 @@ import logging
 from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
-# Re-use the classification helpers 
+#  classification helpers 
 # ---------------------------------------------------------------------------
 
 from services.tag_classify import table_classification_agent as catalog_agent
@@ -186,13 +186,13 @@ async def _classify_catalogs(
 
             if tag_id is None or confidence < min_confidence:
                 logger.info(
-                    f"[AutoPII]    ↷ '{catalog['table_name']}' skipped — "
+                    f"[AutoPII]     '{catalog['table_name']}' skipped — "
                     f"tag='{tag_name}' confidence={confidence:.2f} (below threshold or unknown tag)"
                 )
                 continue
 
             logger.info(
-                f"[AutoPII]    ✓ '{catalog['table_name']}' → tag='{tag_name}' "
+                f"[AutoPII]     '{catalog['table_name']}' → tag='{tag_name}' "
                 f"(confidence={confidence:.2f})"
             )
 
@@ -202,12 +202,12 @@ async def _classify_catalogs(
                     tag_id, tag_name, confidence, reasoning, assigned_by,
                 )
                 pending_count += 1
-                logger.info(f"[AutoPII]    ⏳ '{catalog['table_name']}' queued as PENDING (awaiting human approval)")
+                logger.info(f"[AutoPII]     '{catalog['table_name']}' queued as PENDING (awaiting human approval)")
             else:
                 ok = await _save_tag_assignment(db, tag_id, catalog["id"], assigned_by)
                 if ok:
                     saved_count += 1
-                    logger.info(f"[AutoPII]    💾 Tag '{tag_name}' assigned and saved for table '{catalog['table_name']}'")
+                    logger.info(f"[AutoPII]     Tag '{tag_name}' assigned and saved for table '{catalog['table_name']}'")
 
         except Exception as e:
             error_count += 1
@@ -268,13 +268,13 @@ async def _classify_columns(
 
             if tag_id is None or confidence < min_confidence:
                 logger.info(
-                    f"[AutoPII]    ↷ '{col['table_name']}.{col['column_name']}' skipped — "
+                    f"[AutoPII]     '{col['table_name']}.{col['column_name']}' skipped — "
                     f"tag='{tag_name}' confidence={confidence:.2f}"
                 )
                 continue
 
             logger.info(
-                f"[AutoPII]    ✓ '{col['table_name']}.{col['column_name']}' → "
+                f"[AutoPII]    '{col['table_name']}.{col['column_name']}' → "
                 f"tag='{tag_name}' sensitive={is_sensitive} type={data_type} "
                 f"(confidence={confidence:.2f})"
             )
@@ -288,7 +288,7 @@ async def _classify_columns(
                 )
                 pending_count += 1
                 logger.info(
-                    f"[AutoPII]    ⏳ '{col['table_name']}.{col['column_name']}' "
+                    f"[AutoPII]     '{col['table_name']}.{col['column_name']}' "
                     f"queued as PENDING (awaiting human approval)"
                 )
             else:
@@ -299,7 +299,7 @@ async def _classify_columns(
                 if ok:
                     saved_count += 1
                     logger.info(
-                        f"[AutoPII]    💾 Tag '{tag_name}' assigned and saved for "
+                        f"[AutoPII]     Tag '{tag_name}' assigned and saved for "
                         f"column '{col['table_name']}.{col['column_name']}'"
                     )
 
@@ -321,8 +321,6 @@ async def _classify_columns(
 
 # ---------------------------------------------------------------------------
 # Pending-approval helpers
-# Stores suggested classifications in `pii_detection_pending` table
-# (see migration SQL at bottom of this file).
 # ---------------------------------------------------------------------------
 
 async def _store_pending_catalog(

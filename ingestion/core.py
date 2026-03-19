@@ -508,7 +508,7 @@ class PostgresSink:
             for upstream in lineage.upstreams:
                 upstream_urn = upstream.dataset
 
-                # ── Resolve upstream URN → catalog_id in YOUR postgres ──────
+                # ── Resolve upstream URN → catalog_id in  postgres ──────
                 upstream_catalog_id = self._resolve_catalog_id_sync(cur, upstream_urn)
                 if not upstream_catalog_id:
                     logger.debug(f"[Lineage] Upstream catalog not found for URN: {upstream_urn}")
@@ -598,7 +598,7 @@ class PostgresSink:
             if not match:
                 return None
 
-            full_name = match.group(1)   # e.g. "STUDENT_DB.PUBLIC.ORDERS"
+            full_name = match.group(1)  
             parts = full_name.split('.')
 
             if len(parts) == 3:
@@ -995,13 +995,13 @@ class IngestionManager:
 
             for query_id, query_text, start_time in rows:
                 try:
-                    # Parse SQL with sqlglot to extract source→target tables
+                    # Parse SQL with sqlglot to extract source target tables
                     statements = sqlglot.parse(query_text, dialect="snowflake")
                     for stmt in statements:
                         if stmt is None:
                             continue
 
-                        # Find the target table (what's being written to)
+                        # Find the target table 
                         target_table = None
                         sources = []
 
@@ -1123,7 +1123,7 @@ class IngestionManager:
         logger.info("[Lineage][Athena] Starting query history based lineage extraction")
 
         try:
-            # ── Connect to Athena via boto3 ───────────────────────────────────
+            # ── Connect to Athena via boto3 ───
             aws_region         = conn_details.get("aws_region", os.environ.get("AWS_DEFAULT_REGION"))
             aws_access_key_id  = conn_details.get("aws_access_key_id") or os.environ.get("AWS_ACCESS_KEY_ID")
             aws_secret_key     = conn_details.get("aws_secret_access_key") or os.environ.get("AWS_SECRET_ACCESS_KEY")
@@ -1186,11 +1186,11 @@ class IngestionManager:
                     result_config   = qe.get("ResultConfiguration", {})
 
                     query_execution_id = qe.get("QueryExecutionId")
-                    query_start_time   = status.get("SubmissionDateTime")   # tz-aware datetime
-                    query_end_time     = status.get("CompletionDateTime")   # tz-aware datetime
+                    query_start_time   = status.get("SubmissionDateTime")  
+                    query_end_time     = status.get("CompletionDateTime")   
                     query_runtime_ms   = stats.get("TotalExecutionTimeInMillis")
                     data_scanned_bytes = stats.get("DataScannedInBytes")
-                    query_status       = state                               # "SUCCEEDED"
+                    query_status       = state                              
                     engine_version     = engine_info.get("EffectiveEngineVersion") or engine_info.get("SelectedEngineVersion")
                     s3_output_location = result_config.get("OutputLocation")
 
@@ -1250,7 +1250,7 @@ class IngestionManager:
 
                     target_table = target_table.strip('"').upper()
 
-                    # ── Find AS SELECT boundary ───────────────────────────────
+                    # ── Find AS SELECT boundary ───────
                     as_select_match = re.search(
                         r'\bAS\s*[\n\r]+\s*SELECT\b|\bAS\s+SELECT\b',
                         upper_q,
@@ -1312,7 +1312,7 @@ class IngestionManager:
                 logger.info("[Lineage][Athena] No lineage pairs extracted from queries")
                 return 0
 
-            # ── Write into your Postgres table_lineage ────────────────────────
+            # ── Write into  Postgres table_lineage ────────────────────────
             sink_conn = psycopg2.connect(
                 host     = self.settings.PG_HOST,
                 port     = self.settings.PG_PORT,

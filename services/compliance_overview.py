@@ -34,7 +34,7 @@ def execute_query(query, params=None):
         conn.close()
 router = APIRouter(
     prefix="/api/dashboard",
-    tags=["Dashboard"]
+    tags=["compliance-Dashboard"]
 )
 
 
