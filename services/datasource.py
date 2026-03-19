@@ -1873,4 +1873,4 @@ def get_ingestion_loading_steps():
         "Policy check successful",
         "Metadata summary"
     ]
-    return {"reasoning_loads": {POST_INGESTION_LOAD}}
+    return {"reasoning_loads": POST_INGESTION_LOAD}
