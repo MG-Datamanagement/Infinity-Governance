@@ -1104,14 +1104,19 @@ class IngestionManager:
         except Exception as e:
             logger.exception(f"[Lineage] QUERY_HISTORY extraction failed: {e}")
             return 0
+        
     async def _extract_athena_lineage(
             self, source_id: str, conn_details: dict
             ):
         """
         Lineage extractor for Athena using boto3 query execution history.
         Parses CTAS and INSERT INTO SELECT statements to extract lineage.
+        Also captures per-query execution metadata:
+            query_execution_id, query_start_time, query_end_time,
+            query_runtime_ms, data_scanned_bytes, query_status,
+            engine_version, s3_output_location
         Writes into table_lineage in your Postgres.
-            """
+        """
         import boto3
         import sqlglot
 
@@ -1126,12 +1131,11 @@ class IngestionManager:
 
             athena = boto3.client(
                 "athena",
-                region_name          = aws_region,
-                aws_access_key_id    = aws_access_key_id,
-                aws_secret_access_key= aws_secret_key,
+                region_name           = aws_region,
+                aws_access_key_id     = aws_access_key_id,
+                aws_secret_access_key = aws_secret_key,
             )
 
-            
             all_query_ids = []
             paginator = athena.get_paginator("list_query_executions")
 
@@ -1150,6 +1154,7 @@ class IngestionManager:
             from datetime import datetime, timedelta, timezone
             cutoff = datetime.now(timezone.utc) - timedelta(days=7)
 
+            # Each entry: dict with query_text + all execution metadata
             lineage_queries = []
 
             for i in range(0, len(all_query_ids), 50):
@@ -1157,9 +1162,8 @@ class IngestionManager:
                 response = athena.batch_get_query_execution(QueryExecutionIds=batch)
 
                 for qe in response.get("QueryExecutions", []):
-                    # Filter: only successful, only write queries, only within 7 days
-                    status     = qe.get("Status", {})
-                    state      = status.get("State", "")
+                    status      = qe.get("Status", {})
+                    state       = status.get("State", "")
                     submit_time = status.get("SubmissionDateTime")
 
                     if state != "SUCCEEDED":
@@ -1170,91 +1174,110 @@ class IngestionManager:
                     query_text = qe.get("Query", "")
                     upper_q    = query_text.upper()
 
-                    if (
-                        "CREATE TABLE" in upper_q and "SELECT" in upper_q
-                    ) or (
-                        "INSERT INTO" in upper_q and "SELECT" in upper_q
+                    if not (
+                        ("CREATE TABLE" in upper_q and "SELECT" in upper_q)
+                        or ("INSERT INTO" in upper_q and "SELECT" in upper_q)
                     ):
-                        lineage_queries.append(query_text)
+                        continue
+
+                    # ── Capture all execution metadata ────────────────────────
+                    stats           = qe.get("Statistics", {})
+                    engine_info     = qe.get("EngineVersion", {})
+                    result_config   = qe.get("ResultConfiguration", {})
+
+                    query_execution_id = qe.get("QueryExecutionId")
+                    query_start_time   = status.get("SubmissionDateTime")   # tz-aware datetime
+                    query_end_time     = status.get("CompletionDateTime")   # tz-aware datetime
+                    query_runtime_ms   = stats.get("TotalExecutionTimeInMillis")
+                    data_scanned_bytes = stats.get("DataScannedInBytes")
+                    query_status       = state                               # "SUCCEEDED"
+                    engine_version     = engine_info.get("EffectiveEngineVersion") or engine_info.get("SelectedEngineVersion")
+                    s3_output_location = result_config.get("OutputLocation")
+
+                    lineage_queries.append({
+                        "query_text":          query_text,
+                        "query_execution_id":  query_execution_id,
+                        "query_start_time":    query_start_time,
+                        "query_end_time":      query_end_time,
+                        "query_runtime_ms":    query_runtime_ms,
+                        "data_scanned_bytes":  data_scanned_bytes,
+                        "query_status":        query_status,
+                        "engine_version":      engine_version,
+                        "s3_output_location":  s3_output_location,
+                    })
 
             logger.info(f"[Lineage][Athena] {len(lineage_queries)} lineage-producing queries found")
-
-            for i, q in enumerate(lineage_queries):
-                logger.info(f"[Lineage][Athena] Query {i+1} length={len(q)}, start: {q[:200]}")
-                logger.info(f"[Lineage][Athena] Query {i+1} chars 180-280: {repr(q[180:280])}")
-
 
             if not lineage_queries:
                 logger.info("[Lineage][Athena] No CTAS or INSERT INTO SELECT queries found")
                 return 0
 
             # ── Parse SQL → extract upstream/downstream pairs ─────────────────
+            # Each entry: (upstream_name, downstream_name, query_meta_dict)
             lineage_pairs = []
 
-            for query_text in lineage_queries:
+            for qmeta in lineage_queries:
+                query_text = qmeta["query_text"]
                 try:
                     query_text = query_text.replace('\r\n', '\n').replace('\r', '\n')
-                    upper_q = query_text.upper().strip()
+                    upper_q    = query_text.upper().strip()
 
                     # ── Extract TARGET table ──────────────────────────────────
-                    
                     target_match = re.search(
                         r'CREATE\s+(?:OR\s+REPLACE\s+)?(?:EXTERNAL\s+)?TABLE\s+'
                         r'(?:IF\s+NOT\s+EXISTS\s+)?'
-                        r'(?:"([^"]+)"\s*\.\s*"?([^"\s(,]+)"?'   # "db".table
-                        r'|"([^"]+)"\s*\.\s*([^\s(,]+)'           # "db".table (unquoted table)
-                        r'|([^\s.(,]+)\s*\.\s*([^\s(,]+)'         # db.table
-                        r'|([^\s(,]+))',                           # just table
+                        r'(?:"([^"]+)"\s*\.\s*"?([^"\s(,]+)"?'
+                        r'|"([^"]+)"\s*\.\s*([^\s(,]+)'
+                        r'|([^\s.(,]+)\s*\.\s*([^\s(,]+)'
+                        r'|([^\s(,]+))',
                         query_text,
                         re.IGNORECASE
                     )
 
                     if not target_match:
-                        logger.debug(f"[Lineage][Athena] Could not extract target table from query")
+                        logger.debug("[Lineage][Athena] Could not extract target table from query")
                         continue
 
                     g = target_match.groups()
                     if g[0] and g[1]:
-                        target_db, target_table = g[0], g[1]
+                        target_table = g[1]
                     elif g[2] and g[3]:
-                        target_db, target_table = g[2], g[3]
+                        target_table = g[3]
                     elif g[4] and g[5]:
-                        target_db, target_table = g[4], g[5]
+                        target_table = g[5]
                     else:
-                        target_db, target_table = None, g[6]
+                        target_table = g[6]
 
                     target_table = target_table.strip('"').upper()
 
-                    # ── Extract SOURCE tables from FROM / JOIN clauses ────────
+                    # ── Find AS SELECT boundary ───────────────────────────────
                     as_select_match = re.search(
                         r'\bAS\s*[\n\r]+\s*SELECT\b|\bAS\s+SELECT\b',
                         upper_q,
                         re.IGNORECASE
                     )
                     if not as_select_match:
-                        # Show exactly what the query looks like around AS SELECT
-                        idx = upper_q.find('AS')
-                        logger.info(f"[Lineage][Athena] No AS SELECT found. upper_q[210:240]: {repr(upper_q[210:240])}")
-                        logger.info(f"[Lineage][Athena] First AS at pos {idx}: {repr(upper_q[idx:idx+20]) if idx != -1 else 'NOT FOUND'}")
-                        logger.info(f"[Lineage][Athena] Has \\r\\n: {'CRLF' if chr(13) in upper_q else 'LF only'}")
+                        logger.debug("[Lineage][Athena] No AS SELECT boundary found")
                         continue
 
-                    as_select_pos = as_select_match.start()
-                    logger.info(f"[Lineage][Athena] AS SELECT found at pos {as_select_pos}")
+                    select_part = query_text[as_select_match.start():]
 
-
-                    # Only parse the SELECT part for source tables
-                    select_part = query_text[as_select_pos:]
-
-                
+                    # ── Extract SOURCE tables from FROM / JOIN clauses ────────
                     source_pattern = re.compile(
                         r'(?:FROM|JOIN)\s+'
-                        r'(?:"([^"]+)"\s*\.\s*"?([^"\s,()\r\n]+)"?'  # "db".table
-                        r'|"([^"]+)"\s*\.\s*([^\s,()\r\n]+)'          # "db".table unquoted
-                        r'|([a-zA-Z0-9_]+)\s*\.\s*([a-zA-Z0-9_]+)'   # db.table
-                        r'|([a-zA-Z0-9_]+))',                          # just table
+                        r'(?:"([^"]+)"\s*\.\s*"?([^"\s,()\r\n]+)"?'
+                        r'|"([^"]+)"\s*\.\s*([^\s,()\r\n]+)'
+                        r'|([a-zA-Z0-9_]+)\s*\.\s*([a-zA-Z0-9_]+)'
+                        r'|([a-zA-Z0-9_]+))',
                         re.IGNORECASE
                     )
+
+                    _SQL_KEYWORDS = {
+                        'SELECT','WHERE','ON','AND','OR','NOT','NULL',
+                        'TRUE','FALSE','INNER','LEFT','RIGHT','OUTER',
+                        'CROSS','FULL','LATERAL','WITH','AS','HAVING',
+                        'GROUP','ORDER','BY','LIMIT','UNION','ALL'
+                    }
 
                     sources = []
                     for m in source_pattern.finditer(select_part):
@@ -1270,25 +1293,16 @@ class IngestionManager:
                         else:
                             continue
 
-                        # Skip SQL keywords that look like table names
-                        if src in {
-                            'SELECT','WHERE','ON','AND','OR','NOT','NULL',
-                            'TRUE','FALSE','INNER','LEFT','RIGHT','OUTER',
-                            'CROSS','FULL','LATERAL','WITH','AS','HAVING',
-                            'GROUP','ORDER','BY','LIMIT','UNION','ALL'
-                        }:
+                        if src in _SQL_KEYWORDS or src == target_table:
                             continue
 
-                        if src != target_table:
-                            sources.append(src)
+                        sources.append(src)
 
-                    logger.info(
-                        f"[Lineage][Athena] Parsed: {sources} → {target_table}"
-                    )
+                    logger.info(f"[Lineage][Athena] Parsed: {sources} → {target_table}")
 
                     if target_table and sources:
                         for src in set(sources):
-                            lineage_pairs.append((src, target_table, query_text))
+                            lineage_pairs.append((src, target_table, qmeta))
 
                 except Exception as parse_err:
                     logger.debug(f"[Lineage][Athena] Parse error: {parse_err}")
@@ -1309,7 +1323,7 @@ class IngestionManager:
             cur = sink_conn.cursor()
             lineage_stored = 0
 
-            for upstream_name, downstream_name, sql_text in lineage_pairs:
+            for upstream_name, downstream_name, qmeta in lineage_pairs:
                 cur.execute("""
                     SELECT id FROM catalogs
                     WHERE source_id = %s AND UPPER(table_name) = %s
@@ -1336,17 +1350,50 @@ class IngestionManager:
                         upstream_catalog_id,
                         downstream_catalog_id,
                         transformation_query,
-                        is_active
+                        is_active,
+                        query_execution_id,
+                        query_start_time,
+                        query_end_time,
+                        query_runtime_ms,
+                        data_scanned_bytes,
+                        query_status,
+                        engine_version,
+                        s3_output_location
                     )
-                    VALUES (%s, %s, %s, TRUE)
+                    VALUES (%s, %s, %s, TRUE, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (upstream_catalog_id, downstream_catalog_id)
                     DO UPDATE SET
                         transformation_query = EXCLUDED.transformation_query,
                         is_active            = TRUE,
-                        updated_at           = NOW()
-                """, (str(up_row[0]), str(dn_row[0]), sql_text[:2000]))
+                        updated_at           = NOW(),
+                        query_execution_id   = EXCLUDED.query_execution_id,
+                        query_start_time     = EXCLUDED.query_start_time,
+                        query_end_time       = EXCLUDED.query_end_time,
+                        query_runtime_ms     = EXCLUDED.query_runtime_ms,
+                        data_scanned_bytes   = EXCLUDED.data_scanned_bytes,
+                        query_status         = EXCLUDED.query_status,
+                        engine_version       = EXCLUDED.engine_version,
+                        s3_output_location   = EXCLUDED.s3_output_location
+                """, (
+                    str(up_row[0]),
+                    str(dn_row[0]),
+                    qmeta["query_text"][:2000],
+                    qmeta["query_execution_id"],
+                    qmeta["query_start_time"],
+                    qmeta["query_end_time"],
+                    qmeta["query_runtime_ms"],
+                    qmeta["data_scanned_bytes"],
+                    qmeta["query_status"],
+                    qmeta["engine_version"],
+                    qmeta["s3_output_location"],
+                ))
 
-                logger.info(f"[Lineage][Athena] ✓ Stored: {upstream_name} → {downstream_name}")
+                logger.info(
+                    f"[Lineage][Athena] ✓ Stored: {upstream_name} → {downstream_name} "
+                    f"[exec_id={qmeta['query_execution_id']}, "
+                    f"runtime={qmeta['query_runtime_ms']}ms, "
+                    f"scanned={qmeta['data_scanned_bytes']}B]"
+                )
                 lineage_stored += 1
 
             sink_conn.commit()
@@ -1359,7 +1406,6 @@ class IngestionManager:
         except Exception as e:
             logger.exception(f"[Lineage][Athena] Extraction failed: {e}")
             return 0
-    
 
     async def _sync_athena_descriptions(self, source_id: str):
         """
@@ -1455,6 +1501,252 @@ class IngestionManager:
 
         except Exception as e:
             logger.error(f"[Description] Glue description sync failed (non-fatal): {e}")
+
+    
+    
+    async def _sync_athena_row_counts(self, source_id: str):
+        """
+        For every catalog entry belonging to source_id, fire a SELECT COUNT(*)
+        directly against Athena and persist the result into catalog_stats.
+ 
+        Design notes
+        ------------
+        - Queries are submitted concurrently (up to MAX_CONCURRENT_COUNT_QUERIES
+          at a time) to respect Athena's per-workgroup concurrency soft-limit
+          while still finishing quickly for large catalogues.
+        - Each query is polled synchronously in a thread-pool worker until it
+          reaches a terminal state.  A per-query wall-clock timeout is enforced;
+          stray queries are cancelled on timeout so they don't consume DPUs.
+        - The entire module is non-fatal: any exception is caught and logged so
+          that a COUNT failure can never roll back or corrupt the ingestion job.
+        - Row counts are upserted (ON CONFLICT … DO UPDATE) so re-running the
+          ingestion simply refreshes the numbers.
+        """
+        import boto3
+        import time
+ 
+        # ── Tunables ──────────────────────────────────────────────────────────
+        MAX_CONCURRENT_COUNT_QUERIES = 5   # stay within Athena's 20-query soft limit
+        POLL_INTERVAL_SECONDS        = 2   # how often to check query state
+        QUERY_TIMEOUT_SECONDS        = 120 # cancel & skip after 2 minutes per table
+ 
+        logger.info(f"[RowCount][Athena] Starting row-count sync for source={source_id}")
+ 
+        try:
+            # ── 1. Load source credentials from DB ───────────────────────────
+            source = await self.db.fetch_one(
+                "SELECT connection_details FROM data_sources WHERE id = $1", source_id
+            )
+            if not source:
+                logger.warning(f"[RowCount][Athena] Source {source_id} not found — skipping")
+                return
+ 
+            conn_details = json.loads(source["connection_details"])
+ 
+            aws_region            = conn_details.get("aws_region")            or os.environ.get("AWS_DEFAULT_REGION")
+            aws_access_key_id     = conn_details.get("aws_access_key_id")     or os.environ.get("AWS_ACCESS_KEY_ID")
+            aws_secret_access_key = conn_details.get("aws_secret_access_key") or os.environ.get("AWS_SECRET_ACCESS_KEY")
+            work_group            = conn_details.get("work_group", "primary")
+            s3_staging_dir        = conn_details.get("s3_staging_dir")
+ 
+            if not s3_staging_dir:
+                logger.warning(
+                    "[RowCount][Athena] s3_staging_dir not configured — "
+                    "cannot execute COUNT queries; skipping row-count sync"
+                )
+                return
+ 
+            athena = boto3.client(
+                "athena",
+                region_name           = aws_region,
+                aws_access_key_id     = aws_access_key_id,
+                aws_secret_access_key = aws_secret_access_key,
+            )
+ 
+            # ── 2. Fetch all catalogs owned by this source ────────────────────
+            catalogs = await self.db.fetch_all(
+                "SELECT id, schema_name, table_name FROM catalogs WHERE source_id = $1",
+                source_id
+            )
+ 
+            if not catalogs:
+                logger.info("[RowCount][Athena] No catalogs found — nothing to count")
+                return
+ 
+            logger.info(
+                f"[RowCount][Athena] Submitting COUNT(*) queries for "
+                f"{len(catalogs)} table(s)"
+            )
+ 
+            # ── 3. Synchronous helpers (run inside thread-pool) ───────────────
+ 
+            def _submit_count_query(schema_name: str, table_name: str) -> str | None:
+                """
+                Fire  SELECT COUNT(*) FROM "schema"."table"  and return the
+                QueryExecutionId.  Returns None if submission fails.
+                """
+                sql = f'SELECT COUNT(*) FROM "{schema_name}"."{table_name}"'
+                try:
+                    resp = athena.start_query_execution(
+                        QueryString           = sql,
+                        QueryExecutionContext = {"Database": schema_name},
+                        ResultConfiguration   = {"OutputLocation": s3_staging_dir},
+                        WorkGroup             = work_group,
+                    )
+                    exec_id = resp["QueryExecutionId"]
+                    logger.debug(
+                        f'[RowCount][Athena] Submitted COUNT for '
+                        f'"{schema_name}"."{table_name}" → exec_id={exec_id}'
+                    )
+                    return exec_id
+                except Exception as e:
+                    logger.warning(
+                        f'[RowCount][Athena] Failed to submit COUNT for '
+                        f'"{schema_name}"."{table_name}": {e}'
+                    )
+                    return None
+ 
+            def _poll_and_fetch(exec_id: str, schema_name: str, table_name: str) -> int | None:
+                """
+                Poll until the query reaches a terminal state, then return the
+                integer row count.  Returns None on failure or timeout.
+                """
+                deadline = time.monotonic() + QUERY_TIMEOUT_SECONDS
+ 
+                while time.monotonic() < deadline:
+                    resp  = athena.get_query_execution(QueryExecutionId=exec_id)
+                    state = (
+                        resp
+                        .get("QueryExecution", {})
+                        .get("Status", {})
+                        .get("State", "")
+                    )
+ 
+                    if state == "SUCCEEDED":
+                        results = athena.get_query_results(QueryExecutionId=exec_id)
+                        rows    = results.get("ResultSet", {}).get("Rows", [])
+                        # Rows[0] = header ("_col0"), Rows[1] = the count value
+                        if len(rows) >= 2:
+                            try:
+                                count = int(rows[1]["Data"][0].get("VarCharValue", 0))
+                                logger.debug(
+                                    f'[RowCount][Athena] COUNT result: '
+                                    f'"{schema_name}"."{table_name}" = {count:,}'
+                                )
+                                return count
+                            except (ValueError, IndexError, KeyError) as parse_err:
+                                logger.warning(
+                                    f'[RowCount][Athena] Could not parse COUNT result '
+                                    f'for "{schema_name}"."{table_name}": {parse_err}'
+                                )
+                        return None  # SUCCEEDED but unparseable
+ 
+                    if state in ("FAILED", "CANCELLED"):
+                        reason = (
+                            resp
+                            .get("QueryExecution", {})
+                            .get("Status", {})
+                            .get("StateChangeReason", "unknown reason")
+                        )
+                        logger.warning(
+                            f'[RowCount][Athena] COUNT query {state} for '
+                            f'"{schema_name}"."{table_name}": {reason}'
+                        )
+                        return None
+ 
+                    time.sleep(POLL_INTERVAL_SECONDS)
+ 
+                # ── Timed out — cancel to avoid wasting DPUs ─────────────────
+                try:
+                    athena.stop_query_execution(QueryExecutionId=exec_id)
+                    logger.warning(
+                        f'[RowCount][Athena] COUNT query timed out and was cancelled '
+                        f'for "{schema_name}"."{table_name}" (exec_id={exec_id})'
+                    )
+                except Exception:
+                    pass
+                return None
+ 
+            # ── 4. Async wrapper — one coroutine per table ────────────────────
+            sem = asyncio.Semaphore(MAX_CONCURRENT_COUNT_QUERIES)
+ 
+            async def _count_one(catalog_id: str, schema_name: str, table_name: str):
+                """Returns (catalog_id, row_count | None)."""
+                async with sem:
+                    loop = asyncio.get_event_loop()
+ 
+                    exec_id = await loop.run_in_executor(
+                        None, _submit_count_query, schema_name, table_name
+                    )
+                    if exec_id is None:
+                        return catalog_id, None
+ 
+                    row_count = await loop.run_in_executor(
+                        None, _poll_and_fetch, exec_id, schema_name, table_name
+                    )
+                    return catalog_id, row_count
+ 
+            tasks   = [
+                _count_one(str(c["id"]), c["schema_name"], c["table_name"])
+                for c in catalogs
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+ 
+            # ── 5. Persist results into catalog_stats ─────────────────────────
+            sink_conn = psycopg2.connect(
+                host     = self.settings.PG_HOST,
+                port     = self.settings.PG_PORT,
+                database = self.settings.PG_DB,
+                user     = self.settings.PG_USER,
+                password = self.settings.PG_PASS,
+            )
+            cur     = sink_conn.cursor()
+            updated = 0
+ 
+            for result in results:
+                # asyncio.gather with return_exceptions=True surfaces errors here
+                if isinstance(result, Exception):
+                    logger.warning(f"[RowCount][Athena] Unexpected task error: {result}")
+                    continue
+ 
+                catalog_id, row_count = result
+                if row_count is None:
+                    continue  # query failed or timed out — leave existing value intact
+ 
+                cur.execute("""
+                    INSERT INTO catalog_stats (catalog_id, row_count, computed_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (catalog_id)
+                    DO UPDATE SET
+                        row_count   = EXCLUDED.row_count,
+                        computed_at = NOW()
+                """, (catalog_id, row_count))
+
+                cur.execute(
+                    "UPDATE catalogs SET row_count = %s WHERE id = %s",
+                    (row_count, catalog_id)
+                )
+ 
+                logger.info(
+                    f"[RowCount][Athena] ✓ catalog_id={catalog_id}  "
+                    f"row_count={row_count:,}"
+                )
+                updated += 1
+ 
+            sink_conn.commit()
+            cur.close()
+            sink_conn.close()
+ 
+            logger.info(
+                f"[RowCount][Athena] ✓ Row-count sync complete — "
+                f"{updated}/{len(catalogs)} table(s) updated"
+            )
+ 
+        except Exception as e:
+            # Non-fatal: row-count failure must never affect the ingestion job
+            logger.error(f"[RowCount][Athena] Row-count sync failed (non-fatal): {e}")
+
+    
 
     async def _extract_csv_metadata(self, source_id: str, job_id: str, conn_details: dict) -> int:
         return await asyncio.to_thread(self._extract_csv_metadata_sync, source_id, job_id, conn_details)
@@ -1770,6 +2062,14 @@ class IngestionManager:
                         logger.info(f"[Ingestion] Cleaned up zero-column catalogs for {source_type}")
                 except Exception as cleanup_err:
                     logger.warning(f"[Ingestion] Failed to clean up catalogs for {source_type}: {cleanup_err}")
+
+                
+                # ── 7.6. Athena row-count sync ──
+                if source_type == "athena":
+                    try:
+                        await self._sync_athena_row_counts(source_id)
+                    except Exception as rc_err:
+                        logger.warning(f"[RowCount] Sync failed (non-fatal): {rc_err}")
 
 
                 if source_type in {"athena", "glue"}:

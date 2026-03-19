@@ -625,11 +625,51 @@ CREATE TABLE IF NOT EXISTS table_lineage (
     CONSTRAINT uq_table_lineage UNIQUE (upstream_catalog_id, downstream_catalog_id)
 );
 
+
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='query_execution_id') THEN
+        ALTER TABLE table_lineage ADD COLUMN query_execution_id  VARCHAR(255);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='query_start_time') THEN
+        ALTER TABLE table_lineage ADD COLUMN query_start_time    TIMESTAMP WITH TIME ZONE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='query_end_time') THEN
+        ALTER TABLE table_lineage ADD COLUMN query_end_time      TIMESTAMP WITH TIME ZONE;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='query_runtime_ms') THEN
+        ALTER TABLE table_lineage ADD COLUMN query_runtime_ms    BIGINT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='data_scanned_bytes') THEN
+        ALTER TABLE table_lineage ADD COLUMN data_scanned_bytes  BIGINT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='query_status') THEN
+        ALTER TABLE table_lineage ADD COLUMN query_status        VARCHAR(50);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='engine_version') THEN
+        ALTER TABLE table_lineage ADD COLUMN engine_version      VARCHAR(100);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name='table_lineage' AND column_name='s3_output_location') THEN
+        ALTER TABLE table_lineage ADD COLUMN s3_output_location  TEXT;
+    END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_tl_upstream   ON table_lineage(upstream_catalog_id);
 CREATE INDEX IF NOT EXISTS idx_tl_downstream ON table_lineage(downstream_catalog_id);
 CREATE INDEX IF NOT EXISTS idx_tl_owner      ON table_lineage(owner_id);
 CREATE INDEX IF NOT EXISTS idx_tl_active     ON table_lineage(is_active);
-CREATE INDEX IF NOT EXISTS idx_tl_created_at ON table_lineage(created_at DESC);  -- added: latest lineage first
+CREATE INDEX IF NOT EXISTS idx_tl_created_at ON table_lineage(created_at DESC); 
+
+CREATE INDEX IF NOT EXISTS idx_tl_execution_id ON table_lineage(query_execution_id);
+CREATE INDEX IF NOT EXISTS idx_tl_query_status ON table_lineage(query_status);
 
 DROP TRIGGER IF EXISTS update_table_lineage_updated_at ON table_lineage;
 CREATE TRIGGER update_table_lineage_updated_at
@@ -863,6 +903,7 @@ CREATE TABLE IF NOT EXISTS datacards (
 );
 
 
+
 -- ============================================================================
 -- CATALOG QUERIES
 -- ============================================================================
@@ -886,3 +927,187 @@ DROP TRIGGER IF EXISTS update_catalog_queries_updated_at ON catalog_queries;
 CREATE TRIGGER update_catalog_queries_updated_at
     BEFORE UPDATE ON catalog_queries
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+
+-- ============================================================================
+-- COLUMN QUERIES TABLE
+-- Stores derived / computed column expressions used for lineage display.
+-- Linked to `columns` by (table_name, column_name) so it survives re-ingestion
+-- and also carries an optional direct FK to `columns.id` once resolved.
+-- ============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS column_queries (
+    id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+    table_name    VARCHAR(255) NOT NULL,                 -- matches catalogs.table_name  (case-insensitive)
+    column_name   VARCHAR(255) NOT NULL,                 -- matches columns.name          (case-insensitive)
+    query_expression TEXT      NOT NULL,                 -- the SQL / expression string from the CSV
+    column_id     UUID        REFERENCES columns(id)  ON DELETE SET NULL,   -- resolved FK (nullable)
+    catalog_id    UUID        REFERENCES catalogs(id) ON DELETE SET NULL,   -- resolved FK (nullable)
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE (table_name, column_name)                     -- one expression per (table, column) pair
+);
+
+-- Indexes for fast lookups from the lineage API
+CREATE INDEX IF NOT EXISTS idx_col_queries_table  ON column_queries(table_name);
+CREATE INDEX IF NOT EXISTS idx_col_queries_column ON column_queries(column_name);
+CREATE INDEX IF NOT EXISTS idx_col_queries_col_fk ON column_queries(column_id);
+CREATE INDEX IF NOT EXISTS idx_col_queries_cat_fk ON column_queries(catalog_id);
+
+-- Auto-update timestamp
+DROP TRIGGER IF EXISTS update_column_queries_updated_at ON column_queries;
+CREATE TRIGGER update_column_queries_updated_at
+    BEFORE UPDATE ON column_queries
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+
+-- ============================================================================
+-- SEED DATA 
+-- ============================================================================
+
+INSERT INTO column_queries (table_name, column_name, query_expression) VALUES
+
+-- ── bookingpassenger ─────────────────────────────────────────────────────────
+('bookingpassenger', 'age_years',
+ 'DATEDIFF(''year'', bp.passengerdob, CURRENT_DATE)'),
+
+('bookingpassenger', 'age_bucket',
+ 'CASE WHEN age < 12 THEN ''child'' WHEN age < 18 THEN ''teenager'' WHEN age < 35 THEN ''young_adult'' WHEN age < 55 THEN ''adult'' ELSE ''senior'' END'),
+
+('bookingpassenger', 'passport_days_to_expiry',
+ 'DATEDIFF(''day'', CURRENT_DATE, bp.passportexpiry)'),
+
+('bookingpassenger', 'passport_status',
+ 'CASE WHEN days < 0 THEN ''expired'' WHEN days < 90 THEN ''expiring_soon'' WHEN days < 365 THEN ''expiring_within_year'' ELSE ''valid'' END'),
+
+('bookingpassenger', 'payment_completion_rate',
+ 'CASE WHEN bp.totalcost > 0 THEN ROUND(1.0 - (bp.balancedue / bp.totalcost), 4) ELSE NULL END'),
+
+('bookingpassenger', 'used_discount',
+ 'CASE WHEN bp.discountcode IS NOT NULL THEN 1 ELSE 0 END'),
+
+('bookingpassenger', 'passport_risk_flag',
+ 'CASE WHEN passport_days_to_expiry < 90 AND has_international_travel = 1 THEN 1 ELSE 0 END'),
+
+('bookingpassenger', 'payment_risk_flag',
+ 'CASE WHEN bp.totalcost > 0 AND (bp.balancedue / bp.totalcost) > 0.5 THEN 1 ELSE 0 END'),
+
+-- ── booking ───────────────────────────────────────────────────────────────────
+('booking', 'booking_lead_days',
+ 'DATEDIFF(''day'', b.bookingutc, MIN(pjs.departuredate) OVER (PARTITION BY bp.passengerid, bp.bookingid))'),
+
+('booking', 'booking_lead_category',
+ 'CASE WHEN lead <= 3 THEN ''last_minute'' WHEN lead <= 14 THEN ''short_lead'' WHEN lead <= 60 THEN ''medium_lead'' ELSE ''early_planner'' END'),
+
+('booking', 'used_hold',
+ 'CASE WHEN b.holdutc IS NOT NULL THEN 1 ELSE 0 END'),
+
+('booking', 'used_promo',
+ 'CASE WHEN b.bookingpromocode IS NOT NULL THEN 1 ELSE 0 END'),
+
+('booking', 'booking_hour_utc',
+ 'EXTRACT(HOUR FROM b.bookingutc)'),
+
+('booking', 'booking_time_of_day',
+ 'CASE WHEN hour BETWEEN 6 AND 11 THEN ''morning'' WHEN hour BETWEEN 12 AND 17 THEN ''afternoon'' WHEN hour BETWEEN 18 AND 21 THEN ''evening'' ELSE ''night_owl'' END'),
+
+-- ── passengerjourneysegment ───────────────────────────────────────────────────
+('passengerjourneysegment', 'total_segments',
+ 'COUNT(DISTINCT pjs.segmentid)'),
+
+('passengerjourneysegment', 'total_journeys',
+ 'COUNT(DISTINCT pjs.journeynumber)'),
+
+('passengerjourneysegment', 'total_trips',
+ 'COUNT(DISTINCT pjs.tripnumber)'),
+
+('passengerjourneysegment', 'unique_flights',
+ 'COUNT(DISTINCT pjs.xrefflightnumber)'),
+
+('passengerjourneysegment', 'has_international_travel',
+ 'MAX(CASE WHEN pjs.international = TRUE THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'intl_segment_count',
+ 'SUM(CASE WHEN pjs.international = TRUE THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'domestic_segment_count',
+ 'SUM(CASE WHEN pjs.international = FALSE THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'unique_routes',
+ 'COUNT(DISTINCT pjs.departurestation || ''-'' || pjs.arrivalstation)'),
+
+('passengerjourneysegment', 'unique_departure_stations',
+ 'COUNT(DISTINCT pjs.departurestation)'),
+
+('passengerjourneysegment', 'unique_arrival_stations',
+ 'COUNT(DISTINCT pjs.arrivalstation)'),
+
+('passengerjourneysegment', 'has_roundtrip',
+ 'MAX(CASE WHEN pjs.triptype = ''RT'' THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'has_oneway',
+ 'MAX(CASE WHEN pjs.triptype = ''OW'' THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'seats_assigned',
+ 'COUNT(CASE WHEN pjs.seatnumber IS NOT NULL THEN 1 END)'),
+
+('passengerjourneysegment', 'seats_unassigned',
+ 'COUNT(CASE WHEN pjs.seatnumber IS NULL THEN 1 END)'),
+
+('passengerjourneysegment', 'unique_farebases',
+ 'COUNT(DISTINCT pjs.farebasis)'),
+
+('passengerjourneysegment', 'has_open_fare',
+ 'MAX(CASE WHEN pjs.farestatus = ''OPEN'' THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'is_ticketed',
+ 'MAX(CASE WHEN pjs.ticketstatus = ''TICKETED'' THEN 1 ELSE 0 END)'),
+
+('passengerjourneysegment', 'first_departure_date',
+ 'MIN(pjs.departuredate)'),
+
+('passengerjourneysegment', 'last_departure_date',
+ 'MAX(pjs.departuredate)'),
+
+('passengerjourneysegment', 'travel_intensity_score',
+ 'ROUND(COUNT(DISTINCT segmentid)*1.0 + MAX(intl)*3.0 + COUNT(DISTINCT routes)*0.5 + COUNT(DISTINCT flights)*0.5, 2)'),
+
+('passengerjourneysegment', 'passenger_value_segment',
+ 'CASE WHEN totalcost>=5000 AND intl=1 THEN ''premium_intl'' WHEN totalcost>=5000 THEN ''premium_domestic'' WHEN totalcost>=1000 AND intl=1 THEN ''mid_intl'' WHEN totalcost>=1000 THEN ''mid_domestic'' ELSE ''budget'' END'),
+
+-- ── agent ─────────────────────────────────────────────────────────────────────
+('agent', 'agent_tenure_years',
+ 'DATEDIFF(''year'', a.agentsince, CURRENT_DATE)'),
+
+('agent', 'agent_seniority_tier',
+ 'CASE WHEN tenure < 2 THEN ''junior'' WHEN tenure < 5 THEN ''mid'' WHEN tenure < 10 THEN ''senior'' ELSE ''veteran'' END'),
+
+-- ── system ────────────────────────────────────────────────────────────────────
+('system', 'profile_refreshed_utc',
+ 'CURRENT_TIMESTAMP AS profile_refreshed_utc')
+
+ON CONFLICT (table_name, column_name)
+DO UPDATE SET
+    query_expression = EXCLUDED.query_expression,
+    updated_at       = NOW();
+
+
+-- ============================================================================
+-- RESOLVE FKs — backfill column_id and catalog_id where a match exists.
+-- Matches on lower-cased names so casing differences don't break the join.
+-- Safe to re-run; uses LEFT JOIN so unmatched rows remain (column_id = NULL).
+-- ============================================================================
+
+UPDATE column_queries cq
+SET
+    column_id  = col.id,
+    catalog_id = cat.id,
+    updated_at = NOW()
+FROM columns col
+JOIN catalogs cat ON cat.id = col.catalog_id
+WHERE LOWER(col.name)       = LOWER(cq.column_name)
+  AND LOWER(cat.table_name) = LOWER(cq.table_name)
+  AND cq.column_id IS NULL;   -- skip rows already resolved

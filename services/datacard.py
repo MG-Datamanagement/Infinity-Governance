@@ -59,24 +59,6 @@ class CreateCustomPropertyRequest(BaseModel):
     value:      str
     value_type: Optional[str] = "string"
 
-# ============================================================================
-# SQL – run once at startup (or via your migration tool) to create the table
-# ============================================================================
-#
-#   CREATE TABLE IF NOT EXISTS datacards (
-#       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-#       catalog_id    TEXT NOT NULL,
-#       table_name    TEXT,
-#       full_name     TEXT,
-#       data_card     TEXT NOT NULL,
-#       generated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-#       status        TEXT NOT NULL DEFAULT 'generated',   -- 'generated' | 'cached'
-#       created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-#       updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-#       CONSTRAINT uq_datacards_catalog UNIQUE (catalog_id)
-#   );
-#
-# ============================================================================
 
 
 def _build_datacard_prompt(catalog_detail: dict) -> str:
@@ -152,7 +134,6 @@ Source Name  : {catalog_detail.get('source_name') or 'N/A'}
 Source Type  : {catalog_detail.get('source_type') or 'N/A'}
 Description  : {catalog_detail.get('description') or 'No description provided'}
 Column Count : {catalog_detail.get('column_count', len(catalog_detail.get('columns', [])))}
-Domain(s)    : {domains}
 Tags         : {tags}
 Owner        : {owner_str}
 Last Updated : {catalog_detail.get('updated_at') or 'Unknown'}
@@ -513,7 +494,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         db, logger,
         endpoint=endpoint,
         method="POST",
-        action_summary=f"Datacard generated for catalog '{catalog['table_name']}' (id={catalog_id})",
+        action_summary=f"Datacard generated for catalog '{catalog['table_name']}' ",
         entity_type="catalog",
         entity_id=catalog_id,
         entity_name=catalog["table_name"],

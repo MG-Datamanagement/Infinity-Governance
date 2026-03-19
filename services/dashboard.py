@@ -820,7 +820,9 @@ async def get_overview_stats():
             at_risk_domains = at_risk_row or 0
 
         return {
-            "total_datasets":   row["total_datasets"],
+            "total_datasets":   {
+                "value" : row["total_datasets"],
+                "info" : "Count of total catalogs that have been ingested into the data catalog"},
             "total_tags":       row["total_tags"],
             "total_domains":    row["total_domains"],
             "total_assets":     row["total_assets"],
@@ -923,4 +925,51 @@ def get_compliance_overview():
         }
 
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/v1/tags/top", tags=["Overview"])
+async def get_top_tags(
+    limit: int = Query(30, ge=1, le=200)
+):
+    """
+    Returns tags with total asset count (catalogs + columns) in descending order.
+    """
+    from app import db, logger
+    try:
+        rows = await db.fetch_all(
+            """
+            SELECT
+                t.id,
+                t.name,
+                t.color,
+                t.tag_type,
+                COUNT(DISTINCT tca.catalog_id)  AS catalog_count,
+                COUNT(DISTINCT tcola.column_id) AS column_count,
+                COUNT(DISTINCT tca.catalog_id) + COUNT(DISTINCT tcola.column_id) AS total_assets
+            FROM tags t
+            LEFT JOIN tag_catalog_assignments tca   ON t.id = tca.tag_id
+            LEFT JOIN tag_column_assignments  tcola ON t.id = tcola.tag_id
+            GROUP BY t.id, t.name, t.color, t.tag_type
+            ORDER BY total_assets DESC, t.name ASC
+            LIMIT $1
+            """,
+            limit,
+        )
+
+        return [
+            {
+                "id":            str(row["id"]),
+                "name":          row["name"],
+                "color":         row["color"],
+                "tag_type":      row["tag_type"],
+                "catalog_count": row["catalog_count"] or 0,
+                "column_count":  row["column_count"]  or 0,
+                "total_assets":  row["total_assets"]  or 0,
+            }
+            for row in rows
+        ]
+
+    except Exception as e:
+        logger.error(f"Error fetching top tags: {e}")
         raise HTTPException(status_code=500, detail=str(e))
