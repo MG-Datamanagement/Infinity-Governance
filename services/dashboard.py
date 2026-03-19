@@ -599,13 +599,15 @@ async def get_recent_activity_minimal(
         LIMIT $1
     """, limit)
 
-    return [
+    return {
+        "info": " Recent user activities",
+        "activities": [
         {
             "t": row["created_at"].isoformat() if row["created_at"] else None,
             "msg": row["action_summary"]
         }
         for row in rows
-    ]
+    ]}
 
 
 
@@ -662,7 +664,10 @@ def get_recently_viewed():
             for row in rows
         ]
 
-        return {"recently_viewed": datasets}
+        return {
+            "info": "Recently viewed catalogs based on user activity",
+            "recently_viewed": datasets
+            }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -822,14 +827,36 @@ async def get_overview_stats():
         return {
             "total_datasets":   {
                 "value" : row["total_datasets"],
-                "info" : "Count of total catalogs that have been ingested into the data catalog"},
-            "total_tags":       row["total_tags"],
-            "total_domains":    row["total_domains"],
-            "total_assets":     row["total_assets"],
-            "pending_review":   pending_review or 0,
-            "open_issues":      open_issues,
-            "governance_score": governance_score,
-            "at_risk_domains":  at_risk_domains,
+                "info" : "Count of total catalogs that have been ingested into the data catalog"
+                },
+            "total_tags": {
+                "value" : row["total_tags"],
+                "info" : "Count of total tags available for classification and labeling"
+               }, 
+            "total_domains":  {
+                "value" : row["total_domains"],
+                "info" : "Count of total domains that can be used to group and organize datasets"
+            },
+            "total_assets":    {
+                "value" : row["total_assets"],
+                "info" : "Total count of all assets in the system (datasets + tags + line of business domains)" 
+            },
+            "pending_review":  {
+                "value" : pending_review,
+                "info" : "Number of datasets that are missing critical metadata and may require review "
+            },
+            "open_issues":     {
+                "value" : open_issues,
+                "info" : "Number of open compliance issues across all datasets based on the latest compliance snapshot" 
+            },
+            "governance_score":{
+                "value" : governance_score,
+                "info" : "Overall governance score  based on the latest compliance snapshot"
+            },
+            "at_risk_domains": {
+                "value" : at_risk_domains,
+                "info" : "Number of domains that have at least one dataset with a CRITICAL or HIGH severity compliance issue based on the latest compliance snapshot"
+            }
         }
 
     except Exception as e:
@@ -859,6 +886,7 @@ async def get_datasets_by_platform():
         """)
 
         return {
+            "info": "Breakdown of how many datasets are ingested from each platform type",
             "platforms": [
                 {
                     "platform":      r["platform"],
@@ -894,10 +922,11 @@ async def domains_simple_with_count(
         limit,
     )
 
-    return [
+    return{ "info": "Top domains by dataset count", 
+           "domains": [
         {"id": str(row["id"]), "name": row["name"], "dataset_count": row["dataset_count"] or 0}
         for row in rows
-    ]
+    ]}
 
 
 @router.get("/compliance-overview", tags=["Overview"])
@@ -920,6 +949,7 @@ def get_compliance_overview():
         ]
 
         return {
+            "info": "Overview of compliance status based on the latest snapshot, including AI-generated insights and framework scores",
             "insight": insight_text,
             "framework_scores": framework_scores
         }
@@ -957,7 +987,9 @@ async def get_top_tags(
             limit,
         )
 
-        return [
+        return {
+            "info": "Top tags by asset count",
+            "tags": [
             {
                 "id":            str(row["id"]),
                 "name":          row["name"],
@@ -968,7 +1000,7 @@ async def get_top_tags(
                 "total_assets":  row["total_assets"]  or 0,
             }
             for row in rows
-        ]
+        ]}
 
     except Exception as e:
         logger.error(f"Error fetching top tags: {e}")
