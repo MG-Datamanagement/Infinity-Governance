@@ -234,6 +234,9 @@ app.include_router(solr_router)
 from services.catalog_properties import router as catalog_properties_router
 app.include_router(catalog_properties_router)   
 
+from services.line_of_business import router as line_of_business_router
+app.include_router(line_of_business_router) 
+
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================

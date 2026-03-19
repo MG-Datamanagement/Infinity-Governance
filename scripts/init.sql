@@ -1111,3 +1111,44 @@ JOIN catalogs cat ON cat.id = col.catalog_id
 WHERE LOWER(col.name)       = LOWER(cq.column_name)
   AND LOWER(cat.table_name) = LOWER(cq.table_name)
   AND cq.column_id IS NULL;   -- skip rows already resolved
+
+
+
+CREATE TABLE IF NOT EXISTS public.line_of_business (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name TEXT NOT NULL,
+    description TEXT,
+    owner UUID,
+    color TEXT,
+
+    parent_lob_id UUID NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_lob_parent
+        FOREIGN KEY (parent_lob_id)
+        REFERENCES public.line_of_business(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT fk_lob_owner
+        FOREIGN KEY (owner)
+        REFERENCES public.owners(id)
+        ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS public.lob_catalog_map (
+    lob_id UUID NOT NULL,
+    catalog_id UUID NOT NULL,
+
+    PRIMARY KEY (lob_id, catalog_id),
+
+    CONSTRAINT fk_lob
+        FOREIGN KEY (lob_id)
+        REFERENCES public.line_of_business(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_catalog
+        FOREIGN KEY (catalog_id)
+        REFERENCES public.catalogs(id)   
+        ON DELETE CASCADE
+);
