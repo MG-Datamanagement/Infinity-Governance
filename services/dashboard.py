@@ -982,3 +982,133 @@ async def get_top_tags(
     except Exception as e:
         logger.error(f"Error fetching top tags: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# AI COLUMN DESCRIPTION GENERATOR
+# ============================================================================
+
+@router.post("/api/v1/catalog/{catalog_id}/columns/generate-descriptions", tags=["Catalogs"])
+async def generate_column_descriptions(catalog_id: str):
+    """
+    For a given catalog_id, fetch all columns where description is NULL,
+    generate a one-line AI description for each using Azure OpenAI,
+    and update the columns table.
+    """
+    from app import db, logger
+    import httpx
+
+    AZURE_OPENAI_API_KEY        = os.getenv("AZURE_OPENAI_API_KEY")
+    AZURE_OPENAI_ENDPOINT       = os.getenv("AZURE_OPENAI_ENDPOINT")
+    AZURE_OPENAI_DEPLOYMENT     = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+    AZURE_OPENAI_API_VERSION    = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
+
+    if not AZURE_OPENAI_API_KEY or not AZURE_OPENAI_ENDPOINT:
+        raise HTTPException(status_code=500, detail="Azure OpenAI credentials are not configured")
+
+    try:
+        # ── 1. Verify catalog exists ─────────────────────────────────────────
+        catalog = await db.fetch_one("""
+            SELECT id, table_name, schema_name, database_name
+            FROM catalogs
+            WHERE id = $1
+        """, catalog_id)
+
+        if not catalog:
+            raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
+
+        table_name = catalog["table_name"]
+
+        # ── 2. Fetch columns with NULL description ───────────────────────────
+        columns = await db.fetch_all("""
+            SELECT id, name, data_type, is_primary_key, is_foreign_key, is_nullable
+            FROM columns
+            WHERE catalog_id = $1
+              AND (description IS NULL OR description = '')
+            ORDER BY ordinal_position
+        """, catalog_id)
+
+        if not columns:
+            return {
+                "catalog_id": catalog_id,
+                "table_name": table_name,
+                "updated": 0,
+                "message": "All columns already have descriptions — nothing to update."
+            }
+
+        # ── 3. Call Azure OpenAI for each column ─────────────────────────────
+        azure_url = (
+            f"{AZURE_OPENAI_ENDPOINT.rstrip('/')}"
+            f"/openai/deployments/{AZURE_OPENAI_DEPLOYMENT}"
+            f"/chat/completions?api-version={AZURE_OPENAI_API_VERSION}"
+        )
+        headers = {
+            "Content-Type": "application/json",
+            "api-key": AZURE_OPENAI_API_KEY,
+        }
+
+        updated_count = 0
+        failed = []
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            for col in columns:
+                col = dict(col)
+                col_name   = col["name"]
+                col_type   = col["data_type"] or "unknown"
+                is_pk      = col["is_primary_key"]
+                is_fk      = col["is_foreign_key"]
+                is_null    = col["is_nullable"]
+
+                # Build a concise prompt
+                prompt = (
+                    f"You are a data catalog assistant. "
+                    f"Write a single clear one-line description (max 10 words) for a database column.\n\n"
+                    f"Table: {table_name}\n"
+                    f"Column: {col_name}\n"
+                    f"Type: {col_type}\n"
+                    f"Primary key: {is_pk}, Foreign key: {is_fk}, Nullable: {is_null}\n\n"
+                    f"Reply with only the description — no quotes, no punctuation at the end."
+                )
+
+                payload = {
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 60,
+                    "temperature": 0.3,
+                }
+
+                try:
+                    response = await client.post(azure_url, headers=headers, json=payload)
+                    response.raise_for_status()
+                    result = response.json()
+                    description = (
+                        result["choices"][0]["message"]["content"].strip()
+                    )
+                except Exception as ai_err:
+                    logger.warning(f"AI call failed for column '{col_name}': {ai_err}")
+                    failed.append(col_name)
+                    continue
+
+                # ── 4. Update the column description in DB ───────────────────
+                await db.execute("""
+                    UPDATE columns
+                    SET description = $1,
+                        updated_at  = NOW()
+                    WHERE id = $2
+                """, description, str(col["id"]))
+
+                updated_count += 1
+
+        return {
+            "catalog_id":  catalog_id,
+            "table_name":  table_name,
+            "total_null_columns": len(columns),
+            "updated":     updated_count,
+            "failed":      failed,
+            "message":     f"Successfully generated descriptions for {updated_count} column(s)."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating column descriptions for catalog {catalog_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

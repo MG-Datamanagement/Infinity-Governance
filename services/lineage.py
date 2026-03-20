@@ -169,13 +169,11 @@ MOCK_TRANSACTION_NODE = VisualNode(
     column_mappings=[],
     depth=1,
     ai_summary=(
-        "Increase the column size (e.g., change from VARCHAR(256) to VARCHAR(512) or TEXT) to accommodate longer Thai addresses and IDs. Alternatively, validate input data before insertion to ensure it does not exceed the defined length limits."
+        "Convert or cast the date-formatted input into a string (VARCHAR) to align with the schema and ensure smooth data ingestion."
     ),
     stats="Columns: 16 | Rows: 0",
     notes=(
-        "The address is provided in Thai, which exceeds the default string length of 256 characters. "
-        "Additionally, the 3f1c9a72-5e4b-4d9f-a1c8-7b2e6f9d4a11 value also exceeds the defined limit, "
-        "reaching up to 378 characters."
+        "The journey_time column is defined as VARCHAR(256), while the incoming data is in a date format, causing a type mismatch during ingestion. "
     ),
 )
 

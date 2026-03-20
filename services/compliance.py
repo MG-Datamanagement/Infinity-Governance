@@ -933,7 +933,8 @@ class ComplianceEngine:
                 "score":       overall,
                 "trend_label": trend_label,
             },
-
+            "overall_score_infographic": "The Overall compliance score after the latest scan.",
+            "frameworks_infographic": "The Overall frameworks after the latest scan and their metrics.",
             # ── trends  (top-level, matches old structure exactly) ─────────
             # datasets array: one entry per framework, label + data[]
             "trends": {
