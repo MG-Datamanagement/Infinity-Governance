@@ -11,6 +11,8 @@
 #    - GDPR-008: Source data lineage must be tracked ✓
 #    - GDPR-009: Schema isolation must be enforced for personal data ✓
 #    - GDPR-010: Orphaned catalogs must be assigned or marked for deletion ✓
+#
+#  API RESPONSE STRUCTURE: Matches original codebase (Compliance Engine 1) EXACTLY
 # =============================================================================
 
 import io
@@ -22,16 +24,18 @@ from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from itertools import chain
 from typing import Any, Dict, Generator, List, Optional, TypedDict
-from langchain_openai import AzureChatOpenAI
-from langchain.prompts import PromptTemplate
-from fastapi import FastAPI, HTTPException, APIRouter
+
 import psycopg2
 import psycopg2.extras
 import psycopg2.pool
 from dotenv import load_dotenv
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.graph import END, StateGraph
+from langchain_openai import AzureChatOpenAI
+from langchain.prompts import PromptTemplate
+
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -50,15 +54,13 @@ logger = logging.getLogger("compliance_engine")
 
 IST = timezone.utc
 
-
-
 # =============================================================================
 # CONSTANTS
 # =============================================================================
 
 QUICK_ACTIONS = [
-    {"label": "Run Full Scan",  "action": "run_full_scan"},
-    {"label": "Export Report",  "action": "export_report"},
+    {"label": "Run Full Scan", "action": "run_full_scan"},
+    {"label": "Export Report", "action": "export_report"},
 ]
 
 SEVERITY_DUE_DAYS = {"critical": 3, "high": 7, "medium": 14, "low": 30}
@@ -80,7 +82,7 @@ WHITE       = colors.white
 BLACK       = colors.HexColor("#111827")
 
 # =============================================================================
-# AI PROMPT TEMPLATES (For insights & descriptions only - NO AUTO-FIX)
+# AI PROMPT TEMPLATES
 # =============================================================================
 
 GDPR_DESCRIPTION_GENERATOR = PromptTemplate(
@@ -109,15 +111,11 @@ Generate recommended description for the table:
 )
 
 # =============================================================================
-# FRAMEWORK RULES — GDPR ONLY (001-010, excl. 006) - DETECTION ONLY
+# FRAMEWORK RULES — GDPR ONLY
 # =============================================================================
 
 FRAMEWORK_RULES: dict = {
-
     "GDPR": [
-        # ------------------------------------------------------------------
-        # GDPR-001
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-001",
             "rule": "PII/sensitive catalogs must have a retention policy description",
@@ -151,9 +149,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "5(1)(e)",
             "severity": "critical",
         },
-        # ------------------------------------------------------------------
-        # GDPR-002
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-002",
             "rule": "PII/sensitive catalogs must have an assigned owner (data steward accountability)",
@@ -185,9 +180,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "5(2)",
             "severity": "critical",
         },
-        # ------------------------------------------------------------------
-        # GDPR-003
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-003",
             "rule": "All catalogs must have metadata tracking for data governance",
@@ -220,9 +212,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "5(1)(a)",
             "severity": "high",
         },
-        # ------------------------------------------------------------------
-        # GDPR-004
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-004",
             "rule": "Catalogs must have last_seen_at tracking for data lifecycle management",
@@ -253,9 +242,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "5(1)(e)",
             "severity": "medium",
         },
-        # ------------------------------------------------------------------
-        # GDPR-005
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-005",
             "rule": "Cross-database personal data catalogs require privacy impact assessment documentation",
@@ -294,9 +280,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "35",
             "severity": "critical",
         },
-        # ------------------------------------------------------------------
-        # GDPR-007
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-007",
             "rule": "Catalog metadata audit timestamps must be current",
@@ -327,9 +310,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "32",
             "severity": "medium",
         },
-        # ------------------------------------------------------------------
-        # GDPR-008
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-008",
             "rule": "Source data lineage must be tracked for right-to-be-forgotten implementation",
@@ -363,9 +343,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "17",
             "severity": "critical",
         },
-        # ------------------------------------------------------------------
-        # GDPR-009
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-009",
             "rule": "Schema isolation must be enforced for personal data separation",
@@ -402,9 +379,6 @@ FRAMEWORK_RULES: dict = {
             "gdpr_article": "5(1)(f)",
             "severity": "high",
         },
-        # ------------------------------------------------------------------
-        # GDPR-010
-        # ------------------------------------------------------------------
         {
             "rule_id": "GDPR-010",
             "rule": "Orphaned catalogs without owners must be assigned or marked for deletion",
@@ -440,6 +414,73 @@ FRAMEWORK_RULES: dict = {
 }
 
 # =============================================================================
+# DDL — AUTO-CREATED TABLES ON STARTUP
+# =============================================================================
+
+DDL_STATEMENTS = [
+    """
+    CREATE TABLE IF NOT EXISTS compliance_snapshots (
+        id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        recorded_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+
+        overall_score                   NUMERIC(5,2) NOT NULL,
+        overall_health_status           VARCHAR(20)  NOT NULL,
+        overall_change_from_last_month  NUMERIC(5,2),
+
+        gdpr_score              NUMERIC(5,2),
+        gdpr_status             VARCHAR(20),
+        gdpr_rules_passed       INTEGER,
+        gdpr_rules_total        INTEGER,
+        gdpr_last_checked       TEXT,
+
+        open_issues_count       INTEGER DEFAULT 0,
+        critical_issues_count   INTEGER DEFAULT 0,
+        high_issues_count       INTEGER DEFAULT 0,
+        medium_issues_count     INTEGER DEFAULT 0,
+        low_issues_count        INTEGER DEFAULT 0,
+
+        compliance_health_score         NUMERIC(5,2),
+        compliance_health_trend_label   TEXT,
+
+        top_issue_1_issue       TEXT,
+        top_issue_1_framework   VARCHAR(20),
+        top_issue_1_severity    VARCHAR(20),
+        top_issue_1_dataset     TEXT,
+        top_issue_1_assignee    TEXT,
+        top_issue_1_due_date    TEXT,
+
+        top_issue_2_issue       TEXT,
+        top_issue_2_framework   VARCHAR(20),
+        top_issue_2_severity    VARCHAR(20),
+        top_issue_2_dataset     TEXT,
+        top_issue_2_assignee    TEXT,
+        top_issue_2_due_date    TEXT,
+
+        top_issue_3_issue       TEXT,
+        top_issue_3_framework   VARCHAR(20),
+        top_issue_3_severity    VARCHAR(20),
+        top_issue_3_dataset     TEXT,
+        top_issue_3_assignee    TEXT,
+        top_issue_3_due_date    TEXT,
+
+        ai_insights_text        TEXT,
+        ai_insights_beta        BOOLEAN DEFAULT TRUE,
+
+        trend_month_label       TEXT,
+        trend_overall_data      NUMERIC(5,2)[],
+        trend_gdpr_data         NUMERIC(5,2)[],
+
+        scan_duration_seconds   NUMERIC(8,2),
+        snapshot_json           JSONB NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_recorded_at ON compliance_snapshots (recorded_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_overall     ON compliance_snapshots (overall_score)",
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_health      ON compliance_snapshots (overall_health_status)",
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_gdpr        ON compliance_snapshots (gdpr_score)",
+]
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -462,7 +503,7 @@ def flatten(list_of_lists: list) -> list:
 
 def health_status(score: float) -> str:
     if score >= 90:   return "excellent"
-    elif score >= 75: return "good"
+    elif score >= 75: return "needs_attention"
     elif score >= 50: return "needs_attention"
     return "critical"
 
@@ -471,11 +512,11 @@ def human_time_ago(dt: datetime) -> str:
         dt = dt.replace(tzinfo=timezone.utc)
     diff = datetime.now(timezone.utc) - dt
     secs = int(diff.total_seconds())
-    if secs < 60:         return "just now"
+    if secs < 60:          return "just now"
     elif secs < 3600:
-        m = secs // 60;   return f"{m} minute{'s' if m != 1 else ''} ago"
+        m = secs // 60;    return f"{m} minute{'s' if m != 1 else ''} ago"
     elif secs < 86400:
-        h = secs // 3600; return f"{h} hour{'s' if h != 1 else ''} ago"
+        h = secs // 3600;  return f"{h} hour{'s' if h != 1 else ''} ago"
     else:
         d = secs // 86400; return f"{d} day{'s' if d != 1 else ''} ago"
 
@@ -491,11 +532,11 @@ def _build_pg_connect_kwargs() -> dict:
     if dsn:
         return {"dsn": dsn}
     return {
-        "host":               os.getenv("PG_HOST"),
+        "host":               os.getenv("PG_HOST",     "localhost"),
         "port":               int(os.getenv("PG_PORT", "5432")),
-        "dbname":             os.getenv("PG_DB"),
-        "user":               os.getenv("PG_USER"),
-        "password":           os.getenv("PG_PASS"),
+        "dbname":             os.getenv("PG_DB",     "compliance_db"),
+        "user":               os.getenv("PG_USER",     "postgres"),
+        "password":           os.getenv("PG_PASS", ""),
         "sslmode":            os.getenv("PG_SSLMODE",  "prefer"),
         "keepalives":          1,
         "keepalives_idle":     30,
@@ -516,8 +557,15 @@ class DatabaseManager:
         logger.info("DatabaseManager: pool ready (min=%d, max=%d).", min_conn, max_conn)
 
     def _ensure_tables(self):
-        """Placeholder for table creation logic if needed"""
-        pass
+        try:
+            with self._get_conn() as conn:
+                with conn.cursor() as cur:
+                    for stmt in DDL_STATEMENTS:
+                        cur.execute(stmt)
+                conn.commit()
+            logger.info("DatabaseManager: all tables are ready.")
+        except psycopg2.Error as exc:
+            logger.error("Table setup failed [pgcode=%s]: %s", exc.pgcode, exc.pgerror)
 
     @contextmanager
     def _get_conn(self) -> Generator:
@@ -557,7 +605,7 @@ class DatabaseManager:
 
 
 # =============================================================================
-# LLM EVALUATOR (Detection & Recommendations Only)
+# LLM EVALUATOR
 # =============================================================================
 
 class LLMEvaluator:
@@ -696,7 +744,7 @@ def make_generate_insights_node(llm: LLMEvaluator):
 
 
 # =============================================================================
-# COMPLIANCE ENGINE (Detection & Reporting Only)
+# COMPLIANCE ENGINE
 # =============================================================================
 
 class ComplianceEngine:
@@ -715,9 +763,9 @@ class ComplianceEngine:
         wf.add_node("generate_insights", make_generate_insights_node(self.llm))
 
         wf.set_entry_point("evaluate_frameworks")
-        wf.add_edge("evaluate_frameworks",   "aggregate_scores")
-        wf.add_edge("aggregate_scores",      "generate_insights")
-        wf.add_edge("generate_insights",     END)
+        wf.add_edge("evaluate_frameworks", "aggregate_scores")
+        wf.add_edge("aggregate_scores",    "generate_insights")
+        wf.add_edge("generate_insights",   END)
         return wf.compile()
 
     def run(self) -> dict:
@@ -737,18 +785,96 @@ class ComplianceEngine:
         logger.info("=" * 60)
         return dashboard
 
+    # -------------------------------------------------------------------------
+    # _build_dashboard  — EXACT STRUCTURE from original Compliance Engine 1
+    # -------------------------------------------------------------------------
     def _build_dashboard(self, state: ComplianceState, run_ts: datetime) -> dict:
+        """
+        Build dashboard response that EXACTLY matches the original codebase structure.
+
+        Top-level keys (identical to original):
+          timestamp, overall_compliance, compliance_health,
+          frameworks, open_issues, top_issues, ai_insights, quick_actions
+        """
         overall  = state["overall_score"]
         issues   = state["issues"]
         fw_data  = state["frameworks"]
 
+        # ------------------------------------------------------------------
+        # 1. Change from last month  (query the snapshots table if available)
+        # ------------------------------------------------------------------
+        change_from_last_month = 0.0
+        if _db is not None:
+            try:
+                prev_rows = _db.execute_query(
+                    """
+                    SELECT overall_score
+                    FROM   compliance_snapshots
+                    WHERE  recorded_at <= NOW() - INTERVAL '30 days'
+                    ORDER  BY recorded_at DESC
+                    LIMIT  1
+                    """
+                )
+                if prev_rows:
+                    prev_score = float(prev_rows[0]["overall_score"])
+                    change_from_last_month = round(overall - prev_score, 2)
+            except Exception as exc:
+                logger.warning("Could not compute month-over-month change: %s", exc)
+
+        # ------------------------------------------------------------------
+        # 2. Severity counts
+        # ------------------------------------------------------------------
         sev_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for issue in issues:
             key = issue.get("severity", "low").lower()
             sev_counts[key] = sev_counts.get(key, 0) + 1
 
-        def build_indicators(fw_name: str) -> list:
-            failed_ids = {i["rule_id"] for i in fw_data.get(fw_name, {}).get("issues", [])}
+        # ------------------------------------------------------------------
+        # 3. Trend data  (last 6 snapshots from DB, newest last)
+        #    Falls back to a single point at current score when no history.
+        #    Structure mirrors old codebase: top-level "trends" key with
+        #    labels[] + datasets[{label, data[]}] — one dataset per framework.
+        # ------------------------------------------------------------------
+        trend_labels:  List[str]   = []
+        trend_overall: List[float] = []
+        trend_gdpr:    List[float] = []
+
+        if _db is not None:
+            try:
+                trend_rows = _db.execute_query(
+                    """
+                    SELECT
+                        TO_CHAR(recorded_at, 'Mon') AS month_label,
+                        overall_score,
+                        gdpr_score
+                    FROM   compliance_snapshots
+                    ORDER  BY recorded_at DESC
+                    LIMIT  6
+                    """
+                )
+                # Reverse so oldest → newest (left → right on chart)
+                trend_rows    = list(reversed(trend_rows))
+                trend_labels  = [r["month_label"]            for r in trend_rows]
+                trend_overall = [float(r["overall_score"])   for r in trend_rows]
+                trend_gdpr    = [float(r["gdpr_score"] or 0) for r in trend_rows]
+            except Exception as exc:
+                logger.warning("Could not load trend data: %s", exc)
+
+        # Always include current scan as the latest data point
+        current_month = month_label(run_ts)
+        if not trend_labels or trend_labels[-1] != current_month:
+            trend_labels.append(current_month)
+            trend_overall.append(overall)
+            trend_gdpr.append(fw_data.get("GDPR", {}).get("score", 0.0))
+
+        # ------------------------------------------------------------------
+        # 4. Framework indicators and details  (mirrors original exactly)
+        # ------------------------------------------------------------------
+        def build_indicators(fw_name: str) -> List[dict]:
+            failed_ids = {
+                i["rule_id"]
+                for i in fw_data.get(fw_name, {}).get("issues", [])
+            }
             return [
                 {
                     "text":   rule["rule"],
@@ -760,36 +886,84 @@ class ComplianceEngine:
         def framework_details(fw_name: str) -> str:
             fw     = fw_data.get(fw_name, {})
             passed = fw.get("rules_passed", 0)
-            total  = fw.get("rules_total", 0)
-            failed = fw.get("issues", [])
+            total  = fw.get("rules_total",  0)
+            failed = fw.get("issues",       [])
             if failed:
                 return f"{passed} of {total} Policies ({len(failed)} issue(s))"
             return f"{passed} of {total} Policies"
 
+        # ------------------------------------------------------------------
+        # 5. Top 3 issues  (critical → high → medium → low)
+        # ------------------------------------------------------------------
+        severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        sorted_issues = sorted(
+            issues,
+            key=lambda x: severity_rank.get(x.get("severity", "low").lower(), 4),
+        )
+        top_issues = sorted_issues[:3]
+
+        # ------------------------------------------------------------------
+        # 6. last_updated human string
+        # ------------------------------------------------------------------
+        last_updated = human_time_ago(run_ts)
+
+        # ------------------------------------------------------------------
+        # 7. trend_label  — mirrors old codebase "+X.Y% Overall" format
+        # ------------------------------------------------------------------
+        sign         = "+" if change_from_last_month >= 0 else ""
+        trend_label  = f"{sign}{change_from_last_month:.1f}% Overall"
+
+        # ------------------------------------------------------------------
+        # 8. Assemble — IDENTICAL structure to old Compliance Engine 1
+        # ------------------------------------------------------------------
         return {
+            # ── meta ──────────────────────────────────────────────────────
             "timestamp": run_ts.isoformat(),
-            "mode": "DETECTION & REPORTING ONLY - NO AUTO-FIX",
+
+            # ── overall_compliance ────────────────────────────────────────
             "overall_compliance": {
                 "score":                  overall,
-                "change_from_last_month": 0.0,
+                "change_from_last_month": change_from_last_month,
                 "health_status":          health_status(overall),
-                "last_updated":           "just now",
+                "last_updated":           last_updated,
             },
+
+            # ── compliance_health  (score + trend_label ONLY, no nested trend)
             "compliance_health": {
                 "score":       overall,
-                "trend_label": "Latest scan",
+                "trend_label": trend_label,
             },
+
+            # ── trends  (top-level, matches old structure exactly) ─────────
+            # datasets array: one entry per framework, label + data[]
+            "trends": {
+                "labels": trend_labels,
+                "datasets": [
+                    {
+                        "label": "Overall",
+                        "data":  trend_overall,
+                    },
+                    {
+                        "label": "GDPR",
+                        "data":  trend_gdpr,
+                    },
+                ],
+            },
+
+            # ── frameworks ────────────────────────────────────────────────
             "frameworks": [
                 {
                     "name":         fw_name,
-                    "score":        fw_data.get(fw_name, {}).get("score", 0),
-                    "status":       health_status(fw_data.get(fw_name, {}).get("score", 0)),
+                    "score":        fw_data.get(fw_name, {}).get("score", 0.0),
+                    "status":       health_status(fw_data.get(fw_name, {}).get("score", 0.0)),
                     "details":      framework_details(fw_name),
-                    "last_checked": "just now",
+                    "last_checked": last_updated,
                     "indicators":   build_indicators(fw_name),
                 }
                 for fw_name in FRAMEWORK_RULES
             ],
+
+            # ── open_issues  (no "status" field on items — matches old) ───
             "open_issues": {
                 "count":            len(issues),
                 "severity_summary": sev_counts,
@@ -799,49 +973,25 @@ class ComplianceEngine:
                         "framework":  i["framework"],
                         "severity":   i["severity"],
                         "dataset":    i["dataset"],
-                        "assignee":   i.get("assignee", "Manual Review Required"),
+                        "assignee":   i.get("assignee", "Unassigned"),
                         "due_date":   i["due_date"],
                         "action_url": i.get("action_url", f"/issues/{i.get('rule_id', 'unknown')}"),
-                        "status":     i.get("status", "OPEN"),
                     }
                     for i in issues
                 ],
             },
-            "ai_insights":   {"text": state["insights"], "beta": True},
+
+            # ── ai_insights ───────────────────────────────────────────────
+            "ai_insights": {
+                "text": state["insights"],
+                "beta": True,
+            },
+
+            # ── quick_actions ─────────────────────────────────────────────
             "quick_actions": QUICK_ACTIONS,
         }
 
 
-# =============================================================================
-# INITIALIZATION FUNCTION (Required by app.py)
-# =============================================================================
-
-_global_engine: Optional[ComplianceEngine] = None
-_global_db: Optional[DatabaseManager] = None
-_global_llm: Optional[LLMEvaluator] = None
-
-
-async def init_compliance_engine() -> None:
-    """
-    Initialize the compliance engine on startup.
-    Called from app.py during the lifespan startup phase.
-    """
-    global _global_engine, _global_db, _global_llm, _engine, _db, _llm
-    try:
-        logger.info("Initializing Compliance Engine...")
-        # Initialize database manager (blocking, but fast)
-        _global_db = DatabaseManager(min_conn=1, max_conn=10)
-        _db = _global_db  # Also set module-level variable for router access
-        # Initialize LLM evaluator
-        _global_llm = LLMEvaluator()
-        _llm = _global_llm
-        # Initialize compliance engine
-        _global_engine = ComplianceEngine(db=_global_db, llm=_global_llm)
-        _engine = _global_engine
-        logger.info("Compliance Engine initialized successfully.")
-    except Exception as e:
-        logger.error(f"Failed to initialize Compliance Engine: {e}")
-        raise
 # =============================================================================
 # PDF GENERATION HELPERS
 # =============================================================================
@@ -874,9 +1024,9 @@ def _pdf_styles() -> dict:
 
 def _status_color(status: str):
     s = (status or "").lower()
-    if s in ("critical", "error"):   return RED,     RED_BG
-    if s in ("needs_attention", "warning"): return ORANGE, ORANGE_BG
-    if s in ("excellent", "good", "success"): return GREEN, GREEN_BG
+    if s in ("critical", "error"):              return RED,     RED_BG
+    if s in ("needs_attention", "warning"):     return ORANGE,  ORANGE_BG
+    if s in ("excellent", "good", "success"):   return GREEN,   GREEN_BG
     return MID_BLUE, LIGHT_BLUE
 
 
@@ -888,7 +1038,8 @@ def _score_color(score: float):
 
 def _header_table(snapshot: dict, st: dict):
     recorded = snapshot.get("recorded_at", datetime.utcnow())
-    ts_str = recorded.strftime("%Y-%m-%d %H:%M UTC") if hasattr(recorded, "strftime") else str(recorded)
+    ts_str = (recorded.strftime("%Y-%m-%d %H:%M UTC")
+              if hasattr(recorded, "strftime") else str(recorded))
     right_text = ParagraphStyle("rt", fontSize=9, textColor=colors.HexColor("#BFDBFE"),
                                 fontName="Helvetica", alignment=TA_RIGHT)
     left = [
@@ -901,7 +1052,7 @@ def _header_table(snapshot: dict, st: dict):
     right = [
         Paragraph("Report Period: Latest Snapshot", right_text),
         Paragraph(f"Record ID: {str(snapshot.get('id', ''))[:8]}...", right_text),
-        Paragraph("<b>Detection & Reporting Only - No Auto-Fix</b>", right_text),
+        Paragraph("<b>Detection &amp; Reporting Only — No Auto-Fix</b>", right_text),
     ]
     t = Table([[left, right]], colWidths=[110*mm, 70*mm])
     t.setStyle(TableStyle([
@@ -945,11 +1096,11 @@ def _overall_score_table(snapshot: dict, st: dict):
     sev_table = Table(sev_data, colWidths=[55*mm, 20*mm])
     sev_table.setStyle(TableStyle([
         ("SPAN",          (0, 0), (1, 0)),
-        ("BACKGROUND",    (0, 0), (1, 0), GREY_LIGHT),
+        ("BACKGROUND",    (0, 0), (1, 0),   GREY_LIGHT),
         ("FONTNAME",      (0, 1), (-1, -1), "Helvetica"),
         ("FONTSIZE",      (0, 0), (-1, -1), 8.5),
-        ("TEXTCOLOR",     (1, 2), (1, 2),  RED),
-        ("FONTNAME",      (1, 2), (1, 2),  "Helvetica-Bold"),
+        ("TEXTCOLOR",     (1, 2), (1, 2),   RED),
+        ("FONTNAME",      (1, 2), (1, 2),   "Helvetica-Bold"),
         ("GRID",          (0, 0), (-1, -1), 0.5, GREY_BORDER),
         ("ROWBACKGROUNDS",(0, 1), (-1, -1), [WHITE, GREY_LIGHT]),
         ("LEFTPADDING",   (0, 0), (-1, -1), 6),
@@ -959,8 +1110,8 @@ def _overall_score_table(snapshot: dict, st: dict):
     ]))
     outer = Table([[score_cell, sev_table]], colWidths=[80*mm, 100*mm])
     outer.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (0, 0), bg),
-        ("BACKGROUND",    (1, 0), (1, 0), WHITE),
+        ("BACKGROUND",    (0, 0), (0, 0),   bg),
+        ("BACKGROUND",    (1, 0), (1, 0),   WHITE),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
         ("BOX",           (0, 0), (-1, -1), 1, GREY_BORDER),
         ("LINEAFTER",     (0, 0), (0, 0),   1, GREY_BORDER),
@@ -1102,7 +1253,7 @@ def _open_issues_table(issues: list, st: dict) -> list:
         ("BACKGROUND",    (0, 0), (-1, 0),  DARK_BLUE),
         ("TEXTCOLOR",     (0, 0), (-1, 0),  WHITE),
         ("FONTNAME",      (0, 0), (-1, 0),  "Helvetica-Bold"),
-        ("FONTSIZE",       (0, 0), (-1, -1), 8),
+        ("FONTSIZE",      (0, 0), (-1, -1), 8),
         ("GRID",          (0, 0), (-1, -1), 0.3, GREY_BORDER),
         ("ROWBACKGROUNDS",(0, 1), (-1, -1), [WHITE, GREY_LIGHT]),
         ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
@@ -1142,7 +1293,7 @@ def _build_pdf(dashboard: dict) -> bytes:
         leftMargin=15*mm, rightMargin=15*mm,
         topMargin=10*mm,  bottomMargin=15*mm,
     )
-    st  = _pdf_styles()
+    st = _pdf_styles()
 
     snap: dict = {
         "id":                    "live",
@@ -1185,16 +1336,16 @@ def _build_pdf(dashboard: dict) -> bytes:
 
 
 # =============================================================================
-# SNAPSHOT PERSISTENCE HELPER
+# SNAPSHOT PERSISTENCE
 # =============================================================================
 
 def _save_snapshot(db: DatabaseManager, dashboard: dict) -> None:
     """Persist the latest dashboard result to compliance_snapshots."""
     try:
-        overall   = dashboard.get("overall_compliance", {})
-        issues    = dashboard.get("open_issues", {})
-        sev       = issues.get("severity_summary", {})
-        ai        = dashboard.get("ai_insights", {})
+        overall = dashboard.get("overall_compliance", {})
+        issues  = dashboard.get("open_issues", {})
+        sev     = issues.get("severity_summary", {})
+        ai      = dashboard.get("ai_insights", {})
 
         fw_map: dict = {}
         for fw in dashboard.get("frameworks", []):
@@ -1207,33 +1358,106 @@ def _save_snapshot(db: DatabaseManager, dashboard: dict) -> None:
             if key == "status":
                 return fw.get("status")
             details = fw.get("details", "")
-            import re as _re
-            m = _re.match(r"(\d+) of (\d+)", details)
+            m = re.match(r"(\d+) of (\d+)", details)
             if m:
                 return int(m.group(1)) if key == "rules_passed" else int(m.group(2))
             return None
 
+        # Top 3 issues — derived from open_issues.items sorted by severity
+        severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        all_items = dashboard.get("open_issues", {}).get("items", [])
+        sorted_items = sorted(
+            all_items,
+            key=lambda x: severity_rank.get(x.get("severity", "low").lower(), 4),
+        )
+        top_1 = sorted_items[0] if len(sorted_items) > 0 else {}
+        top_2 = sorted_items[1] if len(sorted_items) > 1 else {}
+        top_3 = sorted_items[2] if len(sorted_items) > 2 else {}
+
+        # Trend arrays — read from top-level "trends" key
+        trends        = dashboard.get("trends", {})
+        trend_labels  = trends.get("labels", [])
+        datasets_map  = {d["label"]: d["data"] for d in trends.get("datasets", [])}
+        trend_overall = datasets_map.get("Overall", [])
+        trend_gdpr    = datasets_map.get("GDPR",    [])
+
         sql = """
             INSERT INTO compliance_snapshots (
-                overall_score, overall_health_status,
-                gdpr_score, gdpr_status, gdpr_rules_passed, gdpr_rules_total,
+                overall_score, overall_health_status, overall_change_from_last_month,
+                gdpr_score, gdpr_status, gdpr_rules_passed, gdpr_rules_total, gdpr_last_checked,
                 open_issues_count, critical_issues_count, high_issues_count,
                 medium_issues_count, low_issues_count,
-                compliance_health_score,
+                compliance_health_score, compliance_health_trend_label,
+                top_issue_1_issue, top_issue_1_framework, top_issue_1_severity,
+                    top_issue_1_dataset, top_issue_1_assignee, top_issue_1_due_date,
+                top_issue_2_issue, top_issue_2_framework, top_issue_2_severity,
+                    top_issue_2_dataset, top_issue_2_assignee, top_issue_2_due_date,
+                top_issue_3_issue, top_issue_3_framework, top_issue_3_severity,
+                    top_issue_3_dataset, top_issue_3_assignee, top_issue_3_due_date,
                 ai_insights_text, ai_insights_beta,
+                trend_month_label, trend_overall_data, trend_gdpr_data,
                 snapshot_json
             ) VALUES (
-                %(overall_score)s, %(overall_health_status)s,
-                %(gdpr_score)s, %(gdpr_status)s, %(gdpr_passed)s, %(gdpr_total)s,
+                %(overall_score)s, %(overall_health_status)s, %(overall_change)s,
+                %(gdpr_score)s, %(gdpr_status)s, %(gdpr_passed)s, %(gdpr_total)s, %(gdpr_last_checked)s,
                 %(open_count)s, %(critical)s, %(high)s, %(medium)s, %(low)s,
-                %(overall_score)s,
+                %(health_score)s, %(trend_label)s,
+                %(top_1_issue)s, %(top_1_framework)s, %(top_1_severity)s,
+                    %(top_1_dataset)s, %(top_1_assignee)s, %(top_1_due_date)s,
+                %(top_2_issue)s, %(top_2_framework)s, %(top_2_severity)s,
+                    %(top_2_dataset)s, %(top_2_assignee)s, %(top_2_due_date)s,
+                %(top_3_issue)s, %(top_3_framework)s, %(top_3_severity)s,
+                    %(top_3_dataset)s, %(top_3_assignee)s, %(top_3_due_date)s,
                 %(ai_text)s, %(ai_beta)s,
+                %(trend_month)s, %(trend_overall)s, %(trend_gdpr)s,
                 %(snap_json)s
             )
         """
-        logger.info("Snapshot persistence disabled (Detection & Reporting only).")
+        params = {
+            "overall_score":          overall.get("score", 0),
+            "overall_health_status":  overall.get("health_status", ""),
+            "overall_change":         overall.get("change_from_last_month", 0.0),
+            "gdpr_score":             fw_val("gdpr", "score"),
+            "gdpr_status":            fw_val("gdpr", "status"),
+            "gdpr_passed":            fw_val("gdpr", "rules_passed"),
+            "gdpr_total":             fw_val("gdpr", "rules_total"),
+            "gdpr_last_checked":      overall.get("last_updated", "just now"),
+            "open_count":             issues.get("count", 0),
+            "critical":               sev.get("critical", 0),
+            "high":                   sev.get("high", 0),
+            "medium":                 sev.get("medium", 0),
+            "low":                    sev.get("low", 0),
+            "health_score":           overall.get("score", 0),
+            "trend_label":            "Latest scan",
+            "top_1_issue":            top_1.get("issue"),
+            "top_1_framework":        top_1.get("framework"),
+            "top_1_severity":         top_1.get("severity"),
+            "top_1_dataset":          top_1.get("dataset"),
+            "top_1_assignee":         top_1.get("assignee"),
+            "top_1_due_date":         top_1.get("due_date"),
+            "top_2_issue":            top_2.get("issue"),
+            "top_2_framework":        top_2.get("framework"),
+            "top_2_severity":         top_2.get("severity"),
+            "top_2_dataset":          top_2.get("dataset"),
+            "top_2_assignee":         top_2.get("assignee"),
+            "top_2_due_date":         top_2.get("due_date"),
+            "top_3_issue":            top_3.get("issue"),
+            "top_3_framework":        top_3.get("framework"),
+            "top_3_severity":         top_3.get("severity"),
+            "top_3_dataset":          top_3.get("dataset"),
+            "top_3_assignee":         top_3.get("assignee"),
+            "top_3_due_date":         top_3.get("due_date"),
+            "ai_text":                ai.get("text", ""),
+            "ai_beta":                ai.get("beta", True),
+            "trend_month":            trend_labels[-1] if trend_labels else None,
+            "trend_overall":          trend_overall or None,
+            "trend_gdpr":             trend_gdpr    or None,
+            "snap_json":              json.dumps(dashboard),
+        }
+        db.execute_query(sql, params)
+        logger.info("Snapshot saved to compliance_snapshots.")
     except Exception as exc:
-        logger.error("Snapshot processing note: %s", exc)
+        logger.error("Snapshot save failed: %s", exc)
 
 
 def _load_latest_snapshot(db: DatabaseManager) -> Optional[dict]:
@@ -1244,20 +1468,6 @@ def _load_latest_snapshot(db: DatabaseManager) -> Optional[dict]:
     return rows[0] if rows else None
 
 
-# =============================================================================
-# FASTAPI APP
-# =============================================================================
-
-_db:     Optional[DatabaseManager]  = None
-_llm:    Optional[LLMEvaluator]     = None
-_engine: Optional[ComplianceEngine] = None
-_latest_dashboard: Optional[dict]   = None
-
-
-
-
-
-router = APIRouter(prefix="/api/compliance",tags=["Compliance"])
 
 def generate_rule_name(issue: str) -> str:
     """
@@ -1310,21 +1520,52 @@ def calculate_health_status(compliance_score: float) -> str:
  
 
 
+# =============================================================================
+# FASTAPI APP
+# =============================================================================
 
-@router.get("/run", tags=["Compliance"])
+_db:               Optional[DatabaseManager]  = None
+_llm:              Optional[LLMEvaluator]     = None
+_engine:           Optional[ComplianceEngine] = None
+_latest_dashboard: Optional[dict]             = None
+
+
+
+
+
+async def init_compliance_engine() -> None:
+    """
+    Initialize the compliance engine on startup.
+    This is called from app.py during the lifespan startup phase.
+    """
+    global _db, _llm, _engine
+    
+    try:
+        logger.info("Initializing Compliance Engine...")
+        _db = DatabaseManager(min_conn=1, max_conn=10)
+        _llm = LLMEvaluator()
+        _engine = ComplianceEngine(db=_db, llm=_llm)
+        logger.info("Compliance Engine initialized successfully.")
+    except Exception as e:
+        logger.error(f"Failed to initialize Compliance Engine: {e}")
+        raise
+
+router = APIRouter(tags=["Compliance"]) 
+
+
+@router.get("/api/compliance/run", tags=["Compliance"])
 def run_compliance_scan():
     """
     Trigger a full GDPR compliance scan (detection & reporting only).
-    
-    All violations are reported. No automatic remediation is applied.
-    Manual action required for all flagged issues.
+
+    Response structure EXACTLY matches original Compliance Engine 1:
     """
     global _latest_dashboard
     if _engine is None:
         raise HTTPException(status_code=503, detail="Compliance engine not initialised.")
     try:
-        result = _engine.run()
-        _latest_dashboard = result
+        result             = _engine.run()
+        _latest_dashboard  = result
         if _db:
             _save_snapshot(_db, result)
         return JSONResponse(content=result)
@@ -1333,67 +1574,95 @@ def run_compliance_scan():
         raise HTTPException(status_code=500, detail=f"Scan failed: {exc}")
 
 
-@router.get("/summary", tags=["Compliance"])
+@router.get("/api/compliance/summary", tags=["Compliance"])
 def get_compliance_summary():
-    """Return the most recent GDPR compliance snapshot summary from the database."""
-    if _db:
-        snap = _load_latest_snapshot(_db)
-        if snap:
-            return JSONResponse(content={
-                "recorded_at":           str(snap.get("recorded_at", "")),
-                "overall_score":         float(snap.get("overall_score", 0)),
-                "overall_health_status": snap.get("overall_health_status", ""),
-                "open_issues_count":     snap.get("open_issues_count", 0),
-                "critical_issues_count": snap.get("critical_issues_count", 0),
-                "high_issues_count":     snap.get("high_issues_count", 0),
-                "medium_issues_count":   snap.get("medium_issues_count", 0),
-                "low_issues_count":      snap.get("low_issues_count", 0),
-                "gdpr_score":            float(snap.get("gdpr_score") or 0),
-                "ai_insights":           snap.get("ai_insights_text", ""),
-                "source": "database",
-                "mode": "Detection & Reporting Only",
-            })
+    """
+    Returns a summary card from the latest compliance_snapshots row.
+    """
+    if _db is None:
+        raise HTTPException(status_code=503, detail="Database not initialised.")
 
-    if _latest_dashboard:
-        oc = _latest_dashboard.get("overall_compliance", {})
-        oi = _latest_dashboard.get("open_issues", {})
-        sv = oi.get("severity_summary", {})
-        return JSONResponse(content={
-            "overall_score":         oc.get("score", 0),
-            "overall_health_status": oc.get("health_status", ""),
-            "open_issues_count":     oi.get("count", 0),
-            "critical_issues_count": sv.get("critical", 0),
-            "high_issues_count":     sv.get("high", 0),
-            "medium_issues_count":   sv.get("medium", 0),
-            "low_issues_count":      sv.get("low", 0),
-            "source": "cache",
-            "mode": "Detection & Reporting Only",
-        })
+    sql = """
+        SELECT overall_score, open_issues_count, snapshot_json
+        FROM   compliance_snapshots
+        ORDER  BY recorded_at DESC
+        LIMIT  1
+    """
+    rows = _db.execute_query(sql)
+    if not rows:
+        raise HTTPException(
+            status_code=404,
+            detail="No compliance snapshot found. Run a scan first."
+        )
 
-    raise HTTPException(
-        status_code=404,
-        detail="No snapshot available. Run a compliance scan first via GET /api/compliance/run.",
+    row        = rows[0]
+    snapshot   = row["snapshot_json"]
+    frameworks = snapshot.get("frameworks", [])
+
+    frameworks_scanned = len(frameworks)
+    open_count         = row["open_issues_count"]
+    overall            = float(row["overall_score"])
+
+    issue_summary = (
+        f"Compliance scan finished. {open_count} issue"
+        f"{'s' if open_count != 1 else ''} found across "
+        f"{frameworks_scanned} framework"
+        f"{'s' if frameworks_scanned != 1 else ''}. "
+        f"Overall score: {overall:.0f}%."
     )
 
+    policies_checked = 0
+    for fw in frameworks:
+        details = fw.get("details", "")
+        m = re.search(r"of\s+(\d+)\s+Policies", details)
+        if m:
+            policies_checked += int(m.group(1))
 
-@router.get("/loading", tags=["Compliance"])
-def get_loading_state():
-    """Returns the current loading / readiness state of the compliance engine."""
+    REASONING_STEPS = [
+        {"title": "Initializing compliance engine",    "description": "Loading GDPR policy definitions and rule sets"},
+        {"title": "Scanning GDPR-001",                 "description": "Checking retention policy documentation on PII catalogs"},
+        {"title": "Scanning GDPR-002",                 "description": "Verifying data steward ownership assignments"},
+        {"title": "Scanning GDPR-003",                 "description": "Auditing governance metadata completeness"},
+        {"title": "Scanning GDPR-004 & GDPR-007",      "description": "Checking data lifecycle tracking and audit timestamps"},
+        {"title": "Scanning GDPR-005",                 "description": "Evaluating DPIA documentation for cross-database PII"},
+        {"title": "Scanning GDPR-008 & GDPR-009",      "description": "Verifying data lineage and schema isolation"},
+        {"title": "Scanning GDPR-010",                 "description": "Identifying orphaned catalogs without owners"},
+        {"title": "Generating compliance report",       "description": "Compiling findings and AI remediation recommendations"},
+    ]
+
     return JSONResponse(content={
-        "engine_ready":    _engine is not None,
-        "database_ready":  _db is not None,
-        "llm_ready":       _llm is not None,
-        "scan_available":  _latest_dashboard is not None,
-        "timestamp":       datetime.now(IST).isoformat(),
-        "mode": "Detection & Reporting Only - No Auto-Fix",
-        "message": (
-            "Engine ready. Trigger a scan via GET /api/compliance/run. All issues require manual remediation."
-            if _engine else "Engine initialising, please wait."
-        ),
+        "timestamp": datetime.now(IST).isoformat(),
+        "summary": {
+            "frameworks_scanned": frameworks_scanned,
+            "issues_found":       open_count,
+            "policies_checked":   policies_checked,
+            "overall_score":      overall,
+            "issue_summary":      issue_summary,
+        },
+        "reasoning": REASONING_STEPS,
     })
 
 
-@router.get("/report/export", tags=["Compliance"])
+@router.get("/api/compliance/loading", tags=["Compliance"])
+def get_loading_compliance():
+    """Get loading state / reasoning steps for compliance scan progress UI."""
+    REASONING_LOAD = [
+        "Initializing compliance engine",
+        "Scanning GDPR-001: Retention policy documentation",
+        "Scanning GDPR-002: Data steward accountability",
+        "Scanning GDPR-003: Governance metadata",
+        "Scanning GDPR-004: Data lifecycle tracking",
+        "Scanning GDPR-005: DPIA documentation",
+        "Scanning GDPR-007: Audit timestamps",
+        "Scanning GDPR-008: Data lineage",
+        "Scanning GDPR-009: Schema isolation",
+        "Scanning GDPR-010: Orphaned catalogs",
+        "Generating compliance report",
+    ]
+    return {"reasoning_loads": REASONING_LOAD}
+
+
+@router.get("/api/compliance/report/export", tags=["Compliance"])
 def export_compliance_report():
     """Export the latest GDPR compliance detection report as a formatted PDF."""
     dashboard: Optional[dict] = _latest_dashboard
@@ -1412,7 +1681,10 @@ def export_compliance_report():
 
     try:
         pdf_bytes = _build_pdf(dashboard)
-        filename  = f"gdpr_compliance_detection_report_{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.pdf"
+        filename  = (
+            f"gdpr_compliance_report_"
+            f"{datetime.now(IST).strftime('%Y%m%d_%H%M%S')}.pdf"
+        )
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
@@ -1422,7 +1694,7 @@ def export_compliance_report():
         logger.exception("PDF generation failed: %s", exc)
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}")
 
-@router.get("/dataset/{catalog_id}", tags=["Compliance"])
+@router.get("/api/compliance/dataset/{catalog_id}", tags=["Compliance"])
 def get_dataset_compliance_report(catalog_id: str):
     if _db is None:
         raise HTTPException(status_code=503, detail="Database not initialised")
@@ -1556,5 +1828,5 @@ def get_dataset_compliance_report(catalog_id: str):
     }
 
 
- 
+
 
