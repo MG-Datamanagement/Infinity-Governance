@@ -70,6 +70,7 @@ class VisualNode(BaseModel):
     depth: int = 1
     ai_summary: Optional[str] = None
     stats: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class VisualLineageResponse(BaseModel):
@@ -173,6 +174,11 @@ MOCK_TRANSACTION_NODE = VisualNode(
         "transaction status, and revenue tracking within the operational data pipeline."
     ),
     stats="Columns: 16 | Rows: 0",
+    notes=(
+        "The address is provided in Thai, which exceeds the default string length of 256 characters. "
+        "Additionally, the 3f1c9a72-5e4b-4d9f-a1c8-7b2e6f9d4a11 value also exceeds the defined limit, "
+        "reaching up to 378 characters."
+    ),
 )
 
 # ── Mock node 2: inventory_management ────────────────────────────────────────
@@ -293,17 +299,11 @@ async def _fetch_columns(db, catalog_id: str) -> List[ColumnInfo]:
             col.is_nullable,
             cq.query_expression
         FROM columns col
+        JOIN catalogs cat
+            ON cat.id = col.catalog_id
         LEFT JOIN column_queries cq
-            ON  (
-                    cq.column_id  = col.id
-                OR  (
-                        cq.column_id IS NULL
-                    AND LOWER(cq.column_name) = LOWER(col.name)
-                    AND LOWER(cq.table_name)  = LOWER(
-                            (SELECT table_name FROM catalogs WHERE id = col.catalog_id)
-                        )
-                )
-            )
+            ON  LOWER(cq.column_name) = LOWER(col.name)
+            AND LOWER(cq.table_name)  = LOWER(cat.table_name)
         WHERE col.catalog_id = $1
         ORDER BY col.ordinal_position NULLS LAST, col.name
         """,
