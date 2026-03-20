@@ -169,9 +169,7 @@ MOCK_TRANSACTION_NODE = VisualNode(
     column_mappings=[],
     depth=1,
     ai_summary=(
-        "The operational-data-store.transaction dataset captures financial transaction "
-        "details associated with bookings and agents, enabling analysis of payment flows, "
-        "transaction status, and revenue tracking within the operational data pipeline."
+        "Increase the column size (e.g., change from VARCHAR(256) to VARCHAR(512) or TEXT) to accommodate longer Thai addresses and IDs. Alternatively, validate input data before insertion to ensure it does not exceed the defined length limits."
     ),
     stats="Columns: 16 | Rows: 0",
     notes=(
