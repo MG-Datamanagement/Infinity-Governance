@@ -690,8 +690,8 @@ async def create_source_redshift(source: DataSourceCreateRedshift):
 
         hardcoded_connection_details = {
             "aws_region": "ap-southeast-1",
-            "aws_access_key_id": "AKIAQVASUH3EUFCE3JVD",
-            "aws_secret_access_key": "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",
+            "username": "AKIAQVASUH3EUFCE3JVD",
+            "password": "P4lKgeT8RcG9KQ8kOmd2rwpLSK1d0/O1Wx1VO50Z",
             "s3_staging_dir": "s3://athena-query-results-tmp-123/",
             "work_group": "primary",
             "database": "your_default_database",
