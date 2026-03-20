@@ -42,9 +42,9 @@ class ColumnMapping(BaseModel):
 class QueryExecutionInfo(BaseModel):
     """Execution metadata from the table_lineage row."""
     query_execution_id: Optional[str] = None
-    query_start_time: Optional[str] = None       # ISO-8601 string (serialised from TIMESTAMPTZ)
-    query_end_time: Optional[str] = None         # ISO-8601 string
-    query_runtime_ms: Optional[int] = None       # execution duration in milliseconds
+    query_start_time: Optional[str] = None
+    query_end_time: Optional[str] = None
+    query_runtime_ms: Optional[int] = None
     data_scanned_bytes: Optional[int] = None
     query_status: Optional[str] = None
     engine_version: Optional[str] = None
@@ -58,15 +58,14 @@ class VisualNode(BaseModel):
     full_name: Optional[str] = None
     schema_name: Optional[str] = None
     database_name: Optional[str] = None
-    type: Optional[str] = "table"          # table | view
+    type: Optional[str] = "table"
     status: Optional[str] = "healthy"
     source: Optional[SourceInfo] = None
     columns: List[ColumnInfo] = []
     tags: List[TagInfo] = []
-    # edge back to the root (or next hop)
     lineage_id: Optional[str] = None
     transformation_query: Optional[str] = None
-    query_execution: Optional[QueryExecutionInfo] = None   # ← NEW nested block
+    query_execution: Optional[QueryExecutionInfo] = None
     column_mappings: List[ColumnMapping] = []
     depth: int = 1
     ai_summary: Optional[str] = None
@@ -75,7 +74,7 @@ class VisualNode(BaseModel):
 
 class VisualLineageResponse(BaseModel):
     root: VisualNode
-    upstreams: List[VisualNode] = []      # flattened, depth-ordered
+    upstreams: List[VisualNode] = []
     downstreams: List[VisualNode] = []
 
 
@@ -87,6 +86,94 @@ llm = AzureChatOpenAI(
     azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
     api_key=os.getenv("AZURE_OPENAI_API_KEY"),
     temperature=0.2
+)
+
+
+# ─── Hardcoded Mock Data ──────────────────────────────────────────────────────
+
+# Table names (lowercased) whose upstream list always includes the mock
+# transaction node — matched against root_data["table_name"] at runtime.
+MOCK_TRIGGER_TABLE_NAMES = {"all_booking", "booking_agent"}
+
+# Sentinel ID prevents the mock node from being duplicated in visited sets.
+MOCK_TRANSACTION_ID = "b12f9e3a-7c44-4c91-9f12-3c8c9c2a1111"
+
+# The full mock transaction upstream node (sourced from error.json)
+MOCK_TRANSACTION_NODE = VisualNode(
+    id=MOCK_TRANSACTION_ID,
+    table_name="transaction",
+    full_name="operational-data-store.transaction",
+    schema_name="operational-data-store",
+    database_name=None,
+    type="table",
+    status="unhealthy",
+    source=SourceInfo(
+        id="36ddfa2f-c9bf-4e9f-bdfb-69189f786606",
+        name="run-test-athena",
+        source_type="athena",
+    ),
+    columns=[
+        ColumnInfo(id="col-001", name="transactionid",     data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",  is_primary_key=True,  is_foreign_key=False, is_nullable=False, query_expression=None),
+        ColumnInfo(id="col-002", name="bookingid",         data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",  is_primary_key=False, is_foreign_key=True,  is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-003", name="agentid",           data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",  is_primary_key=False, is_foreign_key=True,  is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-004", name="transactionamount", data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-005", name="address",           data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-006", name="transactiontype",   data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-007", name="transactionstatus", data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-008", name="paymentmethod",     data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-009", name="transactiondate",   data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-010", name="journaltime",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-011", name="operationtype",     data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-012", name="load_type",         data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-013", name="filename",          data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-014", name="ingestionsequence", data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-015", name="createdutc",        data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-016", name="modifiedutc",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+    ],
+    tags=[
+        TagInfo(id="tag-001", name="Financial", color="#FF9800", tag_type="classification"),
+    ],
+    lineage_id="r9b7tb7e-bn86-4388-bd89-3324caa06866",
+    transformation_query=(
+        "CREATE TABLE booking_transaction\n"
+        "COMMENT 'Derived from: booking, transaction tables'\n"
+        "WITH (\n"
+        "  format = 'PARQUET',\n"
+        "  external_location = 's3://infinity-gov-test/data/data-lineage/booking_transaction/'\n"
+        ") AS\n"
+        "SELECT\n"
+        "    b.bookingid,\n"
+        "    b.bookingtype,\n"
+        "    b.bookingutc,\n"
+        "    b.currencycode,\n\n"
+        "    t.transactionid,\n"
+        "    t.transactionamount,\n"
+        "    t.transactiontype,\n"
+        "    t.transactionstatus,\n"
+        "    t.paymentmethod,\n"
+        "    t.transactiondate\n\n"
+        "FROM booking b\n"
+        "LEFT JOIN transaction t\n"
+        "    ON b.bookingid = t.bookingid"
+    ),
+    query_execution=QueryExecutionInfo(
+        query_execution_id="g3b7tb7s-bn90-5378-bd89-3324caa89071",
+        query_start_time="2026-03-19T05:00:00.000000+00:00",
+        query_end_time="2026-03-19T05:00:01.200000+00:00",
+        query_runtime_ms=1200,
+        data_scanned_bytes=45200,
+        query_status="FAILURE",
+        engine_version="Athena engine version 3",
+        s3_output_location="s3://athena-query-results-tmp-123/transaction/",
+    ),
+    column_mappings=[],
+    depth=1,
+    ai_summary=(
+        "The operational-data-store.transaction dataset captures financial transaction "
+        "details associated with bookings and agents, enabling analysis of payment flows, "
+        "transaction status, and revenue tracking within the operational data pipeline."
+    ),
+    stats="Columns: 16 | Rows: 0",
 )
 
 
@@ -112,11 +199,6 @@ async def _fetch_catalog_node(db, catalog_id: str) -> Optional[Dict]:
 
 
 async def _fetch_columns(db, catalog_id: str) -> List[ColumnInfo]:
-    """
-    Fetch columns for a catalog, LEFT JOINing column_queries so that every
-    column already carries its query_expression (NULL when not present).
-    Matching is done case-insensitively on both table_name and column_name.
-    """
     rows = await db.fetch_all(
         """
         SELECT
@@ -126,14 +208,13 @@ async def _fetch_columns(db, catalog_id: str) -> List[ColumnInfo]:
             col.is_primary_key,
             col.is_foreign_key,
             col.is_nullable,
-            cq.query_expression          -- NULL when no entry exists
+            cq.query_expression
         FROM columns col
-        -- match by catalog FK first (fastest); fall back to name match
         LEFT JOIN column_queries cq
             ON  (
-                    cq.column_id  = col.id          -- resolved FK (preferred)
+                    cq.column_id  = col.id
                 OR  (
-                        cq.column_id IS NULL        -- unresolved: name-based match
+                        cq.column_id IS NULL
                     AND LOWER(cq.column_name) = LOWER(col.name)
                     AND LOWER(cq.table_name)  = LOWER(
                             (SELECT table_name FROM catalogs WHERE id = col.catalog_id)
@@ -205,11 +286,6 @@ async def _fetch_col_mappings(db, lineage_id: str) -> List[ColumnMapping]:
 
 
 def _build_query_execution_info(row: Dict) -> Optional[QueryExecutionInfo]:
-    """
-    Extract execution-metadata fields from a table_lineage row dict.
-    Returns None if every field is NULL (keeps the response clean for
-    lineage edges that were created manually rather than via query execution).
-    """
     fields = {
         "query_execution_id": row.get("query_execution_id"),
         "query_start_time": (
@@ -226,7 +302,6 @@ def _build_query_execution_info(row: Dict) -> Optional[QueryExecutionInfo]:
         "engine_version": row.get("engine_version"),
         "s3_output_location": row.get("s3_output_location"),
     }
-    # Return None when all values are None (no execution metadata stored)
     if all(v is None for v in fields.values()):
         return None
     return QueryExecutionInfo(**fields)
@@ -276,7 +351,7 @@ async def _build_visual_node(
     db,
     llm,
     catalog_id: str,
-    lineage_row: Optional[Dict],     # ← changed: pass full row instead of individual fields
+    lineage_row: Optional[Dict],
     depth: int,
 ) -> Optional["VisualNode"]:
     data = await _fetch_catalog_node(db, catalog_id)
@@ -332,7 +407,7 @@ async def _build_visual_node(
         tags=tags,
         lineage_id=lineage_id,
         transformation_query=transformation_query,
-        query_execution=query_execution,           # ← NEW
+        query_execution=query_execution,
         column_mappings=col_mappings,
         depth=depth,
         ai_summary=ai_summary,
@@ -343,21 +418,41 @@ async def _build_visual_node(
 async def _traverse(
     db,
     catalog_id: str,
-    direction: str,        # "upstream" | "downstream"
+    direction: str,
     max_depth: int,
     current_depth: int,
     visited: set,
+    root_table_name: str = "",
 ) -> List[VisualNode]:
     """
-    BFS/DFS that returns a flat list of VisualNode objects, depth-ordered.
-    direction="downstream": follow edges where upstream_catalog_id = catalog_id
-    direction="upstream":   follow edges where downstream_catalog_id = catalog_id
+    BFS/DFS returning a flat, depth-ordered list of VisualNode objects.
+
+    Mock injection rule:
+      When direction == 'upstream', current_depth == 1, and root_table_name
+      (lowercased) is in MOCK_TRIGGER_TABLE_NAMES, the mock transaction node
+      is prepended to the upstream list before any DB-sourced nodes.
+      The sentinel MOCK_TRANSACTION_ID is added to `visited` immediately so
+      it is never injected a second time within the same traversal.
     """
     if current_depth > max_depth:
         return []
 
     results: List[VisualNode] = []
 
+    # ── Inject mock transaction node at depth-1 for trigger tables ───────────
+    if (
+        direction == "upstream"
+        and current_depth == 1
+        and root_table_name.lower() in MOCK_TRIGGER_TABLE_NAMES
+        and MOCK_TRANSACTION_ID not in visited
+    ):
+        visited.add(MOCK_TRANSACTION_ID)
+        mock = MOCK_TRANSACTION_NODE.copy(deep=True)
+        mock.depth = current_depth
+        results.append(mock)
+        # The mock node has no real DB children — no deeper traversal for it.
+
+    # ── Normal DB traversal ──────────────────────────────────────────────────
     if direction == "downstream":
         rows = await db.fetch_all(
             """
@@ -410,13 +505,19 @@ async def _traverse(
             db,
             llm,
             catalog_id=next_id,
-            lineage_row=row_dict,      # ← pass full row dict
+            lineage_row=row_dict,
             depth=current_depth,
         )
         if node:
             results.append(node)
             deeper = await _traverse(
-                db, next_id, direction, max_depth, current_depth + 1, visited
+                db,
+                next_id,
+                direction,
+                max_depth,
+                current_depth + 1,
+                visited,
+                root_table_name=root_table_name,
             )
             results.extend(deeper)
 
@@ -433,10 +534,8 @@ async def _traverse(
         "Returns the root table with its columns (including any derived "
         "query_expression from column_queries), source info, and tags, "
         "plus flat lists of upstream and downstream nodes. "
-        "Each non-root node now includes a `query_execution` block with "
-        "query_execution_id, query_start_time, query_end_time, "
-        "data_scanned_bytes, query_status, engine_version, and "
-        "s3_output_location sourced from the table_lineage edge. "
+        "Each non-root node includes a `query_execution` block sourced from "
+        "the table_lineage edge. "
         "Use `depth` (1–6, default 2) to control traversal depth and "
         "`direction` (upstream | downstream | both) to limit the graph."
     ),
@@ -453,10 +552,12 @@ async def get_visual_lineage(
         if not root_data:
             raise HTTPException(404, f"Catalog '{catalog_id}' not found")
 
-        # ── build root node (no lineage edge → no query_execution block) ─────
-        root_columns = await _fetch_columns(db, catalog_id)
-        root_tags    = await _fetch_tags(db, catalog_id)
-        column_count = len(root_columns)
+        root_table_name = root_data.get("table_name", "")
+
+        # ── build root node ───────────────────────────────────────────────────
+        root_columns  = await _fetch_columns(db, catalog_id)
+        root_tags     = await _fetch_tags(db, catalog_id)
+        column_count  = len(root_columns)
         row_count     = root_data.get("row_count")
         row_count_str = f"{row_count:,}" if row_count is not None else "N/A"
         status_text   = f"Columns: {column_count} | Rows: {row_count_str}"
@@ -481,7 +582,7 @@ async def get_visual_lineage(
 
         root_node = VisualNode(
             id=str(root_data["id"]),
-            table_name=root_data["table_name"],
+            table_name=root_table_name,
             full_name=root_data.get("full_name"),
             schema_name=root_data.get("schema_name"),
             database_name=root_data.get("database_name"),
@@ -493,20 +594,25 @@ async def get_visual_lineage(
             depth=0,
             ai_summary=root_summary,
             stats=status_text,
-            # root has no lineage edge → query_execution is None
         )
 
         # ── traverse upstreams ────────────────────────────────────────────────
         upstreams: List[VisualNode] = []
         if direction in ("upstream", "both"):
             visited_up = {catalog_id}
-            upstreams = await _traverse(db, catalog_id, "upstream", depth, 1, visited_up)
+            upstreams = await _traverse(
+                db, catalog_id, "upstream", depth, 1, visited_up,
+                root_table_name=root_table_name,
+            )
 
         # ── traverse downstreams ──────────────────────────────────────────────
         downstreams: List[VisualNode] = []
         if direction in ("downstream", "both"):
             visited_down = {catalog_id}
-            downstreams = await _traverse(db, catalog_id, "downstream", depth, 1, visited_down)
+            downstreams = await _traverse(
+                db, catalog_id, "downstream", depth, 1, visited_down,
+                root_table_name=root_table_name,
+            )
 
         return VisualLineageResponse(
             root=root_node,

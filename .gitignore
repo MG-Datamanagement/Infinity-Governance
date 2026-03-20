@@ -16,3 +16,8 @@ Dockerfile.user
 data/
 tmp/
 .DS_Store
+
+
+# Ignore specific JSON files
+error.json
+without_trans.json
