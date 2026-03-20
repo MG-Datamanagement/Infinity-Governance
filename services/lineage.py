@@ -91,14 +91,13 @@ llm = AzureChatOpenAI(
 
 # ─── Hardcoded Mock Data ──────────────────────────────────────────────────────
 
-# Table names (lowercased) whose upstream list always includes the mock
-# transaction node — matched against root_data["table_name"] at runtime.
+# Table names (lowercased) whose upstream list always includes ALL mock nodes
+# — matched against root_data["table_name"] at runtime.
 MOCK_TRIGGER_TABLE_NAMES = {"all_booking", "booking_agent"}
 
-# Sentinel ID prevents the mock node from being duplicated in visited sets.
+# ── Mock node 1: transaction ──────────────────────────────────────────────────
 MOCK_TRANSACTION_ID = "b12f9e3a-7c44-4c91-9f12-3c8c9c2a1111"
 
-# The full mock transaction upstream node (sourced from error.json)
 MOCK_TRANSACTION_NODE = VisualNode(
     id=MOCK_TRANSACTION_ID,
     table_name="transaction",
@@ -175,6 +174,90 @@ MOCK_TRANSACTION_NODE = VisualNode(
     ),
     stats="Columns: 16 | Rows: 0",
 )
+
+# ── Mock node 2: inventory_management ────────────────────────────────────────
+MOCK_INVENTORY_ID = "5f2c7b9e-91c2-4d5b-8c6a-3f7a1b2e9d44"
+
+MOCK_INVENTORY_NODE = VisualNode(
+    id=MOCK_INVENTORY_ID,
+    table_name="inventory_management",
+    full_name="operational-data-store.inventory_management",
+    schema_name="operational-data-store",
+    database_name=None,
+    type="table",
+    status="healthy",
+    source=SourceInfo(
+        id="36ddfa2f-c9bf-4e9f-bdfb-69189f786606",
+        name="run-test-athena",
+        source_type="athena",
+    ),
+    columns=[
+        ColumnInfo(id="c1",  name="inventoryid",       data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c2",  name="productid",         data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})", is_primary_key=False, is_foreign_key=True,  is_nullable=True, query_expression=None),
+        ColumnInfo(id="c3",  name="productname",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c4",  name="category",          data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c5",  name="stockquantity",     data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c6",  name="reorderlevel",      data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c7",  name="warehouse_location",data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c8",  name="supplierid",        data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})", is_primary_key=False, is_foreign_key=True,  is_nullable=True, query_expression=None),
+        ColumnInfo(id="c9",  name="lastrestockdate",   data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c10", name="journaltime",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c11", name="transactionid",     data_type="SchemaFieldDataTypeClass({'type': NumberTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c12", name="operationtype",     data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c13", name="load_type",         data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c14", name="filename",          data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c15", name="ingestionsequence", data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c16", name="createdutc",        data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+        ColumnInfo(id="c17", name="modifiedutc",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})", is_primary_key=False, is_foreign_key=False, is_nullable=True, query_expression=None),
+    ],
+    tags=[
+        TagInfo(id="0475716c-9715-4167-aa6e-deb655ec8809", name="Operational", color="#4CAF50", tag_type="classification"),
+    ],
+    lineage_id="a1b2c3d4-e5f6-7890-abcd-123456789000",
+    transformation_query=(
+        "CREATE TABLE inventory_summary\n"
+        "COMMENT 'Derived from: inventory_management, supplier tables'\n"
+        "WITH (\n"
+        "  format = 'PARQUET',\n"
+        "  external_location = 's3://infinity-gov-test/data/data-lineage/inventory_summary/'\n"
+        ") AS\n"
+        "SELECT\n"
+        "    i.inventoryid,\n"
+        "    i.productid,\n"
+        "    i.productname,\n"
+        "    i.category,\n"
+        "    i.stockquantity,\n"
+        "    i.reorderlevel,\n"
+        "    i.warehouse_location,\n"
+        "    s.suppliername\n"
+        "FROM inventory_management i\n"
+        "LEFT JOIN supplier s\n"
+        "    ON i.supplierid = s.supplierid"
+    ),
+    query_execution=QueryExecutionInfo(
+        query_execution_id="b12d29da-3ee2-4213-9dc3-77c3ce6df681",
+        query_start_time="2026-03-19T04:45:40.310000+00:00",
+        query_end_time="2026-03-19T04:45:42.619000+00:00",
+        query_runtime_ms=2309,
+        data_scanned_bytes=45226,
+        query_status="SUCCEEDED",
+        engine_version="Athena engine version 3",
+        s3_output_location="s3://athena-query-results-tmp-123/Unsaved/2026/03/19/tables/b12d29da-3ee2-4213-9dc3-77c3ce6df681",
+    ),
+    column_mappings=[],
+    depth=1,
+    ai_summary=(
+        "The operational-data-store.inventory_management dataset captures detailed inventory "
+        "records including product stock levels, supplier associations, and warehouse locations. "
+        "It serves as a critical dataset for supply chain monitoring, stock optimization, and "
+        "operational analytics within the data pipeline."
+    ),
+    stats="Columns: 17 | Rows: 75",
+)
+
+# Ordered list of all mock nodes to inject — add new mocks here in future.
+MOCK_NODES: List[VisualNode] = [MOCK_TRANSACTION_NODE, MOCK_INVENTORY_NODE]
+MOCK_IDS: List[str]          = [MOCK_TRANSACTION_ID,   MOCK_INVENTORY_ID]
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -429,28 +512,27 @@ async def _traverse(
 
     Mock injection rule:
       When direction == 'upstream', current_depth == 1, and root_table_name
-      (lowercased) is in MOCK_TRIGGER_TABLE_NAMES, the mock transaction node
-      is prepended to the upstream list before any DB-sourced nodes.
-      The sentinel MOCK_TRANSACTION_ID is added to `visited` immediately so
-      it is never injected a second time within the same traversal.
+      (lowercased) is in MOCK_TRIGGER_TABLE_NAMES, every node in MOCK_NODES
+      that has not yet been visited is prepended to the upstream list before
+      any DB-sourced nodes.
     """
     if current_depth > max_depth:
         return []
 
     results: List[VisualNode] = []
 
-    # ── Inject mock transaction node at depth-1 for trigger tables ───────────
+    # ── Inject all mock nodes at depth-1 for trigger tables ─────────────────
     if (
         direction == "upstream"
         and current_depth == 1
         and root_table_name.lower() in MOCK_TRIGGER_TABLE_NAMES
-        and MOCK_TRANSACTION_ID not in visited
     ):
-        visited.add(MOCK_TRANSACTION_ID)
-        mock = MOCK_TRANSACTION_NODE.copy(deep=True)
-        mock.depth = current_depth
-        results.append(mock)
-        # The mock node has no real DB children — no deeper traversal for it.
+        for mock_id, mock_node in zip(MOCK_IDS, MOCK_NODES):
+            if mock_id not in visited:
+                visited.add(mock_id)
+                mock = mock_node.copy(deep=True)
+                mock.depth = current_depth
+                results.append(mock)
 
     # ── Normal DB traversal ──────────────────────────────────────────────────
     if direction == "downstream":
