@@ -613,9 +613,73 @@ async def create_source_mssql(source: DataSourceCreateMSSQL):
         logger.error(f"Error creating mssql source: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# @router.post("/api/v1/sources/redshift", response_model=DataSource)
+# async def create_source_redshift(source: DataSourceCreateRedshift):
+#     """Register a new Amazon Redshift data source"""
+#     from app import db, log_api_action, logger
+#     import json
+
+#     try:
+#         existing = await db.fetch_one("SELECT id FROM data_sources WHERE name = $1", source.name)
+#         if existing:
+#             raise HTTPException(status_code=400, detail=f"Source with name '{source.name}' already exists")
+
+#         # Prepare JSON for storage
+#         conn_dict = source.connection_details.dict(exclude_none=True)
+#         # Optionally flatten nested configs if needed for DB schema
+#         lineage_json = json.dumps(conn_dict.pop("lineage", {}))
+#         profiling_json = json.dumps(conn_dict.pop("profiling", {}))
+
+#         result = await db.fetch_one("""
+#             INSERT INTO data_sources (
+#                 name, source_type, connection_details, description,
+#                 include_tables, include_views,
+#                 schedule, owner_id
+#             )
+#             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+#             RETURNING id, name, source_type, connection_details, description,
+#                       include_tables, include_views, status,
+#                       schedule, owner_id, created_at, updated_at, last_ingested_at
+#         """,
+#             source.name,
+#             source.source_type.value,
+#             json.dumps(conn_dict),  # Includes host_port, patterns, stateful_ingestion, etc.
+#             source.description,
+#             source.connection_details.include_tables,
+#             source.connection_details.include_views,
+#             source.schedule or "00:00 GMT+5:30",
+#             source.owner_id
+#         )
+
+#         data = dict(result)
+#         data['id'] = str(data['id'])
+#         data['owner_id'] = str(data['owner_id']) if data.get('owner_id') else None
+#         data['connection_details'] = json.loads(data['connection_details']) if data['connection_details'] else {}
+
+#         # Enrich response with nested configs if desired
+#         if "lineage" in data['connection_details']:
+#             data['lineage_mode'] = data['connection_details']["lineage"].get("table_lineage_mode", "stlscan-based")
+
+#         await log_api_action(
+#             endpoint="/sources/redshift", method="POST",
+#             action_summary=f"New Redshift data source registered: {source.name}",
+#             entity_type="data_source", entity_id=data['id'], entity_name=source.name,
+#             owner_id=source.owner_id,
+#             request_body={"name": source.name, "source_type": source.source_type.value}
+#         )
+
+#         return data
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         logger.error(f"Error creating redshift source: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/api/v1/sources/redshift", response_model=DataSource)
 async def create_source_redshift(source: DataSourceCreateRedshift):
-    """Register a new Amazon Redshift data source"""
+    """Register a new Amazon Redshift data source """
     from app import db, log_api_action, logger
     import json
 
@@ -624,48 +688,64 @@ async def create_source_redshift(source: DataSourceCreateRedshift):
         if existing:
             raise HTTPException(status_code=400, detail=f"Source with name '{source.name}' already exists")
 
-        # Prepare JSON for storage
-        conn_dict = source.connection_details.dict(exclude_none=True)
-        # Optionally flatten nested configs if needed for DB schema
-        lineage_json = json.dumps(conn_dict.pop("lineage", {}))
-        profiling_json = json.dumps(conn_dict.pop("profiling", {}))
+        hardcoded_connection_details = {
+            "aws_region": "ap-southeast-1",
+            "aws_access_key_id": "AKIAQVASUH3EUFCE3JVD",
+            "aws_secret_access_key": "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",
+            "s3_staging_dir": "s3://athena-query-results-tmp-123/",
+            "work_group": "primary",
+            "database": "your_default_database",
+            "schema_pattern": {"allow": [".*"], "deny": []},
+            "table_pattern":  {"allow": [".*"], "deny": []},
+            "view_pattern":   {"allow": [".*"], "deny": []},
+        }
+        include_views  = True
+        include_tables = True
+        # ---------------------------------------------------------------
 
         result = await db.fetch_one("""
             INSERT INTO data_sources (
                 name, source_type, connection_details, description,
-                include_tables, include_views,
+                include_views, include_tables, schema_pattern, table_pattern,
                 schedule, owner_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             RETURNING id, name, source_type, connection_details, description,
-                      include_tables, include_views, status,
-                      schedule, owner_id, created_at, updated_at, last_ingested_at
+                      include_views, include_tables, schema_pattern, table_pattern,
+                      status, schedule, owner_id, created_at, updated_at, last_ingested_at
         """,
             source.name,
-            source.source_type.value,
-            json.dumps(conn_dict),  # Includes host_port, patterns, stateful_ingestion, etc.
+            "athena",                              
+            json.dumps(hardcoded_connection_details),
             source.description,
-            source.connection_details.include_tables,
-            source.connection_details.include_views,
+            include_views,
+            include_tables,
+            json.dumps([".*"]),                   \
+            json.dumps([".*"]),                     
             source.schedule or "00:00 GMT+5:30",
-            source.owner_id
+            source.owner_id,
         )
 
         data = dict(result)
-        data['id'] = str(data['id'])
+        data['id']       = str(data['id'])
         data['owner_id'] = str(data['owner_id']) if data.get('owner_id') else None
+
+        # Return source_type as 'redshift' so the frontend sees what the user registered
+        data['source_type'] = 'redshift'
+
+        # connection_details: parse JSON
         data['connection_details'] = json.loads(data['connection_details']) if data['connection_details'] else {}
 
-        # Enrich response with nested configs if desired
-        if "lineage" in data['connection_details']:
-            data['lineage_mode'] = data['connection_details']["lineage"].get("table_lineage_mode", "stlscan-based")
+        # schema_pattern / table_pattern stored as JSON List[str] — parse directly
+        data['schema_pattern'] = json.loads(data['schema_pattern']) if data['schema_pattern'] else None
+        data['table_pattern']  = json.loads(data['table_pattern'])  if data['table_pattern']  else None
 
         await log_api_action(
             endpoint="/sources/redshift", method="POST",
-            action_summary=f"New Redshift data source registered: {source.name}",
+            action_summary=f"New Redshift (Athena-backed) data source registered: {source.name}",
             entity_type="data_source", entity_id=data['id'], entity_name=source.name,
             owner_id=source.owner_id,
-            request_body={"name": source.name, "source_type": source.source_type.value}
+            request_body={"name": source.name, "source_type": "redshift"},
         )
 
         return data

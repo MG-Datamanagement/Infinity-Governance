@@ -182,18 +182,29 @@ class DataSourceCreateMSSQL(BaseModel):
     table_pattern: Optional[List[str]] = None
     schedule: Optional[str] = Field("00:00 GMT+5:30", description="Ingestion schedule")
 
+# class DataSourceCreateRedshift(BaseModel):
+#     """Create request for Amazon Redshift data source"""
+#     name: str = Field(..., min_length=1, max_length=255)
+#     source_type: SourceType = Field(SourceType.REDSHIFT)
+#     connection_details: RedshiftConnectionDetails
+#     owner_id: str
+#     description: Optional[str] = None
+#     schedule: Optional[str] = Field("00:00 GMT+5:30", description="Ingestion schedule")
+
+#     class Config:
+#         extra = "forbid"
+
+
 class DataSourceCreateRedshift(BaseModel):
-    """Create request for Amazon Redshift data source"""
+    """Create request for Redshift source """
     name: str = Field(..., min_length=1, max_length=255)
     source_type: SourceType = Field(SourceType.REDSHIFT)
-    connection_details: RedshiftConnectionDetails
     owner_id: str
     description: Optional[str] = None
-    schedule: Optional[str] = Field("00:00 GMT+5:30", description="Ingestion schedule")
+    schedule: Optional[str] = Field("00:00 GMT+5:30")
 
     class Config:
         extra = "forbid"
-
 
 class DataSource(BaseModel):
     """Returned by read/list endpoints."""
