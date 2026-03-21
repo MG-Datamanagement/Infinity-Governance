@@ -11,8 +11,6 @@ from models import CatalogDataCardResponse
 router = APIRouter(tags=["datacard"])
 
 
- 
- 
 class BulkDataCardResult(BaseModel):
     catalog_id: str
     table_name: str
@@ -20,8 +18,8 @@ class BulkDataCardResult(BaseModel):
     status: str                     # "generated" | "cached" | "failed"
     error: Optional[str] = None     # populated only when status == "failed"
     generated_at: Optional[datetime] = None
- 
- 
+
+
 class BulkDataCardResponse(BaseModel):
     source_id: str
     total_catalogs: int
@@ -33,14 +31,14 @@ class BulkDataCardResponse(BaseModel):
 # ============================================================================
 # Schemas – catalog properties + custom properties
 # ============================================================================
- 
+
 class CustomPropertyItem(BaseModel):
     id:         str
     key:        str
     value:      str
     value_type: str
- 
- 
+
+
 class CatalogPropertiesResponse(BaseModel):
     full_name:         Optional[str]
     database:          Optional[str]
@@ -48,18 +46,17 @@ class CatalogPropertiesResponse(BaseModel):
     source:            Optional[str]
     source_type:       Optional[str]
     column_count:      int
-    row_count:         Optional[int]        # ← ADDED
+    row_count:         Optional[int]
     tags:              str
     owner:             str
     last_updated:      Optional[str]
     custom_properties: List[CustomPropertyItem] = []
- 
- 
+
+
 class CreateCustomPropertyRequest(BaseModel):
     key:        str
     value:      str
     value_type: Optional[str] = "string"
-
 
 
 def _build_datacard_prompt(catalog_detail: dict) -> str:
@@ -89,6 +86,10 @@ def _build_datacard_prompt(catalog_detail: dict) -> str:
 
     props = catalog_detail.get("properties") or {}
     props_lines = "\n".join(f"  {k}: {v}" for k, v in props.items()) if props else "  (none)"
+
+    # ── Row count: show real number or "Unknown" ─────────────────────────────
+    row_count_raw = catalog_detail.get("row_count")
+    row_count_str = f"{row_count_raw:,}" if row_count_raw is not None else "Unknown"  # ← ADDED
 
     prompt = f"""You are a senior data governance analyst. Generate a professional **Data Card** 
 for the dataset described below. The card must strictly follow this format:
@@ -136,6 +137,7 @@ Source Name  : {catalog_detail.get('source_name') or 'N/A'}
 Source Type  : {catalog_detail.get('source_type') or 'N/A'}
 Description  : {catalog_detail.get('description') or 'No description provided'}
 Column Count : {catalog_detail.get('column_count', len(catalog_detail.get('columns', [])))}
+Row Count    : {row_count_str}
 Tags         : {tags}
 Owner        : {owner_str}
 Last Updated : {catalog_detail.get('updated_at') or 'Unknown'}
@@ -285,6 +287,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
             c.schema_name,
             c.description,
             c.metadata        AS properties,
+            c.row_count,                          -- ← ADDED
             c.created_at,
             c.updated_at,
             ds.name           AS source_name,
@@ -308,7 +311,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
             action_summary=f"Datacard generation failed – catalog not found",
             entity_id=catalog_id, status_code=404,
         )
-        raise HTTPException(status_code=404, detail=f"Catalog  not found")
+        raise HTTPException(status_code=404, detail=f"Catalog not found")
 
     # ── Step 2: Columns ─────────────────────────────────────────────────────
     columns = await db.fetch_all(
@@ -367,7 +370,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         await _log(
             db, logger,
             endpoint=endpoint, method="POST",
-            action_summary=f"Datacard returned from cache for catalog ",
+            action_summary=f"Datacard returned from cache for catalog",
             entity_id=catalog_id,
             entity_name=catalog["table_name"],
             status_code=200,
@@ -410,6 +413,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         "source_name":   catalog["source_name"],
         "source_type":   catalog["source_type"],
         "column_count":  len(columns),
+        "row_count":     catalog["row_count"],        # ← ADDED
         "properties":    existing_meta,
         "updated_at":    catalog["updated_at"].isoformat() if catalog["updated_at"] else None,
         "owner": {
@@ -496,7 +500,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         db, logger,
         endpoint=endpoint,
         method="POST",
-        action_summary=f"Datacard generated for catalog '{catalog['table_name']}' ",
+        action_summary=f"Datacard generated for catalog '{catalog['table_name']}'",
         entity_type="catalog",
         entity_id=catalog_id,
         entity_name=catalog["table_name"],
@@ -505,6 +509,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         response_summary=(
             f"status=generated | "
             f"columns={len(columns)} | "
+            f"rows={catalog['row_count']} | "       # ← ADDED
             f"domains={len(domains)} | "
             f"tags={len(tags)} | "
             f"datacard_chars={len(data_card_text)}"
@@ -591,8 +596,7 @@ async def get_catalog_datacard(catalog_id: str):
         status=row["status"],
     )
 
- 
- 
+
 @router.post(
     "/api/v1/sources/{source_id}/datacards/bulk-generate",
     response_model=BulkDataCardResponse,
@@ -607,23 +611,23 @@ async def bulk_generate_datacards(
     Iterates over every catalog that belongs to the given **source_id** and
     generates (or returns the cached) Data Card for each one, storing results
     in the `datacards` table.
- 
+
     Query parameters
     ----------------
     - **max_tokens** (default 2000): token budget passed to Azure OpenAI per card.
     - **skip_cached** (default true): when *true*, catalogs that already have a
       stored datacard are skipped (returned with status="cached").  Set to
       *false* to force-regenerate every card even if one already exists.
- 
+
     Response
     --------
     Returns a summary with per-catalog results including status
     ("generated" | "cached" | "failed") and any error messages for failed ones.
     """
     from app import db, logger, get_azure_client, AZURE_CONFIG
- 
+
     endpoint = f"/api/v1/sources/{source_id}/datacards/bulk-generate"
- 
+
     # ── Guard: Azure OpenAI must be configured ───────────────────────────────
     ai_client = get_azure_client()
     if not ai_client:
@@ -639,7 +643,7 @@ async def bulk_generate_datacards(
             status_code=503,
             detail="Azure OpenAI is not configured. Set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT.",
         )
- 
+
     # ── Step 1: Verify the source exists ────────────────────────────────────
     source = await db.fetch_one(
         "SELECT id, name, source_type FROM data_sources WHERE id = $1",
@@ -655,7 +659,7 @@ async def bulk_generate_datacards(
             status_code=404,
         )
         raise HTTPException(status_code=404, detail=f"Data source '{source_id}' not found")
- 
+
     # ── Step 2: Fetch all catalogs for this source ───────────────────────────
     catalogs = await db.fetch_all(
         """
@@ -667,6 +671,7 @@ async def bulk_generate_datacards(
             c.schema_name,
             c.description,
             c.metadata        AS properties,
+            c.row_count,                          -- ← ADDED
             c.updated_at,
             ds.name           AS source_name,
             ds.source_type    AS source_type,
@@ -682,19 +687,19 @@ async def bulk_generate_datacards(
         """,
         source_id,
     )
- 
+
     if not catalogs:
         raise HTTPException(
             status_code=404,
             detail=f"No catalogs found for source '{source_id}'",
         )
- 
+
     # ── Step 3: Process each catalog ────────────────────────────────────────
     results: List[BulkDataCardResult] = []
     generated_count = 0
     cached_count    = 0
     failed_count    = 0
- 
+
     def _parse_dtype(raw: str) -> str:
         if not raw:
             return "unknown"
@@ -710,19 +715,19 @@ async def bulk_generate_datacards(
                 "UnionTypeClass":   "union",     "DateTypeClass":    "date",
             }.get(m.group(1), m.group(1).lower())
         return raw
- 
+
     for catalog in catalogs:
         catalog_id  = str(catalog["id"])
         table_name  = catalog["table_name"]
         full_name   = catalog["full_name"]
- 
+
         try:
             # ── 3a: Check cache ──────────────────────────────────────────────
             cached_row = await db.fetch_one(
                 "SELECT data_card, generated_at FROM datacards WHERE catalog_id = $1",
                 catalog_id,
             )
- 
+
             if skip_cached and cached_row and cached_row["data_card"]:
                 logger.info(f"[bulk-datacard] Skipping cached catalog {catalog_id}")
                 cached_count += 1
@@ -734,7 +739,7 @@ async def bulk_generate_datacards(
                     generated_at=cached_row["generated_at"],
                 ))
                 continue
- 
+
             # ── 3b: Fetch columns ────────────────────────────────────────────
             columns = await db.fetch_all(
                 """
@@ -746,7 +751,7 @@ async def bulk_generate_datacards(
                 """,
                 catalog_id,
             )
- 
+
             # ── 3c: Fetch domains ────────────────────────────────────────────
             domains = await db.fetch_all(
                 """
@@ -758,7 +763,7 @@ async def bulk_generate_datacards(
                 """,
                 catalog_id,
             )
- 
+
             # ── 3d: Fetch tags ───────────────────────────────────────────────
             tags = await db.fetch_all(
                 """
@@ -770,7 +775,7 @@ async def bulk_generate_datacards(
                 """,
                 catalog_id,
             )
- 
+
             # ── 3e: Build catalog_detail dict ────────────────────────────────
             existing_meta = catalog["properties"] or {}
             if isinstance(existing_meta, str):
@@ -778,7 +783,7 @@ async def bulk_generate_datacards(
                     existing_meta = json.loads(existing_meta)
                 except Exception:
                     existing_meta = {}
- 
+
             catalog_detail = {
                 "id":            catalog_id,
                 "table_name":    table_name,
@@ -789,6 +794,7 @@ async def bulk_generate_datacards(
                 "source_name":   catalog["source_name"],
                 "source_type":   catalog["source_type"],
                 "column_count":  len(columns),
+                "row_count":     catalog["row_count"],    # ← ADDED
                 "properties":    existing_meta,
                 "updated_at":    catalog["updated_at"].isoformat() if catalog["updated_at"] else None,
                 "owner": {
@@ -812,10 +818,10 @@ async def bulk_generate_datacards(
                     for col in columns
                 ],
             }
- 
+
             # ── 3f: Build prompt & call Azure OpenAI ─────────────────────────
             prompt = _build_datacard_prompt(catalog_detail)
- 
+
             ai_response = await ai_client.chat.completions.create(
                 model=AZURE_CONFIG["azure_deployment"],
                 messages=[
@@ -831,10 +837,10 @@ async def bulk_generate_datacards(
                 temperature=0.4,
                 max_tokens=max_tokens,
             )
- 
+
             data_card_text = ai_response.choices[0].message.content.strip()
             generated_at   = datetime.utcnow()
- 
+
             # ── 3g: Persist to datacards table ───────────────────────────────
             await _save_datacard(
                 db, logger,
@@ -844,7 +850,7 @@ async def bulk_generate_datacards(
                 data_card_text=data_card_text,
                 status="generated",
             )
- 
+
             # ── 3h: Also update catalogs.metadata JSONB (backward compat) ────
             updated_meta = {**existing_meta, "data_card": data_card_text}
             try:
@@ -855,7 +861,7 @@ async def bulk_generate_datacards(
                 )
             except Exception as exc:
                 logger.warning(f"[bulk-datacard] Could not update catalogs.metadata for {catalog_id}: {exc}")
- 
+
             generated_count += 1
             results.append(BulkDataCardResult(
                 catalog_id=catalog_id,
@@ -864,8 +870,8 @@ async def bulk_generate_datacards(
                 status="generated",
                 generated_at=generated_at,
             ))
-            logger.info(f"[bulk-datacard] Generated datacard for catalog  ({table_name})")
- 
+            logger.info(f"[bulk-datacard] Generated datacard for catalog ({table_name})")
+
         except Exception as exc:
             # Individual catalog failure must not abort the whole batch
             failed_count += 1
@@ -880,7 +886,7 @@ async def bulk_generate_datacards(
                 status="failed",
                 error=str(exc),
             ))
- 
+
     # ── Step 4: Audit log ────────────────────────────────────────────────────
     await _log(
         db, logger,
@@ -902,7 +908,7 @@ async def bulk_generate_datacards(
             f"failed={failed_count}"
         ),
     )
- 
+
     return BulkDataCardResponse(
         source_id=source_id,
         total_catalogs=len(catalogs),
@@ -912,12 +918,11 @@ async def bulk_generate_datacards(
         results=results,
     )
 
- 
- 
+
 # ============================================================================
 # GET  /api/v1/catalogs/{catalog_id}/properties
 # ============================================================================
- 
+
 @router.get(
     "/api/v1/catalogs/{catalog_id}/properties",
     response_model=CatalogPropertiesResponse,
@@ -938,7 +943,7 @@ async def get_catalog_properties(catalog_id: str):
                 c.database_name,
                 c.schema_name,
                 c.updated_at,
-                c.row_count,                          -- ← ADDED
+                c.row_count,
                 ds.name        AS source_name,
                 ds.source_type AS source_type,
                 o.name         AS owner_name,
@@ -951,10 +956,10 @@ async def get_catalog_properties(catalog_id: str):
             """,
             catalog_id,
         )
- 
+
         if not catalog:
             raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
- 
+
         # ── Column count ──────────────────────────────────────────────────────
         col_count_row = await db.fetch_one(
             "SELECT COUNT(*) AS cnt FROM columns WHERE catalog_id = $1", catalog_id,
@@ -962,8 +967,8 @@ async def get_catalog_properties(catalog_id: str):
         column_count = col_count_row["cnt"] if col_count_row else 0
 
         # ── Row count (from catalogs table, may be NULL) ──────────────────────
-        row_count = catalog["row_count"]  # ← ADDED (already fetched above)
- 
+        row_count = catalog["row_count"]
+
         # ── Tags ──────────────────────────────────────────────────────────────
         tag_rows = await db.fetch_all(
             """
@@ -974,7 +979,7 @@ async def get_catalog_properties(catalog_id: str):
             catalog_id,
         )
         tags_str = ", ".join(r["name"] for r in tag_rows) or "None"
- 
+
         # ── Custom properties – exclude null/empty values at DB level ─────────
         cp_rows = await db.fetch_all(
             """
@@ -996,23 +1001,23 @@ async def get_catalog_properties(catalog_id: str):
             )
             for r in cp_rows
         ]
- 
+
         # ── Owner ─────────────────────────────────────────────────────────────
         if catalog["owner_name"]:
             owner_str = f"{catalog['owner_name']} ({catalog['owner_role']}) – {catalog['owner_email'] or 'no email'}"
         else:
             owner_str = "Unassigned"
- 
+
         # ── Last updated ──────────────────────────────────────────────────────
         last_updated = (
             catalog["updated_at"].strftime("%d/%m/%Y %H:%M:%S")
             if catalog["updated_at"] else None
         )
- 
+
         # ── Strip None/empty scalar fields ────────────────────────────────────
         def _val(v):
             return v if v is not None and str(v).strip() != "" else None
- 
+
         await _log(
             db, logger,
             endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
@@ -1023,12 +1028,12 @@ async def get_catalog_properties(catalog_id: str):
             status_code=200,
             response_summary=(
                 f"columns={column_count} | "
-                f"rows={row_count} | "      # ← ADDED to audit log
+                f"rows={row_count} | "
                 f"tags={tags_str} | "
                 f"custom_props={len(custom_props)}"
             ),
         )
- 
+
         return CatalogPropertiesResponse(
             full_name=_val(catalog["full_name"]),
             database=_val(catalog["database_name"]),
@@ -1036,25 +1041,25 @@ async def get_catalog_properties(catalog_id: str):
             source=_val(catalog["source_name"]),
             source_type=_val(catalog["source_type"]),
             column_count=column_count,
-            row_count=row_count,            # ← ADDED
+            row_count=row_count,
             tags=tags_str,
             owner=owner_str,
             last_updated=last_updated,
             custom_properties=custom_props,
         )
- 
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error("get_catalog_properties error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
- 
- 
+
+
 # ============================================================================
 # POST  /api/v1/catalogs/{catalog_id}/properties
 # Add a custom property to a catalog
 # ============================================================================
- 
+
 @router.post(
     "/api/v1/catalogs/{catalog_id}/properties",
     response_model=CustomPropertyItem,
@@ -1073,13 +1078,13 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
         cat = await db.fetch_one("SELECT id FROM catalogs WHERE id = $1", catalog_id)
         if not cat:
             raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
- 
+
         # ── Validate inputs ───────────────────────────────────────────────────
         if not body.key or not body.key.strip():
             raise HTTPException(status_code=400, detail="Property key must not be empty.")
         if not body.value or not body.value.strip():
             raise HTTPException(status_code=400, detail="Property value must not be empty.")
- 
+
         # ── Duplicate key guard ───────────────────────────────────────────────
         existing = await db.fetch_one(
             "SELECT id FROM custom_properties WHERE catalog_id = $1 AND key = $2",
@@ -1090,7 +1095,7 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
                 status_code=409,
                 detail=f"Property key '{body.key}' already exists for this catalog. Use PATCH to update it.",
             )
- 
+
         # ── Insert ────────────────────────────────────────────────────────────
         row = await db.fetch_one(
             """
@@ -1103,7 +1108,7 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
             body.value.strip(),
             (body.value_type or "string").strip(),
         )
- 
+
         await _log(db, logger,
                    endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
                    method="POST",
@@ -1112,14 +1117,14 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
                    status_code=201,
                    request_body={"key": body.key, "value": body.value, "value_type": body.value_type},
                    response_summary=f"property_id={row['id']}")
- 
+
         return CustomPropertyItem(
             id=str(row["id"]),
             key=row["key"],
             value=row["value"],
             value_type=row["value_type"] or "string",
         )
- 
+
     except HTTPException:
         raise
     except Exception as e:
