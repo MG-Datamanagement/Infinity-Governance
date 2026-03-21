@@ -48,6 +48,7 @@ class CatalogPropertiesResponse(BaseModel):
     source:            Optional[str]
     source_type:       Optional[str]
     column_count:      int
+    row_count:         Optional[int]        # ← ADDED
     tags:              str
     owner:             str
     last_updated:      Optional[str]
@@ -108,6 +109,7 @@ its primary purpose, and who typically uses it.
 | Source         | ...   |
 | Source Type    | ...   |
 | Column Count   | ...   |
+| Row Count      | ...   |
 | Domain(s)      | ...   |
 | Tags           | ...   |
 | Owner          | ...   |
@@ -228,7 +230,7 @@ async def _save_datacard(
             data_card_text,
             status,
         )
-        logger.info(f"[datacard] Saved to datacards table for catalog {catalog_id}")
+        logger.info(f"[datacard] Saved to datacards table for catalog")
     except Exception as exc:
         logger.warning(f"[datacard] Could not persist to datacards table: {exc}")
 
@@ -303,10 +305,10 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         await _log(
             db, logger,
             endpoint=endpoint, method="POST",
-            action_summary=f"Datacard generation failed – catalog '{catalog_id}' not found",
+            action_summary=f"Datacard generation failed – catalog not found",
             entity_id=catalog_id, status_code=404,
         )
-        raise HTTPException(status_code=404, detail=f"Catalog '{catalog_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Catalog  not found")
 
     # ── Step 2: Columns ─────────────────────────────────────────────────────
     columns = await db.fetch_all(
@@ -365,7 +367,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         await _log(
             db, logger,
             endpoint=endpoint, method="POST",
-            action_summary=f"Datacard returned from cache for catalog '{catalog_id}'",
+            action_summary=f"Datacard returned from cache for catalog ",
             entity_id=catalog_id,
             entity_name=catalog["table_name"],
             status_code=200,
@@ -572,7 +574,7 @@ async def get_catalog_datacard(catalog_id: str):
     await _log(
         db, logger,
         endpoint=endpoint, method="GET",
-        action_summary=f"Datacard retrieved for catalog '{row['table_name']}' (id={catalog_id})",
+        action_summary=f"Datacard retrieved for catalog '{row['table_name']}'",
         entity_type="catalog",
         entity_id=catalog_id,
         entity_name=row["table_name"],
@@ -862,7 +864,7 @@ async def bulk_generate_datacards(
                 status="generated",
                 generated_at=generated_at,
             ))
-            logger.info(f"[bulk-datacard] Generated datacard for catalog {catalog_id} ({table_name})")
+            logger.info(f"[bulk-datacard] Generated datacard for catalog  ({table_name})")
  
         except Exception as exc:
             # Individual catalog failure must not abort the whole batch
@@ -921,7 +923,7 @@ async def bulk_generate_datacards(
     response_model=CatalogPropertiesResponse,
     summary="Get key metadata properties for a catalog entry",
     description=(
-        "Returns core metadata (source, schema, owner, tags, column count) plus all "
+        "Returns core metadata (source, schema, owner, tags, row/column count) plus all "
         "custom properties stored for this catalog. Properties with null/empty values "
         "are excluded from the response."
     ),
@@ -932,7 +934,11 @@ async def get_catalog_properties(catalog_id: str):
         catalog = await db.fetch_one(
             """
             SELECT
-                c.full_name, c.database_name, c.schema_name, c.updated_at,
+                c.full_name,
+                c.database_name,
+                c.schema_name,
+                c.updated_at,
+                c.row_count,                          -- ← ADDED
                 ds.name        AS source_name,
                 ds.source_type AS source_type,
                 o.name         AS owner_name,
@@ -954,6 +960,9 @@ async def get_catalog_properties(catalog_id: str):
             "SELECT COUNT(*) AS cnt FROM columns WHERE catalog_id = $1", catalog_id,
         )
         column_count = col_count_row["cnt"] if col_count_row else 0
+
+        # ── Row count (from catalogs table, may be NULL) ──────────────────────
+        row_count = catalog["row_count"]  # ← ADDED (already fetched above)
  
         # ── Tags ──────────────────────────────────────────────────────────────
         tag_rows = await db.fetch_all(
@@ -1004,11 +1013,21 @@ async def get_catalog_properties(catalog_id: str):
         def _val(v):
             return v if v is not None and str(v).strip() != "" else None
  
-        await _log(db, logger, endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
-                   method="GET",
-                   action_summary=f"Properties retrieved for catalog '{catalog_id}'",
-                   entity_type="catalog", entity_id=catalog_id, status_code=200,
-                   response_summary=f"columns={column_count} | tags={tags_str} | custom_props={len(custom_props)}")
+        await _log(
+            db, logger,
+            endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
+            method="GET",
+            action_summary=f"Properties retrieved for catalog '{catalog_id}'",
+            entity_type="catalog",
+            entity_id=catalog_id,
+            status_code=200,
+            response_summary=(
+                f"columns={column_count} | "
+                f"rows={row_count} | "      # ← ADDED to audit log
+                f"tags={tags_str} | "
+                f"custom_props={len(custom_props)}"
+            ),
+        )
  
         return CatalogPropertiesResponse(
             full_name=_val(catalog["full_name"]),
@@ -1017,6 +1036,7 @@ async def get_catalog_properties(catalog_id: str):
             source=_val(catalog["source_name"]),
             source_type=_val(catalog["source_type"]),
             column_count=column_count,
+            row_count=row_count,            # ← ADDED
             tags=tags_str,
             owner=owner_str,
             last_updated=last_updated,

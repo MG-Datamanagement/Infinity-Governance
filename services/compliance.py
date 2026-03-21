@@ -696,13 +696,13 @@ def make_evaluate_frameworks_node(db: DatabaseManager, llm: LLMEvaluator, rules:
                 else:
                     logger.info("      FAILED  severity=%s", eval_result["severity"])
                     fw_issues.append({
-                        "issue":         rule["rule"],
+                        "issue":         rule["rule"].replace("PII/sensitive", "PII"),
                         "rule_id":       rule_id,
                         "framework":     framework,
                         "severity":      eval_result["severity"].upper(),
                         "reason":        eval_result["reason"],
                         "dataset":       extract_dataset_from_results(query_results),
-                        "assignee":      "Manual Review Required",
+                        "assignee":      "Unassigned",
                         "due_date":      calculate_due_date(eval_result["severity"]),
                         "affected_rows": len(query_results),
                         "action_url":    f"/issues/{rule_id}",
@@ -906,7 +906,7 @@ class ComplianceEngine:
         # 6. last_updated human string
         # ------------------------------------------------------------------
         last_updated = human_time_ago(run_ts)
-
+        last_checked_timestamp = run_ts.isoformat()
         # ------------------------------------------------------------------
         # 7. trend_label  — mirrors old codebase "+X.Y% Overall" format
         # ------------------------------------------------------------------
@@ -925,7 +925,7 @@ class ComplianceEngine:
                 "score":                  overall,
                 "change_from_last_month": change_from_last_month,
                 "health_status":          health_status(overall),
-                "last_updated":           last_updated,
+                "last_updated":           last_checked_timestamp,
             },
 
             # ── compliance_health  (score + trend_label ONLY, no nested trend)
@@ -958,7 +958,7 @@ class ComplianceEngine:
                     "score":        fw_data.get(fw_name, {}).get("score", 0.0),
                     "status":       health_status(fw_data.get(fw_name, {}).get("score", 0.0)),
                     "details":      framework_details(fw_name),
-                    "last_checked": last_updated,
+                    "last_checked": last_checked_timestamp,
                     "indicators":   build_indicators(fw_name),
                 }
                 for fw_name in FRAMEWORK_RULES
@@ -1827,6 +1827,10 @@ def get_dataset_compliance_report(catalog_id: str):
         },
         "rules": rules
     }
+
+
+
+
 
 
 
