@@ -433,68 +433,7 @@ FRAMEWORK_RULES: dict = {
 # DDL — AUTO-CREATED TABLES ON STARTUP
 # =============================================================================
 
-DDL_STATEMENTS = [
-    """
-    CREATE TABLE IF NOT EXISTS compliance_snapshots (
-        id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        recorded_at             TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
-
-        overall_score                   NUMERIC(5,2) NOT NULL,
-        overall_health_status           VARCHAR(20)  NOT NULL,
-        overall_change_from_last_month  NUMERIC(5,2),
-
-        gdpr_score              NUMERIC(5,2),
-        gdpr_status             VARCHAR(20),
-        gdpr_rules_passed       INTEGER,
-        gdpr_rules_total        INTEGER,
-        gdpr_last_checked       TEXT,
-
-        open_issues_count       INTEGER DEFAULT 0,
-        critical_issues_count   INTEGER DEFAULT 0,
-        high_issues_count       INTEGER DEFAULT 0,
-        medium_issues_count     INTEGER DEFAULT 0,
-        low_issues_count        INTEGER DEFAULT 0,
-
-        compliance_health_score         NUMERIC(5,2),
-        compliance_health_trend_label   TEXT,
-
-        top_issue_1_issue       TEXT,
-        top_issue_1_framework   VARCHAR(20),
-        top_issue_1_severity    VARCHAR(20),
-        top_issue_1_dataset     TEXT,
-        top_issue_1_assignee    TEXT,
-        top_issue_1_due_date    TEXT,
-
-        top_issue_2_issue       TEXT,
-        top_issue_2_framework   VARCHAR(20),
-        top_issue_2_severity    VARCHAR(20),
-        top_issue_2_dataset     TEXT,
-        top_issue_2_assignee    TEXT,
-        top_issue_2_due_date    TEXT,
-
-        top_issue_3_issue       TEXT,
-        top_issue_3_framework   VARCHAR(20),
-        top_issue_3_severity    VARCHAR(20),
-        top_issue_3_dataset     TEXT,
-        top_issue_3_assignee    TEXT,
-        top_issue_3_due_date    TEXT,
-
-        ai_insights_text        TEXT,
-        ai_insights_beta        BOOLEAN DEFAULT TRUE,
-
-        trend_month_label       TEXT,
-        trend_overall_data      NUMERIC(5,2)[],
-        trend_gdpr_data         NUMERIC(5,2)[],
-
-        scan_duration_seconds   NUMERIC(8,2),
-        snapshot_json           JSONB NOT NULL
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_snapshots_recorded_at ON compliance_snapshots (recorded_at DESC)",
-    "CREATE INDEX IF NOT EXISTS idx_snapshots_overall     ON compliance_snapshots (overall_score)",
-    "CREATE INDEX IF NOT EXISTS idx_snapshots_health      ON compliance_snapshots (overall_health_status)",
-    "CREATE INDEX IF NOT EXISTS idx_snapshots_gdpr        ON compliance_snapshots (gdpr_score)",
-]
+DDL_STATEMENTS = [ ]
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -556,10 +495,10 @@ def _build_pg_connect_kwargs() -> dict:
     if dsn:
         return {"dsn": dsn}
     return {
-        "host":               os.getenv("PG_HOST",     "localhost"),
+        "host":               os.getenv("PG_HOST"),
         "port":               int(os.getenv("PG_PORT", "5432")),
-        "dbname":             os.getenv("PG_DB",     "compliance_db"),
-        "user":               os.getenv("PG_USER",     "postgres"),
+        "dbname":             os.getenv("PG_DB"),
+        "user":               os.getenv("PG_USER"),
         "password":           os.getenv("PG_PASS", ""),
         "sslmode":            os.getenv("PG_SSLMODE",  "prefer"),
         "keepalives":          1,
