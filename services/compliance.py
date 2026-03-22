@@ -127,8 +127,10 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.description, c.owner_id,
+                       o.name AS owner_name,
                        t.name AS tag_name, c.updated_at
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
                 JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
@@ -159,8 +161,10 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.owner_id, t.name AS tag_name,
+                       o.name AS owner_name,
                        c.created_at, c.updated_at
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
                 JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
@@ -190,8 +194,10 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.metadata, c.description, c.owner_id,
+                       o.name AS owner_name,
                        c.created_at, c.updated_at
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE c.metadata IS NULL
                    OR (c.metadata::text = 'null'::text)
                    OR (c.metadata @> '{"lawful_basis": null}'::jsonb)
@@ -222,8 +228,10 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.last_seen_at, c.owner_id,
+                          o.name AS owner_name,
                        EXTRACT(DAY FROM NOW() - c.last_seen_at) AS days_since_access
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE c.last_seen_at IS NULL
                    OR c.last_seen_at < NOW() - INTERVAL '90 days'
                 ORDER BY c.last_seen_at ASC NULLS FIRST LIMIT 100
@@ -252,9 +260,11 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.description, c.owner_id,
+                          o.name AS owner_name,
                        COUNT(*) OVER (PARTITION BY c.source_id) AS tables_in_source,
                        t.name AS tag_name, c.metadata
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
                 JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
@@ -290,8 +300,10 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.updated_at, c.owner_id,
+                            o.name AS owner_name,
                        EXTRACT(DAY FROM NOW() - c.updated_at) AS days_since_update
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE c.updated_at < NOW() - INTERVAL '180 days'
                    OR c.updated_at IS NULL
                 ORDER BY c.updated_at ASC NULLS LAST LIMIT 100
@@ -320,8 +332,11 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.source_id, ds.id AS source_exists,
-                       c.owner_id, c.metadata
+                       c.owner_id, 
+                         o.name AS owner_name,
+                       c.metadata
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 LEFT JOIN data_sources ds ON ds.id = c.source_id
                 JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
                 JOIN tags t ON t.id = tca.tag_id
@@ -352,18 +367,18 @@ FRAMEWORK_RULES: dict = {
             ),
             "sql": """
                 SELECT c.schema_name,
-                       COUNT(c.id)             AS table_count,
-                       COUNT(DISTINCT c.owner_id) AS owner_count,
-                       STRING_AGG(DISTINCT t.name, ', ')     AS tags,
-                       MAX(c.updated_at)       AS last_update,
-                       STRING_AGG(DISTINCT c.full_name, ', ') AS sample_tables
+                    COUNT(c.id) AS table_count,
+                    COUNT(DISTINCT c.owner_id) AS owner_count,
+                    STRING_AGG(DISTINCT o.name, ', ') AS owner_name,
+                    STRING_AGG(DISTINCT t.name, ', ') AS tags,
+                    MAX(c.updated_at) AS last_update,
+                    STRING_AGG(DISTINCT c.full_name, ', ') AS sample_tables
                 FROM catalogs c
+                LEFT JOIN owners o ON o.id = c.owner_id
                 LEFT JOIN tag_catalog_assignments tca ON tca.catalog_id = c.id
                 LEFT JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
                 GROUP BY c.schema_name
-                HAVING COUNT(DISTINCT CASE WHEN LOWER(t.name) != ALL(%(tags)s) THEN c.id END) > 0
-                ORDER BY table_count DESC
             """,
             "sql_params": {"tags": ["pii", "personal data", "sensitive"]},
             "eval_prompt": (
@@ -389,6 +404,7 @@ FRAMEWORK_RULES: dict = {
             "sql": """
                 SELECT c.id, c.table_name AS name, c.full_name, c.schema_name,
                        c.database_name, c.row_count, c.created_at, c.updated_at,
+                       o.name AS owner_name,
                        c.owner_id, o.id AS owner_exists
                 FROM catalogs c
                 LEFT JOIN owners o ON o.id = c.owner_id
@@ -506,6 +522,14 @@ def health_status(score: float) -> str:
     elif score >= 75: return "needs_attention"
     elif score >= 50: return "needs_attention"
     return "critical"
+
+def extract_owner_from_results(query_results: list) -> str:
+    owners = set()
+    for row in query_results:
+        owner = row.get("owner_name")
+        if owner:
+            owners.add(owner)
+    return ", ".join(sorted(owners)) if owners else "Unassigned"
 
 def human_time_ago(dt: datetime) -> str:
     if dt.tzinfo is None:
@@ -702,7 +726,7 @@ def make_evaluate_frameworks_node(db: DatabaseManager, llm: LLMEvaluator, rules:
                         "severity":      eval_result["severity"].upper(),
                         "reason":        eval_result["reason"],
                         "dataset":       extract_dataset_from_results(query_results),
-                        "assignee":      "Unassigned",
+                        "assignee":      extract_owner_from_results(query_results),
                         "due_date":      calculate_due_date(eval_result["severity"]),
                         "affected_rows": len(query_results),
                         "action_url":    f"/issues/{rule_id}",
@@ -1827,7 +1851,6 @@ def get_dataset_compliance_report(catalog_id: str):
         },
         "rules": rules
     }
-
 
 
 
