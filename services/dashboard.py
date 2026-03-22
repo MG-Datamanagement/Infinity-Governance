@@ -756,11 +756,11 @@ async def get_overview_stats():
             SELECT
                 (SELECT COUNT(*) FROM catalogs)         AS total_datasets,
                 (SELECT COUNT(*) FROM tags)             AS total_tags,
-                (SELECT COUNT(*) FROM domains)          AS total_domains,
+                (SELECT COUNT(*) FROM line_of_business)          AS total_domains,
                 (
                     (SELECT COUNT(*) FROM catalogs) +
                     (SELECT COUNT(*) FROM tags) +
-                    (SELECT COUNT(*) FROM domains)
+                    (SELECT COUNT(*) FROM line_of_business)
                 )                                       AS total_assets
         """)
 
