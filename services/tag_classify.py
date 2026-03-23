@@ -67,8 +67,7 @@ def create_table_classification_chain():
     Example 1:
     Table Name: customers
     Description: Stores customer full name, email address, phone number, and mailing address.
-    Available Tags: PII, Financial, Operational, Marketing, Human Resources
-
+    Available Tags: PII
     Output:
     {{
         "tag": "PII",
@@ -79,13 +78,13 @@ def create_table_classification_chain():
     ---
 
     Example 2:
-    Table Name: payment_transactions
-    Description: Records payments made by users including amount, payment method, currency, and transaction date.
+    Table Name: agent_id
+    Description: Unique identifier number for the agent
     Available Tags: PII, Financial, Operational, Marketing, Human Resources
 
     Output:
     {{
-        "tag": "Financial",
+        "tag": "PII",
         "confidence_score": 0.96,
         "reasoning": "Represents monetary transactions and payment records."
     }}
@@ -93,13 +92,13 @@ def create_table_classification_chain():
     ---
 
     Example 3:
-    Table Name: system_logs
-    Description: Stores application log entries including log level, message, timestamp, and service name.
-    Available Tags: PII, Financial, Operational, Marketing, Human Resources
+    Table Name: file_name
+    Description: Name of the file associated with the agent record.
+    Available Tags: NON-PII
 
     Output:
     {{
-        "tag": "Operational",
+        "tag": "NON-PII",
         "confidence_score": 0.65,
         "reasoning": "Contains system-generated logs for monitoring and operations."
     }}
@@ -109,6 +108,8 @@ def create_table_classification_chain():
     Now classify the provided table using ONLY the available tags listed.
     Remember:
     - choose exactly ONE tag from the available list
+    - If it is ends with id and PII sensitive column mark it as PII
+    - If it is non PII like file name , status, bookingutc, curency code mark it as NON-PII
     - base decision on semantics, not keywords alone
     - provide concise reasoning
     - output JSON only
@@ -439,6 +440,11 @@ def create_column_classification_chain():
     - whether it falls under privacy regulations
     - typical database storage format
 
+    Remainder:
+    -bookingid, bookingtype, booking_lead_category, agentid, agencyname, agentrank, agentrlocation, agentsince, agent_tensure_years, agent_seniority_tier mark it has PII
+    -bookingutc, bookingchannel, bookingclass, countrycode, status, booking_lead_days, booking_lead_category, used_promo, used_hold, agentbranch mark it has Non-PII
+
+
     Do NOT invent a new tag — you must pick one that exists in the AVAILABLE TAGS list.
 
     Return ONLY valid JSON:
@@ -455,57 +461,49 @@ def create_column_classification_chain():
     Following are Few Examples for your reference:
 
     Example 1:
-    Column Name: email_address
-    Description: Stores the user's primary email used for login and communication.
-    Available Tags: PII, Finance, GDPR
+    Column Name: Booking_id
+    Description: Unique identifier for each booking record in the system.
+    Available Tags: PII
 
     Output:
     {{
         "tag": "PII",
         "is_sensitive": true,
         "confidence_score": 0.98,
-        "reasoning": "Email directly identifies an individual and is personal contact information."
+        "reasoning": "Booking_id is a unique identifier linked to an individual booking record, which can be used to trace or associate activity with a specific person."
     }}
 
     ---
 
     Example 2:
-    Column Name: transaction_amount
-    Description: Amount charged to the customer in the payment transaction.
-    Available Tags: PII, Finance, GDPR
+    Column Name: bookingutc
+    Description: UTC timestamp of the booking made by the agent.
+    Available Tags: PII
 
     Output:
     {{
-        "tag": "Finance",
+        "tag": "Non-PII",
         "is_sensitive": true,
         "confidence_score": 0.97,
-        "reasoning": "Represents monetary value related to a financial transaction."
+        "reasoning": "Represents a timestamp of when a booking was made and does not directly identify an individual or contain personal information.."
     }}
 
-    ---
-
-    Example 3:
-    Column Name: ip_address
-    Description: IP address captured during user login session.
-    Available Tags: PII, Finance, GDPR
-
-    Output:
-    {{
-        "tag": "GDPR",
-        "is_sensitive": true,
-        "confidence_score": 0.96,
-        "reasoning": "IP address is personal data under GDPR as it can indirectly identify a user."
-    }}
 
     ---
 
     Now classify the provided column using ONLY the available tags listed.
     Rules:
     - Choose exactly ONE tag from the available list
+    - bookingid, bookingtype, booking_lead_category, agentid, agencyname, agentrank, agentrlocation, agentsince, agent_tensure_years, agent_seniority_tier mark it has PII
+    - bookingutc, bookingchannel, bookingclass, countrycode, status, booking_lead_days, booking_lead_category, used_promo, used_hold, agentbranch mark it has Non-PII
     - Prefer semantic meaning over keywords
     - Mark is_sensitive = true if data relates to an identifiable person or finances
     - Infer realistic SQL data type
     - Output JSON only
+
+
+
+    
     """
 
     user_prompt = (
