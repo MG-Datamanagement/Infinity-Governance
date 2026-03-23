@@ -65,51 +65,52 @@ def create_table_classification_chain():
     Following are Few Examples for your reference:
 
     Example 1:
-    Table Name: customers
-    Description: Stores customer full name, email address, phone number, and mailing address.
+    Table Name: all_booking_agent
+    Description: all_booking_agent dataset captures detailed information about booking agents and their associated bookings
     Available Tags: PII
+ 
     Output:
     {{
         "tag": "PII",
-        "confidence_score": 0.78,
-        "reasoning": "Contains direct personal identifiers including name, email, and phone."
+        "confidence_score": 0.65,
+        "reasoning": "Includes details about agents and their associated bookings, which may contain identifiable information related to individuals."
     }}
+ 
 
     ---
 
     Example 2:
-    Table Name: agent_id
-    Description: Unique identifier number for the agent
-    Available Tags: PII, Financial, Operational, Marketing, Human Resources
-
+    Table Name: all_booking
+    Description: all_booking dataset consolidates complete booking records
+    Available Tags: PII
+ 
     Output:
     {{
         "tag": "PII",
-        "confidence_score": 0.96,
-        "reasoning": "Represents monetary transactions and payment records."
+        "confidence_score": 0.65,
+        "reasoning": "Consolidates booking records which may include user-related details that can be linked to individuals, making it potentially identifiable."
     }}
+ 
 
     ---
-
     Example 3:
-    Table Name: file_name
-    Description: Name of the file associated with the agent record.
-    Available Tags: NON-PII
-
+    Table Name: agent
+    Description: agent dataset contains detailed information about agents associated with the operational-data-store with the agent record.
+    Available Tags: PII
+ 
     Output:
     {{
-        "tag": "NON-PII",
+        "tag": "PII",
         "confidence_score": 0.65,
-        "reasoning": "Contains system-generated logs for monitoring and operations."
+        "reasoning": "Contains information about agents, which may include personal or identifiable details associated with individuals in the system."
     }}
-
+ 
     ---
 
     Now classify the provided table using ONLY the available tags listed.
     Remember:
     - choose exactly ONE tag from the available list
-    - If it is ends with id and PII sensitive column mark it as PII
-    - If it is non PII like file name , status, bookingutc, curency code mark it as NON-PII
+    - agent, all_booking, all_booking_agent, booking, bookingcontact, bookingpassenger, passengerjourneysegment are PII
     - base decision on semantics, not keywords alone
     - provide concise reasoning
     - output JSON only
