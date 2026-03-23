@@ -295,11 +295,8 @@ async def _fetch_columns(db, catalog_id: str) -> List[ColumnInfo]:
             col.is_nullable,
             cq.query_expression
         FROM columns col
-        JOIN catalogs cat
-            ON cat.id = col.catalog_id
         LEFT JOIN column_queries cq
-            ON  LOWER(cq.column_name) = LOWER(col.name)
-            AND LOWER(cq.table_name)  = LOWER(cat.table_name)
+            ON LOWER(cq.column_name) = LOWER(col.name)
         WHERE col.catalog_id = $1
         ORDER BY col.ordinal_position NULLS LAST, col.name
         """,

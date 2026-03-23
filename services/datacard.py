@@ -491,7 +491,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
             json.dumps(updated_meta),
             catalog_id,
         )
-        logger.info(f"[datacard] Also saved to catalogs.metadata for catalog {catalog_id}")
+        logger.info(f"[datacard] Also saved to catalogs.metadata for catalog")
     except Exception as exc:
         logger.warning(f"[datacard] Could not persist to catalogs.metadata: {exc}")
 
@@ -658,7 +658,7 @@ async def bulk_generate_datacards(
             entity_id=source_id,
             status_code=404,
         )
-        raise HTTPException(status_code=404, detail=f"Data source '{source_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Data source not found")
 
     # ── Step 2: Fetch all catalogs for this source ───────────────────────────
     catalogs = await db.fetch_all(
@@ -876,7 +876,7 @@ async def bulk_generate_datacards(
             # Individual catalog failure must not abort the whole batch
             failed_count += 1
             logger.error(
-                f"[bulk-datacard] Failed for catalog {catalog_id} ({table_name}): {exc}",
+                f"[bulk-datacard] Failed for catalog  ({table_name}): {exc}",
                 exc_info=True,
             )
             results.append(BulkDataCardResult(
@@ -893,7 +893,7 @@ async def bulk_generate_datacards(
         endpoint=endpoint,
         method="POST",
         action_summary=(
-            f"Bulk datacard generation completed for source '{source['name']}' (id={source_id}): "
+            f"Bulk datacard generation completed for source '{source['name']}': "
             f"{generated_count} generated, {cached_count} cached, {failed_count} failed"
         ),
         entity_type="source",
