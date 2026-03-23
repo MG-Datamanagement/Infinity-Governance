@@ -10,19 +10,13 @@ router = APIRouter(tags=["catalog-properties"])
 # SCHEMAS
 # ============================================================================
 
-class OwnerInfo(BaseModel):
-    id: str
-    name: str
-    email: Optional[str] = None
-
-
 class QueryItem(BaseModel):
     id: str
     catalog_id: str
     title: str
     description: Optional[str] = None
     query_text: str
-    owner: Optional[OwnerInfo] = None
+    owner_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     is_lineage_query: bool = False
@@ -31,7 +25,6 @@ class QueryItem(BaseModel):
 class QueryListResponse(BaseModel):
     catalog_id: str
     user_queries: List[QueryItem] = []
-    lineage_queries: List[QueryItem] = []
 
 
 class CreateQueryRequest(BaseModel):
@@ -51,18 +44,6 @@ class UpdateQueryRequest(BaseModel):
 # ============================================================================
 # HELPERS
 # ============================================================================
-
-async def _get_owner(db, owner_id: Optional[str]) -> Optional[OwnerInfo]:
-    if not owner_id:
-        return None
-    row = await db.fetch_one(
-        "SELECT id, name, email FROM owners WHERE id = $1",
-        owner_id,
-    )
-    if not row:
-        return None
-    return OwnerInfo(id=str(row["id"]), name=row["name"], email=row.get("email"))
-
 
 async def _assert_catalog_exists(db, catalog_id: str):
     row = await db.fetch_one("SELECT id FROM catalogs WHERE id = $1", catalog_id)
@@ -104,9 +85,7 @@ async def list_catalog_queries(catalog_id: str):
             SELECT
                 cq.id, cq.catalog_id, cq.title, cq.description,
                 cq.query_text, cq.created_at, cq.updated_at,
-                o.id    AS owner_id,
-                o.name  AS owner_name,
-                o.email AS owner_email
+                o.name AS owner_name
             FROM   catalog_queries cq
             LEFT JOIN owners o ON o.id = cq.owner_id
             WHERE  cq.catalog_id = $1
@@ -122,11 +101,7 @@ async def list_catalog_queries(catalog_id: str):
                 title=r["title"],
                 description=r.get("description"),
                 query_text=r["query_text"],
-                owner=OwnerInfo(
-                    id=str(r["owner_id"]),
-                    name=r["owner_name"],
-                    email=r.get("owner_email"),
-                ) if r.get("owner_id") else None,
+                owner_name=r.get("owner_name"),
                 created_at=r["created_at"],
                 updated_at=r["updated_at"],
                 is_lineage_query=False,
@@ -134,54 +109,9 @@ async def list_catalog_queries(catalog_id: str):
             for r in rows
         ]
 
-        lineage_rows = await db.fetch_all(
-            """
-            SELECT
-                tl.id, tl.transformation_query, tl.created_at, tl.updated_at,
-                tl.owner_id,
-                o.name  AS owner_name,
-                o.email AS owner_email,
-                CASE
-                    WHEN tl.upstream_catalog_id = $1
-                        THEN 'Lineage → ' || COALESCE(dc.full_name, dc.table_name)
-                    ELSE
-                        'Lineage ← ' || COALESCE(uc.full_name, uc.table_name)
-                END AS auto_title
-            FROM   table_lineage tl
-            LEFT JOIN catalogs uc ON uc.id = tl.upstream_catalog_id
-            LEFT JOIN catalogs dc ON dc.id = tl.downstream_catalog_id
-            LEFT JOIN owners   o  ON o.id  = tl.owner_id
-            WHERE  tl.is_active = TRUE
-              AND  tl.transformation_query IS NOT NULL
-              AND  (tl.upstream_catalog_id = $1 OR tl.downstream_catalog_id = $1)
-            ORDER  BY tl.created_at DESC
-            """,
-            catalog_id,
-        )
-
-        lineage_queries = [
-            QueryItem(
-                id=str(r["id"]),
-                catalog_id=catalog_id,
-                title=r["auto_title"] or "Lineage Query",
-                description="Auto-derived from table lineage. Read-only.",
-                query_text=r["transformation_query"],
-                owner=OwnerInfo(
-                    id=str(r["owner_id"]),
-                    name=r["owner_name"],
-                    email=r.get("owner_email"),
-                ) if r.get("owner_id") else None,
-                created_at=r["created_at"],
-                updated_at=r["updated_at"],
-                is_lineage_query=True,
-            )
-            for r in lineage_rows
-        ]
-
         return QueryListResponse(
             catalog_id=catalog_id,
             user_queries=user_queries,
-            lineage_queries=lineage_queries,
         )
 
     except HTTPException:
@@ -228,7 +158,12 @@ async def create_catalog_query(catalog_id: str, body: CreateQueryRequest):
             body.owner_id,
         )
 
-        owner = await _get_owner(db, str(row["owner_id"])) if row.get("owner_id") else None
+        owner_name = None
+        if row.get("owner_id"):
+            owner_row = await db.fetch_one(
+                "SELECT name FROM owners WHERE id = $1", str(row["owner_id"])
+            )
+            owner_name = owner_row["name"] if owner_row else None
 
         return QueryItem(
             id=str(row["id"]),
@@ -236,7 +171,7 @@ async def create_catalog_query(catalog_id: str, body: CreateQueryRequest):
             title=row["title"],
             description=row.get("description"),
             query_text=row["query_text"],
-            owner=owner,
+            owner_name=owner_name,
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             is_lineage_query=False,
@@ -303,7 +238,12 @@ async def update_catalog_query(catalog_id: str, query_id: str, body: UpdateQuery
             *values,
         )
 
-        owner = await _get_owner(db, str(row["owner_id"])) if row.get("owner_id") else None
+        owner_name = None
+        if row.get("owner_id"):
+            owner_row = await db.fetch_one(
+                "SELECT name FROM owners WHERE id = $1", str(row["owner_id"])
+            )
+            owner_name = owner_row["name"] if owner_row else None
 
         return QueryItem(
             id=str(row["id"]),
@@ -311,7 +251,7 @@ async def update_catalog_query(catalog_id: str, query_id: str, body: UpdateQuery
             title=row["title"],
             description=row.get("description"),
             query_text=row["query_text"],
-            owner=owner,
+            owner_name=owner_name,
             created_at=row["created_at"],
             updated_at=row["updated_at"],
             is_lineage_query=False,
@@ -352,5 +292,3 @@ async def delete_catalog_query(catalog_id: str, query_id: str):
     except Exception as e:
         logger.error("delete_catalog_query error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
-
-

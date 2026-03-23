@@ -94,7 +94,7 @@ llm = AzureChatOpenAI(
 
 # Table names (lowercased) whose upstream list always includes ALL mock nodes
 # — matched against root_data["table_name"] at runtime.
-MOCK_TRIGGER_TABLE_NAMES = {"all_booking", "booking_agent"}
+MOCK_TRIGGER_TABLE_NAMES = {"all_booking", "all_booking_agent"}
 
 # ── Mock node 1: transaction ──────────────────────────────────────────────────
 MOCK_TRANSACTION_ID = "b12f9e3a-7c44-4c91-9f12-3c8c9c2a1111"
@@ -122,7 +122,7 @@ MOCK_TRANSACTION_NODE = VisualNode(
         ColumnInfo(id="col-007", name="transactionstatus", data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
         ColumnInfo(id="col-008", name="paymentmethod",     data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
         ColumnInfo(id="col-009", name="transactiondate",   data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
-        ColumnInfo(id="col-010", name="journaltime",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
+        ColumnInfo(id="col-010", name="journey_time",       data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
         ColumnInfo(id="col-011", name="operationtype",     data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
         ColumnInfo(id="col-012", name="load_type",         data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
         ColumnInfo(id="col-013", name="filename",          data_type="SchemaFieldDataTypeClass({'type': StringTypeClass({})})",  is_primary_key=False, is_foreign_key=False, is_nullable=True,  query_expression=None),
@@ -151,6 +151,7 @@ MOCK_TRANSACTION_NODE = VisualNode(
         "    t.transactiontype,\n"
         "    t.transactionstatus,\n"
         "    t.paymentmethod,\n"
+        "    t.journey_time,\n"
         "    t.transactiondate\n\n"
         "FROM booking b\n"
         "LEFT JOIN transaction t\n"
