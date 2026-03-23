@@ -365,7 +365,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
     )
 
     if cached_row and cached_row["data_card"]:
-        logger.info(f"[datacard] Returning cached datacard for catalog {catalog_id}")
+        logger.info(f"[datacard] Returning cached datacard for catalog ")
 
         await _log(
             db, logger,
@@ -462,7 +462,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         await _log(
             db, logger,
             endpoint=endpoint, method="POST",
-            action_summary=f"Datacard AI generation failed for catalog '{catalog_id}'",
+            action_summary=f"Datacard AI generation failed for catalog ",
             entity_id=catalog_id,
             entity_name=catalog["table_name"],
             status_code=502,
@@ -564,13 +564,13 @@ async def get_catalog_datacard(catalog_id: str):
         await _log(
             db, logger,
             endpoint=endpoint, method="GET",
-            action_summary=f"Datacard GET failed – no datacard found for catalog '{catalog_id}'",
+            action_summary=f"Datacard GET failed – no datacard found for catalog ",
             entity_id=catalog_id, status_code=404,
         )
         raise HTTPException(
             status_code=404,
             detail=(
-                f"No data card found for catalog '{catalog_id}'. "
+                f"No data card found for catalog . "
                 "Call POST /api/v1/catalogs/{catalog_id}/datacard to generate one."
             ),
         )
@@ -653,7 +653,7 @@ async def bulk_generate_datacards(
         await _log(
             db, logger,
             endpoint=endpoint, method="POST",
-            action_summary=f"Bulk datacard failed – source '{source_id}' not found",
+            action_summary=f"Bulk datacard failed – source  not found",
             entity_type="source",
             entity_id=source_id,
             status_code=404,
@@ -691,7 +691,7 @@ async def bulk_generate_datacards(
     if not catalogs:
         raise HTTPException(
             status_code=404,
-            detail=f"No catalogs found for source '{source_id}'",
+            detail=f"No catalogs found for source ",
         )
 
     # ── Step 3: Process each catalog ────────────────────────────────────────
@@ -860,7 +860,7 @@ async def bulk_generate_datacards(
                     catalog_id,
                 )
             except Exception as exc:
-                logger.warning(f"[bulk-datacard] Could not update catalogs.metadata for {catalog_id}: {exc}")
+                logger.warning(f"[bulk-datacard] Could not update catalogs.metadata : {exc}")
 
             generated_count += 1
             results.append(BulkDataCardResult(
