@@ -154,46 +154,6 @@ Replace all placeholder '...' values with real data from the dataset information
     return prompt
 
 
-# ============================================================================
-# HELPER – write a row to api_logs (mirrors app.log_api_action signature)
-# ============================================================================
-
-async def _log(
-    db,
-    logger,
-    *,
-    endpoint: str,
-    method: str,
-    action_summary: str,
-    entity_type: str = "catalog",
-    entity_id: str = None,
-    entity_name: str = None,
-    status_code: int = 200,
-    request_body: dict = None,
-    response_summary: str = None,
-):
-    """Non-blocking api_logs insert; errors are swallowed so they never break the caller."""
-    try:
-        await db.execute(
-            """
-            INSERT INTO api_logs
-                (endpoint, method, action_summary, entity_type, entity_id, entity_name,
-                 status_code, request_body, response_summary)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-            """,
-            endpoint,
-            method,
-            action_summary,
-            entity_type,
-            entity_id,
-            entity_name,
-            status_code,
-            json.dumps(request_body) if request_body else None,
-            response_summary,
-        )
-    except Exception as exc:
-        logger.warning(f"[datacard] Failed to write api_log: {exc}")
-
 
 # ============================================================================
 # HELPER – upsert datacard into dedicated `datacards` table
@@ -259,14 +219,13 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
        (backward-compatible cache).
     3. A record is written to **api_logs** for audit purposes.
     """
-    from app import db, logger, get_azure_client, AZURE_CONFIG
+    from app import db, logger, log_api_action, get_azure_client, AZURE_CONFIG
 
     endpoint = f"/api/v1/catalogs/{catalog_id}/datacard"
 
     ai_client = get_azure_client()
     if not ai_client:
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="POST",
             action_summary="Datacard generation failed – Azure OpenAI not configured",
             entity_id=catalog_id, status_code=503,
@@ -305,8 +264,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
     )
 
     if not catalog:
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="POST",
             action_summary=f"Datacard generation failed – catalog not found",
             entity_id=catalog_id, status_code=404,
@@ -367,8 +325,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
     if cached_row and cached_row["data_card"]:
         logger.info(f"[datacard] Returning cached datacard for catalog ")
 
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="POST",
             action_summary=f"Datacard returned from cache for catalog",
             entity_id=catalog_id,
@@ -459,8 +416,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         )
     except Exception as exc:
         logger.error(f"[datacard] Azure OpenAI call failed for catalog {catalog_id}: {exc}", exc_info=True)
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="POST",
             action_summary=f"Datacard AI generation failed for catalog ",
             entity_id=catalog_id,
@@ -496,8 +452,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         logger.warning(f"[datacard] Could not persist to catalogs.metadata: {exc}")
 
     # ── Step 9: Log to api_logs ──────────────────────────────────────────────
-    await _log(
-        db, logger,
+    await log_api_action(
         endpoint=endpoint,
         method="POST",
         action_summary=f"Datacard generated for catalog '{catalog['table_name']}'",
@@ -541,7 +496,7 @@ async def get_catalog_datacard(catalog_id: str):
     directly from the **datacards** table.  Returns 404 if no card has been
     generated yet (call POST first).
     """
-    from app import db, logger
+    from app import db, logger, log_api_action
 
     endpoint = f"/api/v1/catalogs/{catalog_id}/datacard"
 
@@ -561,8 +516,7 @@ async def get_catalog_datacard(catalog_id: str):
     )
 
     if not row:
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="GET",
             action_summary=f"Datacard GET failed – no datacard found for catalog ",
             entity_id=catalog_id, status_code=404,
@@ -576,8 +530,7 @@ async def get_catalog_datacard(catalog_id: str):
         )
 
     # ── Log successful retrieval ─────────────────────────────────────────────
-    await _log(
-        db, logger,
+    await log_api_action(
         endpoint=endpoint, method="GET",
         action_summary=f"Datacard retrieved for catalog '{row['table_name']}'",
         entity_type="catalog",
@@ -624,15 +577,14 @@ async def bulk_generate_datacards(
     Returns a summary with per-catalog results including status
     ("generated" | "cached" | "failed") and any error messages for failed ones.
     """
-    from app import db, logger, get_azure_client, AZURE_CONFIG
+    from app import db, logger, log_api_action, get_azure_client, AZURE_CONFIG
 
     endpoint = f"/api/v1/sources/{source_id}/datacards/bulk-generate"
 
     # ── Guard: Azure OpenAI must be configured ───────────────────────────────
     ai_client = get_azure_client()
     if not ai_client:
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="POST",
             action_summary="Bulk datacard generation failed – Azure OpenAI not configured",
             entity_type="source",
@@ -650,8 +602,7 @@ async def bulk_generate_datacards(
         source_id,
     )
     if not source:
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=endpoint, method="POST",
             action_summary=f"Bulk datacard failed – source  not found",
             entity_type="source",
@@ -871,6 +822,16 @@ async def bulk_generate_datacards(
                 generated_at=generated_at,
             ))
             logger.info(f"[bulk-datacard] Generated datacard for catalog ({table_name})")
+            await log_api_action(
+                endpoint=endpoint,
+                method="POST",
+                action_summary=f"Datacard generated for catalog '{table_name}' via bulk process",
+                entity_type="catalog",
+                entity_id=catalog_id,
+                entity_name=table_name,
+                status_code=200,
+                response_summary=f"status=generated | tokens={max_tokens}"
+            )
 
         except Exception as exc:
             # Individual catalog failure must not abort the whole batch
@@ -888,8 +849,7 @@ async def bulk_generate_datacards(
             ))
 
     # ── Step 4: Audit log ────────────────────────────────────────────────────
-    await _log(
-        db, logger,
+    await log_api_action(
         endpoint=endpoint,
         method="POST",
         action_summary=(
@@ -934,7 +894,7 @@ async def bulk_generate_datacards(
     ),
 )
 async def get_catalog_properties(catalog_id: str):
-    from app import db, logger
+    from app import db, logger, log_api_action
     try:
         catalog = await db.fetch_one(
             """
@@ -1018,8 +978,7 @@ async def get_catalog_properties(catalog_id: str):
         def _val(v):
             return v if v is not None and str(v).strip() != "" else None
 
-        await _log(
-            db, logger,
+        await log_api_action(
             endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
             method="GET",
             action_summary=f"Properties retrieved for catalog '{catalog_id}'",
@@ -1072,7 +1031,7 @@ async def get_catalog_properties(catalog_id: str):
     ),
 )
 async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequest):
-    from app import db, logger
+    from app import db, logger, log_api_action
     try:
         # ── Validate catalog exists ───────────────────────────────────────────
         cat = await db.fetch_one("SELECT id FROM catalogs WHERE id = $1", catalog_id)
@@ -1109,7 +1068,7 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
             (body.value_type or "string").strip(),
         )
 
-        await _log(db, logger,
+        await log_api_action(
                    endpoint=f"/api/v1/catalogs/{catalog_id}/properties",
                    method="POST",
                    action_summary=f"Custom property '{body.key}' added to catalog '{catalog_id}'",

@@ -97,6 +97,14 @@ add_or_replace_field "tag_color"       "string"        true  false
 add_or_replace_field "source_type"     "string"        true  false   # postgres, mysql …
 add_or_replace_field "source_status"   "string"        true  false   # running | failed | success
 
+# ── GLOSSARY_TERM & DOMAIN specific (these were missing) ─────────────────────
+add_or_replace_field "group_name"      "string"        true  false
+add_or_replace_field "group_id"        "string"        true  false
+
+# Optional but recommended (used in your Pydantic models)
+add_or_replace_field "domain_names"    "string"        true  true
+add_or_replace_field "domain_color"    "string"        true  false
+
 # ── OWNER-specific ─────────────────────────────────────────────────────────────
 add_or_replace_field "owner_role"      "string"        true  false
 add_or_replace_field "owner_email"     "string"        true  false

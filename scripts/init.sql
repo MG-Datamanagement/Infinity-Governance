@@ -229,21 +229,7 @@ CREATE INDEX IF NOT EXISTS idx_columns_primary_key  ON columns(is_primary_key)
 CREATE INDEX IF NOT EXISTS idx_columns_foreign_key  ON columns(is_foreign_key)
     WHERE is_foreign_key = TRUE;                                                    -- added: partial index for FKs
 
--- -- ============================================================================
--- -- RELATIONSHIPS (legacy lineage)
--- -- ============================================================================
 
--- CREATE TABLE IF NOT EXISTS relationships (
---     id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
---     source_catalog_id  UUID REFERENCES catalogs(id) ON DELETE CASCADE,
---     target_catalog_id  UUID REFERENCES catalogs(id) ON DELETE CASCADE,
---     relationship_type  VARCHAR(50) DEFAULT 'dependency',
---     metadata           JSONB,
---     created_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW()
--- );
-
--- CREATE INDEX IF NOT EXISTS idx_relationships_source ON relationships(source_catalog_id);  -- added
--- CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_catalog_id);  -- added
 
 -- ============================================================================
 -- CUSTOM PROPERTIES
@@ -330,6 +316,7 @@ CREATE TABLE IF NOT EXISTS api_logs (
 CREATE INDEX IF NOT EXISTS idx_api_logs_endpoint    ON api_logs(endpoint);
 CREATE INDEX IF NOT EXISTS idx_api_logs_created_at  ON api_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_api_logs_entity_type ON api_logs(entity_type);
+CREATE INDEX IF NOT EXISTS idx_api_logs_entity      ON api_logs(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_api_logs_owner       ON api_logs(owner_id);          -- added: filter logs by owner
 
 -- ============================================================================
@@ -891,7 +878,7 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_psa
 
 CREATE TABLE IF NOT EXISTS datacards (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    catalog_id   TEXT NOT NULL,
+    catalog_id   UUID NOT NULL REFERENCES catalogs(id) ON DELETE CASCADE,
     table_name   TEXT,
     full_name    TEXT,
     data_card    TEXT NOT NULL,
@@ -1156,4 +1143,8 @@ CREATE TABLE IF NOT EXISTS public.lob_catalog_map (
         REFERENCES public.catalogs(id)   
         ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_lob_parent ON public.line_of_business(parent_lob_id);
+CREATE INDEX IF NOT EXISTS idx_lob_owner ON public.line_of_business(owner);
+CREATE INDEX IF NOT EXISTS idx_lob_catalog_map_catalog_id ON public.lob_catalog_map(catalog_id);
  

@@ -621,7 +621,7 @@ async def get_visual_lineage(
     depth:     int = Query(2, ge=1, le=6, description="Traversal depth (1-6), default 2"),
     direction: str = Query("both", enum=["upstream", "downstream", "both"]),
 ):
-    from app import db, logger
+    from app import db, logger, log_api_action
     try:
         # ── validate root exists ──────────────────────────────────────────────
         root_data = await _fetch_catalog_node(db, catalog_id)
@@ -689,6 +689,14 @@ async def get_visual_lineage(
                 db, catalog_id, "downstream", depth, 1, visited_down,
                 root_table_name=root_table_name,
             )
+
+        await log_api_action(
+            endpoint=f"/api/v1/lineage-visual/{catalog_id}",
+            method="GET",
+            action_summary="Viewed visual lineage",
+            entity_type="catalog",
+            entity_id=catalog_id
+        )
 
         return VisualLineageResponse(
             root=root_node,

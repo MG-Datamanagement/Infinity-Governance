@@ -837,16 +837,25 @@ async def get_source(source_id: str):
 @router.delete("/api/v1/delete-source/{source_id}")
 async def delete_source(source_id: str):
     """Delete a data source"""
-    from app import db, logger
+    from app import db, logger, log_api_action
 
     try:
         # Check if source exists
-        source = await db.fetch_one("SELECT id FROM data_sources WHERE id = $1", source_id)
+        source = await db.fetch_one("SELECT id, name FROM data_sources WHERE id = $1", source_id)
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
         
         # Delete source (cascades to catalogs, columns, etc.)
         await db.execute("DELETE FROM data_sources WHERE id = $1", source_id)
+        
+        await log_api_action(
+            endpoint=f"/api/v1/delete-source/{source_id}",
+            method="DELETE",
+            action_summary=f"Deleted data source '{source['name']}' and its associated catalogs",
+            entity_type="data_source",
+            entity_id=source_id,
+            entity_name=source['name']
+        )
         
         return {"message": "Source deleted successfully", "source_id": source_id}
     

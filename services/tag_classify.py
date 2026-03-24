@@ -275,7 +275,7 @@ async def classify_table(data: TableInfo):
     Ad-hoc single-table classification.
     Uses whatever tags currently exist in the database as the allowed set.
     """
-    from app import db, logger  # local import to match project pattern
+    from app import db, logger, log_api_action  # local import to match project pattern
 
     try:
         tags = await _fetch_available_tags(db)
@@ -320,7 +320,7 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
        tag_catalog_assignments.
     6. Return a preview/summary of every classification result.
     """
-    from app import db, logger
+    from app import db, logger, log_api_action
 
     # -- 1. Validate source ------------------------------------------------
     source = await db.fetch_one(
@@ -406,6 +406,15 @@ async def classify_source_catalogs(request: BulkClassifyRequest):
             ))
 
     # -- 6. Return summary -------------------------------------------------
+    await log_api_action(
+        endpoint="/api/v1/tables/classify-table/source",
+        method="POST",
+        action_summary=f"Ran bulk table classification for source '{source['name']}'",
+        entity_type="data_source",
+        entity_id=request.source_id,
+        entity_name=source['name']
+    )
+
     return BulkClassifyResponse(
         source_id=request.source_id,
         total_catalogs=len(catalogs),
@@ -730,7 +739,7 @@ async def classify_column(data: ColumnInfo):
     Fetches the current tag list from the database and asks the LLM to
     pick the best match.
     """
-    from app import db, logger  # local import — matches project pattern
+    from app import db, logger, log_api_action  # local import — matches project pattern
 
     try:
         tags = await _fetch_available_tags(db)
@@ -812,7 +821,7 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
 
     Set save_to_db=false (default) to preview suggestions before committing.
     """
-    from app import db, logger
+    from app import db, logger, log_api_action
 
     # -- 1. Validate source ------------------------------------------------
     source = await db.fetch_one(
@@ -926,6 +935,15 @@ async def classify_source_columns(request: BulkColumnClassifyRequest):
             ))
 
     # -- 6. Return summary -------------------------------------------------
+    await log_api_action(
+        endpoint="/api/v1/columns/classify-column/source",
+        method="POST",
+        action_summary=f"Ran bulk column classification for source '{source['name']}'",
+        entity_type="data_source",
+        entity_id=request.source_id,
+        entity_name=source['name']
+    )
+
     return BulkColumnClassifyResponse(
         source_id=request.source_id,
         catalog_id=request.catalog_id,
@@ -978,7 +996,7 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
        tag_column_assignments (confidence_score is also stored).
     6. Return a full preview/summary — including which rows were saved.
     """
-    from app import db, logger
+    from app import db, logger, log_api_action
 
     # -- 1. Validate catalog -----------------------------------------------
     catalog = await db.fetch_one(
@@ -1090,6 +1108,15 @@ async def classify_catalog_columns(request: BulkColumnClassifyByCatalogRequest):
             ))
 
     # -- 6. Return summary -------------------------------------------------
+    await log_api_action(
+        endpoint=f"/api/v1/columns/classify-column/catalog",
+        method="POST",
+        action_summary=f"Ran column classification for catalog '{catalog['table_name']}'",
+        entity_type="catalog",
+        entity_id=request.catalog_id,
+        entity_name=catalog['table_name']
+    )
+
     return BulkColumnClassifyResponse(
         source_id=source_id,
         total_columns=len(columns),
@@ -1212,7 +1239,7 @@ async def full_scan_source(request: FullScanRequest):
        - per-tag breakdown (tables_tagged, columns_tagged, columns_saved)
        - per-table detail including is_tagged flag and column tag breakdown
     """
-    from app import db, logger
+    from app import db, logger, log_api_action
 
     # -- 1. Validate source ------------------------------------------------
     source = await db.fetch_one(
@@ -1396,6 +1423,15 @@ async def full_scan_source(request: FullScanRequest):
     )
 
     # -- 7. Return full report --------------------------------------------
+    await log_api_action(
+        endpoint="/api/v1/scan/source",
+        method="POST",
+        action_summary=f"Ran full compliance scan for source '{source_name}'",
+        entity_type="data_source",
+        entity_id=request.source_id,
+        entity_name=source_name
+    )
+
     return FullScanResponse(
         source_id=request.source_id,
         source_name=source_name,

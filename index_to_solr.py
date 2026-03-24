@@ -57,7 +57,7 @@ def build_catalog_docs(cur) -> list[dict]:
             o.name   AS owner_name,
             -- aggregated tags
             ARRAY_REMOVE(ARRAY_AGG(DISTINCT t.id::text),   NULL) AS tag_ids,
-            ARRAY_REMOVE(ARRAY_AGG(DISTINCT t.name),       NULL) AS tag_names,
+            ARRAY_REMOVE(ARRAY_AGG(DISTINCT t.name),       NULL) AS tag_names
             
         FROM catalogs c
         LEFT JOIN data_sources          ds  ON ds.id  = c.source_id

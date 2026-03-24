@@ -205,7 +205,6 @@ app.include_router(owner_router)
 from services.tag import router as tag_router
 app.include_router(tag_router)
 
-
 from services.lineage import router as lineage_router
 app.include_router(lineage_router)
 
@@ -240,6 +239,9 @@ app.include_router(line_of_business_router)
 
 from services.preview import router as preview_router
 app.include_router(preview_router)
+
+from services.audit import router as audit_router
+app.include_router(audit_router) 
 
 # ============================================================================
 # MAIN ENTRY POINT

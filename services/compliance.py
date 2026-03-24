@@ -646,7 +646,34 @@ class LLMEvaluator:
             temperature=0.1,
         )
         logger.info("LLMEvaluator: AzureChatOpenAI ready.")
+    def generate_issue_explanations(self, issues: list) -> list:
+        prompt = f"""
+    You are a GDPR compliance auditor.
 
+    For each issue below, explain:
+    1. Why this is a GDPR violation
+    2. What is the risk
+    3. Recommended remediation
+
+    Return JSON array like:
+    [
+    {{
+        "rule_id": "GDPR-001",
+        "reason": "...",
+        "recommendation": "..."
+    }}
+    ]
+
+    Issues:
+    {json.dumps(issues, indent=2)}
+    """
+        try:
+            response = self.llm.invoke(prompt).content.strip()
+            response = response.replace("```json", "").replace("```", "").strip()
+            return json.loads(response)
+        except Exception as e:
+            logger.error("LLM explanation failed: %s", e)
+            return []
     def evaluate_rule(self, rule: dict, query_results: list) -> dict:
         """Evaluate rule violations - DETECTION ONLY, NO AUTO-FIX."""
         if not query_results:
@@ -715,28 +742,25 @@ def make_evaluate_frameworks_node(db: DatabaseManager, llm: LLMEvaluator, rules:
                 rule_id = rule.get("rule_id", "UNKNOWN")
                 logger.info("    Evaluating %s ...", rule_id)
                 query_results = db.execute_query(rule["sql"], rule.get("sql_params") or {})
-                eval_result   = llm.evaluate_rule(rule, query_results)
 
-                if eval_result["passed"]:
-                    passed_count += 1
-                    logger.info("      PASSED")
-                else:
-                    logger.info("      FAILED  severity=%s", eval_result["severity"])
+                if query_results:  # violation found
                     fw_issues.append({
                         "issue":         rule["rule"].replace("PII/sensitive", "PII"),
                         "rule_id":       rule_id,
                         "framework":     framework,
-                        "severity":      eval_result["severity"].upper(),
-                        "reason":        eval_result["reason"],
+                        "severity":      rule["severity"].upper(),  # from config
+                        "reason":        "",  # will be filled by LLM later
                         "dataset":       extract_dataset_from_results(query_results),
                         "assignee":      extract_owner_from_results(query_results),
                         "assigned_date": calculate_assigned_date(),
-                        "due_date":      calculate_due_date(eval_result["severity"]),
+                        "due_date":      calculate_due_date(rule["severity"]),
                         "affected_rows": len(query_results),
                         "action_url":    f"/issues/{rule_id}",
                         "query_results": query_results,
                         "status":        "OPEN - AWAITING MANUAL REMEDIATION",
                     })
+                else:
+                    passed_count += 1
 
             score = round((passed_count / len(fw_rules)) * 100, 2) if fw_rules else 0.0
             logger.info(
@@ -766,7 +790,20 @@ def aggregate_scores_node(state: ComplianceState) -> ComplianceState:
 def make_generate_insights_node(llm: LLMEvaluator):
     def generate_insights(state: ComplianceState) -> ComplianceState:
         logger.info("Node: generate_insights")
+
+        # Step 1: Generate explanations for all issues (1 LLM call)
+        explanations = llm.generate_issue_explanations(state["issues"])
+
+        # Step 2: Attach explanations to issues
+        exp_map = {e["rule_id"]: e for e in explanations}
+        for issue in state["issues"]:
+            if issue["rule_id"] in exp_map:
+                issue["reason"] = exp_map[issue["rule_id"]]["reason"]
+                issue["recommendation"] = exp_map[issue["rule_id"]]["recommendation"]
+
+        # Step 3: Generate executive summary (1 LLM call)
         state["insights"] = llm.generate_insights(state["overall_score"], state["issues"])
+
         return state
     return generate_insights
 

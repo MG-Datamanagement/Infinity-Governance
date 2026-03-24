@@ -21,3 +21,8 @@ tmp/
 # Ignore specific JSON files
 error.json
 without_trans.json
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class

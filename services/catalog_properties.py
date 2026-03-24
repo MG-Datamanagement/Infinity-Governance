@@ -132,7 +132,7 @@ async def list_catalog_queries(catalog_id: str):
     summary="Create a query for a catalog",
 )
 async def create_catalog_query(catalog_id: str, body: CreateQueryRequest):
-    from app import db, logger
+    from app import db, logger, log_api_action
     try:
         await _assert_catalog_exists(db, catalog_id)
 
@@ -165,7 +165,7 @@ async def create_catalog_query(catalog_id: str, body: CreateQueryRequest):
             )
             owner_name = owner_row["name"] if owner_row else None
 
-        return QueryItem(
+        item = QueryItem(
             id=str(row["id"]),
             catalog_id=str(row["catalog_id"]),
             title=row["title"],
@@ -176,6 +176,17 @@ async def create_catalog_query(catalog_id: str, body: CreateQueryRequest):
             updated_at=row["updated_at"],
             is_lineage_query=False,
         )
+
+        await log_api_action(
+            endpoint=f"/api/v1/catalogs/{catalog_id}/queries",
+            method="POST",
+            action_summary=f"Created catalog query: '{body.title}'",
+            entity_type="catalog",
+            entity_id=catalog_id,
+            owner_id=body.owner_id
+        )
+
+        return item
 
     except HTTPException:
         raise
@@ -194,7 +205,7 @@ async def create_catalog_query(catalog_id: str, body: CreateQueryRequest):
     summary="Update a catalog query",
 )
 async def update_catalog_query(catalog_id: str, query_id: str, body: UpdateQueryRequest):
-    from app import db, logger
+    from app import db, logger, log_api_action
     try:
         await _assert_catalog_exists(db, catalog_id)
         existing = await _assert_query_exists_and_not_lineage(db, query_id)
@@ -245,7 +256,7 @@ async def update_catalog_query(catalog_id: str, query_id: str, body: UpdateQuery
             )
             owner_name = owner_row["name"] if owner_row else None
 
-        return QueryItem(
+        item = QueryItem(
             id=str(row["id"]),
             catalog_id=str(row["catalog_id"]),
             title=row["title"],
@@ -256,6 +267,17 @@ async def update_catalog_query(catalog_id: str, query_id: str, body: UpdateQuery
             updated_at=row["updated_at"],
             is_lineage_query=False,
         )
+
+        await log_api_action(
+            endpoint=f"/api/v1/catalogs/{catalog_id}/queries/{query_id}",
+            method="PATCH",
+            action_summary="Updated catalog query properties",
+            entity_type="catalog",
+            entity_id=catalog_id,
+            owner_id=body.owner_id if body.owner_id else existing.get("owner_id")
+        )
+
+        return item
 
     except HTTPException:
         raise
@@ -274,7 +296,7 @@ async def update_catalog_query(catalog_id: str, query_id: str, body: UpdateQuery
     summary="Delete a catalog query",
 )
 async def delete_catalog_query(catalog_id: str, query_id: str):
-    from app import db, logger
+    from app import db, logger, log_api_action
     try:
         await _assert_catalog_exists(db, catalog_id)
         existing = await _assert_query_exists_and_not_lineage(db, query_id)
@@ -286,6 +308,14 @@ async def delete_catalog_query(catalog_id: str, query_id: str):
             )
 
         await db.execute("DELETE FROM catalog_queries WHERE id = $1", query_id)
+
+        await log_api_action(
+            endpoint=f"/api/v1/catalogs/{catalog_id}/queries/{query_id}",
+            method="DELETE",
+            action_summary="Deleted catalog query",
+            entity_type="catalog",
+            entity_id=catalog_id
+        )
 
     except HTTPException:
         raise
