@@ -1853,8 +1853,9 @@ Top-level error message: {job['error_message'] or 'none'}
         "You are a data pipeline assistant. Based on the ingestion run metadata provided, "
         "write a single concise sentence (max 30 words) summarising the pipeline result. "
         "Format: start with an emoji (⚡ for success, ⚠️ for warnings, ❌ for failure), "
+        "Convert row counts into 'k' format (e.g., 50 → 50k, 67 → 67k, 1200 → 1.2M if needed)"
         "then state: datasets ingested successfully  "
-        "Example: '⚡ All 5 datasets ingested successfully, classified and compliance-checked.' "
+        "Example: '⚡ All 5 datasets ingested successfully, classified and compliance-checked with 678k rows' "
         "Be factual. No markdown. One sentence only."
     )
 
