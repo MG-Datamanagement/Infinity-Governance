@@ -1177,3 +1177,25 @@ CREATE INDEX IF NOT EXISTS idx_lob_parent ON public.line_of_business(parent_lob_
 CREATE INDEX IF NOT EXISTS idx_lob_owner ON public.line_of_business(owner);
 CREATE INDEX IF NOT EXISTS idx_lob_catalog_map_catalog_id ON public.lob_catalog_map(catalog_id);
  
+
+
+CREATE TABLE IF NOT EXISTS secrets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    name VARCHAR(150) UNIQUE NOT NULL,
+    type VARCHAR(50) NOT NULL,
+
+    encrypted_value TEXT NOT NULL,
+
+    description TEXT,
+
+    is_active BOOLEAN DEFAULT TRUE,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_rotated TIMESTAMP,
+
+    created_by VARCHAR(100)
+);
+ 
+ 
