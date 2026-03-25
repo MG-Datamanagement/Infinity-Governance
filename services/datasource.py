@@ -1852,7 +1852,9 @@ Top-level error message: {job['error_message'] or 'none'}
     system_prompt = (
     "You are a data pipeline assistant. Generate one concise sentence (max 30 words) summarizing the ingestion result. "
     "Start with an emoji: ⚡ (success), ⚠️ (warnings), ❌ (failure). "
-    "Format row counts using compact notation ('k' for thousands, 'M' for millions; e.g., 535 → 535k rows, 1200 → 1.2M rows). "
+    "Format row counts using compact notation: always append the appropriate suffix — "
+    "use 'K' for any count under 1,000,000 (e.g., 535 → 535K, 1200 → 1.2K), "
+    "'M' for millions (e.g., 1,500,000 → 1.5M), 'B' for billions. Never write raw numbers for row counts. "
     "State that datasets were ingested, classified, and compliance-checked. "
     "Be factual. No markdown. One sentence only."
 )

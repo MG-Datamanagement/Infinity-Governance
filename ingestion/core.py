@@ -544,6 +544,39 @@ class PostgresSink:
                     f"{upstream_catalog_id} → {downstream_catalog_id}"
                 )
 
+                # ── Upsert into centric_lineage ────────────────────────────────
+                # 1. From the downstream table's perspective: it has an upstream
+                cur.execute("""
+                    INSERT INTO centric_lineage (
+                        base_catalog_id,
+                        upstream_catalog_id,
+                        downstream_catalog_id,
+                        upstream_query_logic,
+                        downstream_query_logic
+                    )
+                    VALUES (%s, %s, NULL, %s, NULL)
+                    ON CONFLICT (base_catalog_id, upstream_catalog_id) WHERE upstream_catalog_id IS NOT NULL
+                    DO UPDATE SET
+                        upstream_query_logic = EXCLUDED.upstream_query_logic,
+                        updated_at = NOW()
+                """, (str(downstream_catalog_id), str(upstream_catalog_id), query_text))
+
+                # 2. From the upstream table's perspective: it has a downstream
+                cur.execute("""
+                    INSERT INTO centric_lineage (
+                        base_catalog_id,
+                        upstream_catalog_id,
+                        downstream_catalog_id,
+                        upstream_query_logic,
+                        downstream_query_logic
+                    )
+                    VALUES (%s, NULL, %s, NULL, %s)
+                    ON CONFLICT (base_catalog_id, downstream_catalog_id) WHERE downstream_catalog_id IS NOT NULL
+                    DO UPDATE SET
+                        downstream_query_logic = EXCLUDED.downstream_query_logic,
+                        updated_at = NOW()
+                """, (str(upstream_catalog_id), str(downstream_catalog_id), query_text))
+
             # ── Column-level lineage (fineGrainedLineages) ──────────────────
             fine_grained = getattr(lineage, 'fineGrainedLineages', None)
             if not fine_grained:
@@ -1387,6 +1420,40 @@ class IngestionManager:
                     qmeta["engine_version"],
                     qmeta["s3_output_location"],
                 ))
+
+                query_text_truncated = qmeta["query_text"][:2000]
+
+                # 1. From downstream table's perspective: it has an upstream
+                cur.execute("""
+                    INSERT INTO centric_lineage (
+                        base_catalog_id,
+                        upstream_catalog_id,
+                        downstream_catalog_id,
+                        upstream_query_logic,
+                        downstream_query_logic
+                    )
+                    VALUES (%s, %s, NULL, %s, NULL)
+                    ON CONFLICT (base_catalog_id, upstream_catalog_id) WHERE upstream_catalog_id IS NOT NULL
+                    DO UPDATE SET
+                        upstream_query_logic = EXCLUDED.upstream_query_logic,
+                        updated_at = NOW()
+                """, (str(dn_row[0]), str(up_row[0]), query_text_truncated))
+
+                # 2. From upstream table's perspective: it has a downstream
+                cur.execute("""
+                    INSERT INTO centric_lineage (
+                        base_catalog_id,
+                        upstream_catalog_id,
+                        downstream_catalog_id,
+                        upstream_query_logic,
+                        downstream_query_logic
+                    )
+                    VALUES (%s, NULL, %s, NULL, %s)
+                    ON CONFLICT (base_catalog_id, downstream_catalog_id) WHERE downstream_catalog_id IS NOT NULL
+                    DO UPDATE SET
+                        downstream_query_logic = EXCLUDED.downstream_query_logic,
+                        updated_at = NOW()
+                """, (str(up_row[0]), str(dn_row[0]), query_text_truncated))
 
                 logger.info(
                     f"[Lineage][Athena] ✓ Stored: {upstream_name} → {downstream_name} "

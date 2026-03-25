@@ -664,6 +664,35 @@ CREATE TRIGGER update_table_lineage_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
+-- CENTRIC LINEAGE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS centric_lineage (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    base_catalog_id UUID NOT NULL REFERENCES catalogs(id) ON DELETE CASCADE,
+    upstream_catalog_id UUID REFERENCES catalogs(id) ON DELETE CASCADE,
+    downstream_catalog_id UUID REFERENCES catalogs(id) ON DELETE CASCADE,
+    upstream_query_logic TEXT,
+    downstream_query_logic TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CHECK (
+        (upstream_catalog_id IS NOT NULL AND downstream_catalog_id IS NULL) OR
+        (upstream_catalog_id IS NULL AND downstream_catalog_id IS NOT NULL)
+    )
+);
+
+CREATE UNIQUE INDEX idx_centric_lineage_up ON centric_lineage(base_catalog_id, upstream_catalog_id) WHERE upstream_catalog_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_centric_lineage_down ON centric_lineage(base_catalog_id, downstream_catalog_id) WHERE downstream_catalog_id IS NOT NULL;
+
+CREATE INDEX idx_centric_lineage_base ON centric_lineage(base_catalog_id);
+
+DROP TRIGGER IF EXISTS update_centric_lineage_updated_at ON centric_lineage;
+CREATE TRIGGER update_centric_lineage_updated_at
+    BEFORE UPDATE ON centric_lineage
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
 -- LINEAGE COLUMN MAPPINGS
 -- ============================================================================
 

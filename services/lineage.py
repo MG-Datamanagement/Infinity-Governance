@@ -79,6 +79,29 @@ class VisualLineageResponse(BaseModel):
     downstreams: List[VisualNode] = []
 
 
+class CentricLineageNode(BaseModel):
+    id: str
+    table_name: str
+    full_name: Optional[str] = None
+    schema_name: Optional[str] = None
+    database_name: Optional[str] = None
+    type: Optional[str] = "table"
+    status: Optional[str] = "healthy"
+    source: Optional[SourceInfo] = None
+    tags: List[TagInfo] = []
+    lineage_id: Optional[str] = None
+    transformation_query: Optional[str] = None
+    query_execution: Optional[QueryExecutionInfo] = None
+    depth: int = 1
+    stats: Optional[str] = None
+    upstream_nodes: List['CentricLineageNode'] = []
+    downstream_nodes: List['CentricLineageNode'] = []
+
+
+class CentricLineageResponse(BaseModel):
+    base_node: CentricLineageNode
+
+
 # ─── LLM ─────────────────────────────────────────────────────────────────────
 
 llm = AzureChatOpenAI(
@@ -600,6 +623,100 @@ async def _traverse(
     return results
 
 
+async def _build_centric_hierarchy(
+    db,
+    catalog_id: str,
+    traverse_dir: str, # "upstream", "downstream", or "both"
+    max_depth: int,
+    current_depth: int,
+    visited: set,
+    lineage_id: Optional[str] = None,
+    transformation_query: Optional[str] = None,
+) -> Optional[CentricLineageNode]:
+    """Recursively builds the hierarchy from the centric_lineage table."""
+    if current_depth > max_depth:
+        return None
+        
+    if catalog_id in visited:
+        return None
+    visited.add(catalog_id)
+
+    data = await _fetch_catalog_node(db, catalog_id)
+    if not data:
+        return None
+
+    tags = await _fetch_tags(db, catalog_id)
+    row_count = data.get("row_count")
+    row_count_str = f"{row_count:,}" if row_count is not None else "N/A"
+    
+    col_row = await db.fetch_one("SELECT COUNT(*) FROM columns WHERE catalog_id = $1", catalog_id)
+    column_count = col_row[0] if col_row else 0
+    status_text = f"Columns: {column_count} | Rows: {row_count_str}"
+
+    source = None
+    if data.get("source_id"):
+        source = SourceInfo(
+            id=str(data["source_id"]),
+            name=data["source_name"] or "",
+            source_type=data["source_type"] or "",
+        )
+        
+    node = CentricLineageNode(
+        id=str(data["id"]),
+        table_name=data["table_name"],
+        full_name=data.get("full_name"),
+        schema_name=data.get("schema_name"),
+        database_name=data.get("database_name"),
+        type=data.get("type", "table"),
+        status=data.get("status", "healthy"),
+        source=source,
+        tags=tags,
+        lineage_id=lineage_id,
+        transformation_query=transformation_query,
+        query_execution=None,
+        depth=current_depth,
+        stats=status_text,
+        upstream_nodes=[],
+        downstream_nodes=[]
+    )
+    
+    if traverse_dir in ("upstream", "both"):
+        rows = await db.fetch_all(
+            """
+            SELECT id, upstream_catalog_id AS next_id, upstream_query_logic
+            FROM centric_lineage
+            WHERE base_catalog_id = $1 AND upstream_catalog_id IS NOT NULL
+            """,
+            catalog_id
+        )
+        for row in rows:
+            child = await _build_centric_hierarchy(
+                db, str(row["next_id"]), "upstream", max_depth, current_depth + 1, visited.copy(),
+                str(row["id"]), row.get("upstream_query_logic")
+            )
+            if child:
+                node.upstream_nodes.append(child)
+
+    if traverse_dir in ("downstream", "both"):
+        rows = await db.fetch_all(
+            """
+            SELECT id, downstream_catalog_id AS next_id, downstream_query_logic
+            FROM centric_lineage
+            WHERE base_catalog_id = $1 AND downstream_catalog_id IS NOT NULL
+            """,
+            catalog_id
+        )
+        for row in rows:
+            child = await _build_centric_hierarchy(
+                db, str(row["next_id"]), "downstream", max_depth, current_depth + 1, visited.copy(),
+                str(row["id"]), row.get("downstream_query_logic")
+            )
+            if child:
+                node.downstream_nodes.append(child)
+                
+    return node
+
+
 # ─── Endpoint ─────────────────────────────────────────────────────────────────
 
 @router.get(
@@ -708,4 +825,42 @@ async def get_visual_lineage(
         raise
     except Exception as e:
         logger.error("get_visual_lineage error: %s", e)
+        raise HTTPException(500, str(e))
+
+
+@router.get(
+    "/api/v1/lineage-centric/{catalog_id}",
+    response_model=CentricLineageResponse,
+    summary="Hierarchical centric view of lineage from centric_lineage table",
+    description="Returns a deeply nested tree representing upstream and downstream lineage.",
+)
+async def get_centric_lineage(
+    catalog_id: str,
+    depth: int = Query(2, ge=1, le=5, description="Traversal depth"),
+):
+    from app import db, logger, log_api_action
+    try:
+        root_data = await _fetch_catalog_node(db, catalog_id)
+        if not root_data:
+            raise HTTPException(404, f"Catalog '{catalog_id}' not found")
+            
+        # Build root node
+        base_node = await _build_centric_hierarchy(
+            db, catalog_id, "both", depth, 0, set()
+        )
+        
+        await log_api_action(
+            endpoint=f"/api/v1/lineage-centric/{catalog_id}",
+            method="GET",
+            action_summary="Viewed centric lineage",
+            entity_type="catalog",
+            entity_id=catalog_id
+        )
+
+        return CentricLineageResponse(base_node=base_node)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("get_centric_lineage error: %s", e)
         raise HTTPException(500, str(e))
