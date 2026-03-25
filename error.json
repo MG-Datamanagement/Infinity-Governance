@@ -1,0 +1,187 @@
+
+
+{
+  "id": "b12f9e3a-7c44-4c91-9f12-3c8c9c2a1111",
+  "table_name": "transaction",
+  "full_name": "operational-data-store.transaction",
+  "schema_name": "operational-data-store",
+  "database_name": null,
+  "type": "table",
+  "status": "unhealthy",
+  "source": {
+    "id": "36ddfa2f-c9bf-4e9f-bdfb-69189f786606",
+    "name": "run-test-athena",
+    "source_type": "athena"
+  },
+  "columns": [
+    {
+      "id": "col-001",
+      "name": "transactionid",
+      "data_type": "SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",
+      "is_primary_key": true,
+      "is_foreign_key": false,
+      "is_nullable": false,
+      "query_expression": null
+    },
+    {
+      "id": "col-002",
+      "name": "bookingid",
+      "data_type": "SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": true,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-003",
+      "name": "agentid",
+      "data_type": "SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": true,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-004",
+      "name": "transactionamount",
+      "data_type": "SchemaFieldDataTypeClass({'type': NumberTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+    "id": "col-005",
+    "name": "address",
+    "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+    "is_primary_key": false,
+    "is_foreign_key": false,
+    "is_nullable": true,
+    "query_expression": null
+    },
+    {
+      "id": "col-006",
+      "name": "transactiontype",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-007",
+      "name": "transactionstatus",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-008",
+      "name": "paymentmethod",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-009",
+      "name": "transactiondate",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-010",
+      "name": "journaltime",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-011",
+      "name": "operationtype",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-012",
+      "name": "load_type",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-013",
+      "name": "filename",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-014",
+      "name": "ingestionsequence",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-015",
+      "name": "createdutc",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    },
+    {
+      "id": "col-016",
+      "name": "modifiedutc",
+      "data_type": "SchemaFieldDataTypeClass({'type': StringTypeClass({})})",
+      "is_primary_key": false,
+      "is_foreign_key": false,
+      "is_nullable": true,
+      "query_expression": null
+    }
+  ],
+  "tags": [
+    {
+      "id": "tag-001",
+      "name": "Financial",
+      "color": "#FF9800",
+      "tag_type": "classification"
+    }
+  ],
+  "lineage_id": "r9b7tb7e-bn86-4388-bd89-3324caa06866",
+  "transformation_query": "CREATE TABLE booking_transaction\nCOMMENT 'Derived from: booking, transaction tables'\nWITH (\n  format = 'PARQUET',\n  external_location = 's3://infinity-gov-test/data/data-lineage/booking_transaction/'\n) AS\nSELECT\n    b.bookingid,\n    b.bookingtype,\n    b.bookingutc,\n    b.currencycode,\n\n    t.transactionid,\n    t.transactionamount,\n    t.transactiontype,\n    t.transactionstatus,\n    t.paymentmethod,\n    t.transactiondate\n\nFROM booking b\nLEFT JOIN transaction t\n    ON b.bookingid = t.bookingid",
+  "query_execution": {
+    "query_execution_id": "g3b7tb7s-bn90-5378-bd89-3324caa89071",
+    "query_start_time": "2026-03-19T05:00:00.000000+00:00",
+    "query_end_time": "2026-03-19T05:00:01.200000+00:00",
+    "query_runtime_ms": 1200,
+    "data_scanned_bytes": 45200,
+    "query_status": "FAILURE",
+    "engine_version": "Athena engine version 3",
+    "s3_output_location": "s3://athena-query-results-tmp-123/transaction/"
+  },
+  "column_mappings": [],
+  "depth": 1,
+  "ai_summary": "The operational-data-store.transaction dataset captures financial transaction details associated with bookings and agents, enabling analysis of payment flows, transaction status, and revenue tracking within the operational data pipeline.",
+  "stats": "Columns: 16 | Rows: 0",
+  "notes":"The address is provided in Thai, which exceeds the default string length of 256 characters. Additionally, the 3f1c9a72-5e4b-4d9f-a1c8-7b2e6f9d4a11 value also exceeds the defined limit, reaching up to 378 characters."
+}
