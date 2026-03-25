@@ -335,7 +335,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
         )
 
         return CatalogDataCardResponse(
-            catalog_id=catalog_id,
+            catalog_id=str(catalog["id"]),
             table_name=catalog["table_name"],
             full_name=catalog["full_name"],
             data_card=cached_row["data_card"],
@@ -472,7 +472,7 @@ async def generate_catalog_datacard(catalog_id: str, max_tokens: int = 2000):
     )
 
     return CatalogDataCardResponse(
-        catalog_id=catalog_id,
+        catalog_id=str(catalog["id"]),
         table_name=catalog["table_name"],
         full_name=catalog["full_name"],
         data_card=data_card_text,
@@ -541,7 +541,7 @@ async def get_catalog_datacard(catalog_id: str):
     )
 
     return CatalogDataCardResponse(
-        catalog_id=row["catalog_id"],
+        catalog_id=str(row["catalog_id"]),
         table_name=row["table_name"],
         full_name=row["full_name"],
         data_card=row["data_card"],

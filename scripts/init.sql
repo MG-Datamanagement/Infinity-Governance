@@ -682,10 +682,10 @@ CREATE TABLE IF NOT EXISTS centric_lineage (
     )
 );
 
-CREATE UNIQUE INDEX idx_centric_lineage_up ON centric_lineage(base_catalog_id, upstream_catalog_id) WHERE upstream_catalog_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_centric_lineage_down ON centric_lineage(base_catalog_id, downstream_catalog_id) WHERE downstream_catalog_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_centric_lineage_up ON centric_lineage(base_catalog_id, upstream_catalog_id) WHERE upstream_catalog_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_centric_lineage_down ON centric_lineage(base_catalog_id, downstream_catalog_id) WHERE downstream_catalog_id IS NOT NULL;
 
-CREATE INDEX idx_centric_lineage_base ON centric_lineage(base_catalog_id);
+CREATE INDEX IF NOT EXISTS idx_centric_lineage_base ON centric_lineage(base_catalog_id);
 
 DROP TRIGGER IF EXISTS update_centric_lineage_updated_at ON centric_lineage;
 CREATE TRIGGER update_centric_lineage_updated_at
