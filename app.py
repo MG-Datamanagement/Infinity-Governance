@@ -237,11 +237,16 @@ app.include_router(catalog_properties_router)
 from services.line_of_business import router as line_of_business_router
 app.include_router(line_of_business_router) 
 
+from services.secrets import router as secrets_router
+app.include_router(secrets_router)
+
 from services.preview import router as preview_router
 app.include_router(preview_router)
 
 from services.audit import router as audit_router
 app.include_router(audit_router) 
+
+
 
 # ============================================================================
 # MAIN ENTRY POINT
