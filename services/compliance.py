@@ -35,7 +35,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.graph import END, StateGraph
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -135,7 +135,7 @@ FRAMEWORK_RULES: dict = {
                 JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
                   AND (c.description IS NULL OR c.description = '')
-                ORDER BY c.full_name LIMIT 100
+                ORDER BY c.full_name LIMIT 50
             """,
             "sql_params": {"tags": ["pii", "sensitive", "confidential", "personal data"]},
             "eval_prompt": (
@@ -169,7 +169,7 @@ FRAMEWORK_RULES: dict = {
                 JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
                   AND c.owner_id IS NULL
-                ORDER BY c.full_name LIMIT 100
+                ORDER BY c.full_name LIMIT 50
             """,
             "sql_params": {"tags": ["pii", "sensitive", "confidential", "personal data"]},
             "eval_prompt": (
@@ -202,7 +202,7 @@ FRAMEWORK_RULES: dict = {
                    OR (c.metadata::text = 'null'::text)
                    OR (c.metadata @> '{"lawful_basis": null}'::jsonb)
                    OR (c.metadata @> '{"processing_purpose": null}'::jsonb)
-                ORDER BY c.created_at DESC LIMIT 100
+                ORDER BY c.created_at DESC LIMIT 50
             """,
             "sql_params": {},
             "eval_prompt": (
@@ -234,7 +234,7 @@ FRAMEWORK_RULES: dict = {
                 LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE c.last_seen_at IS NULL
                    OR c.last_seen_at < NOW() - INTERVAL '90 days'
-                ORDER BY c.last_seen_at ASC NULLS FIRST LIMIT 100
+                ORDER BY c.last_seen_at ASC NULLS FIRST LIMIT 50
             """,
             "sql_params": {},
             "eval_prompt": (
@@ -274,7 +274,7 @@ FRAMEWORK_RULES: dict = {
                     OR (c.metadata @> '{"dpia_completed": false}'::jsonb)
                     OR NOT (c.metadata ? 'dpia_initiated_at')
                   )
-                ORDER BY c.full_name LIMIT 100
+                ORDER BY c.full_name LIMIT 50
             """,
             "sql_params": {"tags": ["pii", "personal data", "sensitive"]},
             "eval_prompt": (
@@ -306,7 +306,7 @@ FRAMEWORK_RULES: dict = {
                 LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE c.updated_at < NOW() - INTERVAL '180 days'
                    OR c.updated_at IS NULL
-                ORDER BY c.updated_at ASC NULLS LAST LIMIT 100
+                ORDER BY c.updated_at ASC NULLS LAST LIMIT 50
             """,
             "sql_params": {},
             "eval_prompt": (
@@ -342,7 +342,7 @@ FRAMEWORK_RULES: dict = {
                 JOIN tags t ON t.id = tca.tag_id
                 WHERE LOWER(t.name) = ANY(%(tags)s)
                   AND (c.source_id IS NULL OR ds.id IS NULL)
-                ORDER BY c.full_name LIMIT 100
+                ORDER BY c.full_name LIMIT 50
             """,
             "sql_params": {"tags": ["pii", "personal data", "sensitive"]},
             "eval_prompt": (
@@ -410,7 +410,7 @@ FRAMEWORK_RULES: dict = {
                 LEFT JOIN owners o ON o.id = c.owner_id
                 WHERE c.owner_id IS NULL
                    OR o.id IS NULL
-                ORDER BY c.created_at ASC LIMIT 100
+                ORDER BY c.created_at ASC LIMIT 50
             """,
             "sql_params": {},
             "eval_prompt": (
@@ -730,50 +730,124 @@ class ComplianceState(TypedDict):
 # LANGGRAPH NODES
 # =============================================================================
 
+# def make_evaluate_frameworks_node(db: DatabaseManager, llm: LLMEvaluator, rules: dict):
+#     def evaluate_frameworks(state: ComplianceState) -> ComplianceState:
+#         logger.info("Node: evaluate_frameworks (DETECTION ONLY)")
+#         for framework, fw_rules in rules.items():
+#             logger.info("  Framework: %s", framework)
+#             passed_count = 0
+#             fw_issues    = []
+
+#             for rule in fw_rules:
+#                 rule_id = rule.get("rule_id", "UNKNOWN")
+#                 logger.info("    Evaluating %s ...", rule_id)
+#                 query_results = db.execute_query(rule["sql"], rule.get("sql_params") or {})
+
+#                 if query_results:  # violation found
+#                     fw_issues.append({
+#                         "issue":         rule["rule"].replace("PII/sensitive", "PII"),
+#                         "rule_id":       rule_id,
+#                         "framework":     framework,
+#                         "severity":      rule["severity"].upper(),  # from config
+#                         "reason":        "",  # will be filled by LLM later
+#                         "dataset":       extract_dataset_from_results(query_results),
+#                         "assignee":      extract_owner_from_results(query_results),
+#                         "assigned_date": calculate_assigned_date(),
+#                         "due_date":      calculate_due_date(rule["severity"]),
+#                         "affected_rows": len(query_results),
+#                         "action_url":    f"/issues/{rule_id}",
+#                         "query_results": query_results,
+#                         "status":        "OPEN - AWAITING MANUAL REMEDIATION",
+#                     })
+#                 else:
+#                     passed_count += 1
+
+#             score = round((passed_count / len(fw_rules)) * 100, 2) if fw_rules else 0.0
+#             logger.info(
+#                 "  %s: %.1f%%  (%d/%d passed, %d issue(s))",
+#                 framework, score, passed_count, len(fw_rules), len(fw_issues),
+#             )
+#             state["frameworks"][framework] = {
+#                 "score":        score,
+#                 "issues":       fw_issues,
+#                 "rules_total":  len(fw_rules),
+#                 "rules_passed": passed_count,
+#             }
+#         return state
+#     return evaluate_frameworks
+
+
+
+
 def make_evaluate_frameworks_node(db: DatabaseManager, llm: LLMEvaluator, rules: dict):
+
+    def process_rule(rule, framework):
+        rule_id = rule.get("rule_id", "UNKNOWN")
+
+        query_results = db.execute_query(rule["sql"], rule.get("sql_params") or {})
+
+        
+        if not query_results:
+            return {
+                "passed": True,
+                "issue": None
+            }
+
+        severity = rule.get("severity", "medium")
+
+        issue = {
+            "issue": rule["rule"].replace("PII/sensitive", "PII"),
+            "rule_id": rule_id,
+            "framework": framework,
+            "severity": severity.upper(),
+            "reason": "Violation detected based on query results",
+            "dataset": extract_dataset_from_results(query_results[:5]), 
+            "assignee": extract_owner_from_results(query_results[:5]),
+            "assigned_date": calculate_assigned_date(),
+            "due_date": calculate_due_date(severity),
+            "affected_rows": len(query_results),
+            "action_url": f"/issues/{rule_id}",
+            "status": "OPEN - AWAITING MANUAL REMEDIATION",
+        }
+
+        return {
+            "passed": False,
+            "issue": issue
+        }
+
     def evaluate_frameworks(state: ComplianceState) -> ComplianceState:
-        logger.info("Node: evaluate_frameworks (DETECTION ONLY)")
+        logger.info("Node: evaluate_frameworks (FAST MODE 🚀)")
+
         for framework, fw_rules in rules.items():
-            logger.info("  Framework: %s", framework)
             passed_count = 0
-            fw_issues    = []
+            fw_issues = []
 
-            for rule in fw_rules:
-                rule_id = rule.get("rule_id", "UNKNOWN")
-                logger.info("    Evaluating %s ...", rule_id)
-                query_results = db.execute_query(rule["sql"], rule.get("sql_params") or {})
+           
+            with ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [
+                    executor.submit(process_rule, rule, framework)
+                    for rule in fw_rules
+                ]
 
-                if query_results:  # violation found
-                    fw_issues.append({
-                        "issue":         rule["rule"].replace("PII/sensitive", "PII"),
-                        "rule_id":       rule_id,
-                        "framework":     framework,
-                        "severity":      rule["severity"].upper(),  # from config
-                        "reason":        "",  # will be filled by LLM later
-                        "dataset":       extract_dataset_from_results(query_results),
-                        "assignee":      extract_owner_from_results(query_results),
-                        "assigned_date": calculate_assigned_date(),
-                        "due_date":      calculate_due_date(rule["severity"]),
-                        "affected_rows": len(query_results),
-                        "action_url":    f"/issues/{rule_id}",
-                        "query_results": query_results,
-                        "status":        "OPEN - AWAITING MANUAL REMEDIATION",
-                    })
-                else:
-                    passed_count += 1
+                for future in as_completed(futures):
+                    result = future.result()
+
+                    if result["passed"]:
+                        passed_count += 1
+                    else:
+                        fw_issues.append(result["issue"])
 
             score = round((passed_count / len(fw_rules)) * 100, 2) if fw_rules else 0.0
-            logger.info(
-                "  %s: %.1f%%  (%d/%d passed, %d issue(s))",
-                framework, score, passed_count, len(fw_rules), len(fw_issues),
-            )
+
             state["frameworks"][framework] = {
-                "score":        score,
-                "issues":       fw_issues,
-                "rules_total":  len(fw_rules),
+                "score": score,
+                "issues": fw_issues,
+                "rules_total": len(fw_rules),
                 "rules_passed": passed_count,
             }
+
         return state
+
     return evaluate_frameworks
 
 
