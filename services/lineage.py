@@ -96,6 +96,7 @@ class CentricLineageNode(BaseModel):
     depth: int = 1
     ai_summary: Optional[str] = None
     stats: Optional[str] = None
+    notes: Optional[str] = None
     upstream_nodes: List['CentricLineageNode'] = []
     downstream_nodes: List['CentricLineageNode'] = []
 
@@ -723,6 +724,7 @@ async def _build_centric_hierarchy(
                         depth=current_depth + 1,
                         ai_summary=mock_node.ai_summary,
                         stats=mock_node.stats,
+                        notes=mock_node.notes,
                         upstream_nodes=[],
                         downstream_nodes=[]
                     )
