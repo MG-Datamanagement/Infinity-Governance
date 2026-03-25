@@ -88,11 +88,13 @@ class CentricLineageNode(BaseModel):
     type: Optional[str] = "table"
     status: Optional[str] = "healthy"
     source: Optional[SourceInfo] = None
+    columns: List[ColumnInfo] = []
     tags: List[TagInfo] = []
     lineage_id: Optional[str] = None
     transformation_query: Optional[str] = None
     query_execution: Optional[QueryExecutionInfo] = None
     depth: int = 1
+    ai_summary: Optional[str] = None
     stats: Optional[str] = None
     upstream_nodes: List['CentricLineageNode'] = []
     downstream_nodes: List['CentricLineageNode'] = []
@@ -632,6 +634,7 @@ async def _build_centric_hierarchy(
     visited: set,
     lineage_id: Optional[str] = None,
     transformation_query: Optional[str] = None,
+    query_execution_info: Optional[QueryExecutionInfo] = None,
 ) -> Optional[CentricLineageNode]:
     """Recursively builds the hierarchy from the centric_lineage table."""
     if current_depth > max_depth:
@@ -646,6 +649,8 @@ async def _build_centric_hierarchy(
         return None
 
     tags = await _fetch_tags(db, catalog_id)
+    columns = await _fetch_columns(db, catalog_id)
+    
     row_count = data.get("row_count")
     row_count_str = f"{row_count:,}" if row_count is not None else "N/A"
     
@@ -661,6 +666,19 @@ async def _build_centric_hierarchy(
             source_type=data["source_type"] or "",
         )
         
+    upstream_tables = ["upstream dependency"] if traverse_dir in ("upstream", "both") else []
+    downstream_tables = ["downstream dependency"] if traverse_dir in ("downstream", "both") else []
+
+    ai_summary = await _generate_ai_summary(
+        llm,
+        {
+            "full_name": data.get("full_name"),
+            "columns": [c.dict() for c in columns],
+        },
+        upstream=upstream_tables,
+        downstream=downstream_tables,
+    )
+
     node = CentricLineageNode(
         id=str(data["id"]),
         table_name=data["table_name"],
@@ -670,29 +688,66 @@ async def _build_centric_hierarchy(
         type=data.get("type", "table"),
         status=data.get("status", "healthy"),
         source=source,
+        columns=columns,
         tags=tags,
         lineage_id=lineage_id,
         transformation_query=transformation_query,
-        query_execution=None,
+        query_execution=query_execution_info,
         depth=current_depth,
+        ai_summary=ai_summary,
         stats=status_text,
         upstream_nodes=[],
         downstream_nodes=[]
     )
     
     if traverse_dir in ("upstream", "both"):
+        # ── Inject all mock nodes at depth-1 for trigger tables ─────────────────
+        if current_depth == 0 and data["table_name"].lower() in MOCK_TRIGGER_TABLE_NAMES:
+            for mock_id, mock_node in zip(MOCK_IDS, MOCK_NODES):
+                if mock_id not in visited:
+                    visited.add(mock_id)
+                    centric_mock = CentricLineageNode(
+                        id=mock_node.id,
+                        table_name=mock_node.table_name,
+                        full_name=mock_node.full_name,
+                        schema_name=mock_node.schema_name,
+                        database_name=mock_node.database_name,
+                        type=mock_node.type,
+                        status=mock_node.status,
+                        source=mock_node.source,
+                        columns=mock_node.columns,
+                        tags=mock_node.tags,
+                        lineage_id=mock_node.lineage_id,
+                        transformation_query=mock_node.transformation_query,
+                        query_execution=mock_node.query_execution,
+                        depth=current_depth + 1,
+                        ai_summary=mock_node.ai_summary,
+                        stats=mock_node.stats,
+                        upstream_nodes=[],
+                        downstream_nodes=[]
+                    )
+                    node.upstream_nodes.append(centric_mock)
+
         rows = await db.fetch_all(
             """
-            SELECT id, upstream_catalog_id AS next_id, upstream_query_logic
-            FROM centric_lineage
-            WHERE base_catalog_id = $1 AND upstream_catalog_id IS NOT NULL
+            SELECT c.id, c.upstream_catalog_id AS next_id, c.upstream_query_logic,
+                   tl.query_execution_id, tl.query_start_time, tl.query_end_time,
+                   tl.query_runtime_ms, tl.data_scanned_bytes, tl.query_status,
+                   tl.engine_version, tl.s3_output_location
+            FROM centric_lineage c
+            LEFT JOIN table_lineage tl 
+              ON tl.downstream_catalog_id = c.base_catalog_id 
+             AND tl.upstream_catalog_id = c.upstream_catalog_id
+             AND tl.is_active = TRUE
+            WHERE c.base_catalog_id = $1 AND c.upstream_catalog_id IS NOT NULL
             """,
             catalog_id
         )
         for row in rows:
+            exec_info = _build_query_execution_info(dict(row)) if row.get("query_execution_id") else None
             child = await _build_centric_hierarchy(
                 db, str(row["next_id"]), "upstream", max_depth, current_depth + 1, visited.copy(),
-                str(row["id"]), row.get("upstream_query_logic")
+                str(row["id"]), row.get("upstream_query_logic"), exec_info
             )
             if child:
                 node.upstream_nodes.append(child)
@@ -700,16 +755,24 @@ async def _build_centric_hierarchy(
     if traverse_dir in ("downstream", "both"):
         rows = await db.fetch_all(
             """
-            SELECT id, downstream_catalog_id AS next_id, downstream_query_logic
-            FROM centric_lineage
-            WHERE base_catalog_id = $1 AND downstream_catalog_id IS NOT NULL
+            SELECT c.id, c.downstream_catalog_id AS next_id, c.downstream_query_logic,
+                   tl.query_execution_id, tl.query_start_time, tl.query_end_time,
+                   tl.query_runtime_ms, tl.data_scanned_bytes, tl.query_status,
+                   tl.engine_version, tl.s3_output_location
+            FROM centric_lineage c
+            LEFT JOIN table_lineage tl 
+              ON tl.upstream_catalog_id = c.base_catalog_id 
+             AND tl.downstream_catalog_id = c.downstream_catalog_id
+             AND tl.is_active = TRUE
+            WHERE c.base_catalog_id = $1 AND c.downstream_catalog_id IS NOT NULL
             """,
             catalog_id
         )
         for row in rows:
+            exec_info = _build_query_execution_info(dict(row)) if row.get("query_execution_id") else None
             child = await _build_centric_hierarchy(
                 db, str(row["next_id"]), "downstream", max_depth, current_depth + 1, visited.copy(),
-                str(row["id"]), row.get("downstream_query_logic")
+                str(row["id"]), row.get("downstream_query_logic"), exec_info
             )
             if child:
                 node.downstream_nodes.append(child)
