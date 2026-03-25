@@ -665,7 +665,7 @@ class LLMEvaluator:
     ]
 
     Issues:
-    {json.dumps(issues, indent=2, default=str)}
+    {json.dumps(issues, indent=2)}
     """
         try:
             response = self.llm.invoke(prompt).content.strip()
