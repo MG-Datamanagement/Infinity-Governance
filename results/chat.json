@@ -1,0 +1,194 @@
+[
+  {
+    "question": "list assets in snowflake platform",
+    "answer": "Please configure Azure OpenAI credentials",
+    "query_type": "descriptive",
+    "sql_query": null,
+    "timestamp": "2026-01-22T04:18:14.000590",
+    "session_id": null
+  },
+  {
+    "question": "list assets in snowflake platform",
+    "answer": "Please configure Azure OpenAI credentials",
+    "query_type": "descriptive",
+    "sql_query": null,
+    "timestamp": "2026-01-22T04:20:31.026425",
+    "session_id": null
+  },
+  {
+    "question": "list assets in snowflake platform",
+    "answer": "Please configure Azure OpenAI credentials",
+    "query_type": "descriptive",
+    "sql_query": null,
+    "timestamp": "2026-01-22T04:23:31.813297",
+    "session_id": null
+  },
+  {
+    "question": "list all snowflake datasets",
+    "answer": "Snowflake datasets:\n\n1. LINEITEM\n   - URN: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce_db.public.lineitem,PROD)\n   - Updated At: 2026-01-22 04:10:39.488474+00:00\n\n2. ORDERS\n   - URN: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce_db.public.orders,PROD)\n   - Updated At: 2026-01-22 04:10:39.493946+00:00",
+    "query_type": "sql",
+    "sql_query": "SELECT d.*\nFROM datahub_datasets d\nWHERE d.platform_name = 'snowflake'\nLIMIT 100;",
+    "timestamp": "2026-01-22T04:28:29.048084",
+    "session_id": null
+  },
+  {
+    "question": "list assets in snowflake platform",
+    "answer": "Assets in Snowflake platform:\n\n1. LINEITEM\n   - URN: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce_db.public.lineitem,PROD)\n   - Updated at: 2026-01-22 04:10:39.488474+00:00\n\n2. ORDERS\n   - URN: urn:li:dataset:(urn:li:dataPlatform:snowflake,ecommerce_db.public.orders,PROD)\n   - Updated at: 2026-01-22 04:10:39.493946+00:00",
+    "query_type": "sql",
+    "sql_query": "SELECT d.id, d.urn, d.name, d.platform_name, d.created, d.updated_at\nFROM datahub_datasets d\nWHERE d.platform_name = 'snowflake'\nLIMIT 100;",
+    "timestamp": "2026-01-22T04:28:45.300653",
+    "session_id": null
+  },
+  {
+    "question": "what is data lineage and how can it help us",
+    "answer": "Sure! \n\n**What is Data Lineage in DataHub?**\n\nData lineage is like a detailed map that shows where your data comes from, how it moves through different systems, and where it ends up. It tracks every step in the journey of data—from its original source to the final place where it’s used or stored. \n\n**Why is this useful?**\n\nImagine you want to understand how a sales report was created. Data lineage helps you see all the data sources feeding into that report, what transformations or calculations happened along the way, and which systems depend on that data. \n\n**Key parts of Data Lineage:**\n\n- **Upstream Lineage:** Shows where the data originated (the sources).\n- **Downstream Lineage:** Shows where the data is used or sent next (the targets).\n- **Impact Analysis:** Helps you understand what will be affected if you change or fix a data source.\n- **Data Flow Tracking:** Lets you follow the path of data through various systems and processes.\n\n**Practical Examples:**\n\n- If a monthly report suddenly shows incorrect numbers, data lineage lets you quickly trace back to the exact data source or transformation step that might have caused the issue, speeding up troubleshooting.\n- Before updating a database or a data pipeline, you can see which reports or dashboards rely on that data. This way, you can assess the impact and avoid breaking anything important.\n- When onboarding new team members, data lineage provides a visual guide to help them understand how data moves and is connected across your organization.\n\nIn short, DataHub’s lineage feature gives you clear visibility into your data’s journey, making it easier to trust, fix, and manage your data.",
+    "query_type": "datahub_feature",
+    "sql_query": null,
+    "timestamp": "2026-01-22T05:07:36.141904",
+    "session_id": null
+  },
+  {
+    "question": "which dataset has no tags",
+    "answer": "Datasets with no tags include:\n\n1. production_transactionhistory  \n2. humanresources_department  \n3. humanresources_employee  \n4. humanresources_employeedepartmenthistory  \n5. humanresources_employeepayhistory  \n6. humanresources_jobcandidate  \n7. humanresources_shift  \n8. person_address  \n9. person_addresstype  \n10. person_businessentity",
+    "query_type": "sql",
+    "sql_query": "SELECT d.urn, d.name\nFROM datahub_dataset_all d\nLEFT JOIN datahub_tags t ON d.tag_urn = t.urn\nWHERE d.tag_urn IS NULL OR d.tag_urn = ''\nLIMIT 100;",
+    "timestamp": "2026-01-22T05:12:09.241023",
+    "session_id": null
+  },
+  {
+    "question": "which dataset has no tags",
+    "answer": "Datasets with no tags (sample of 10 from 57 total):\n\n1. production_transactionhistory\n2. humanresources_department\n3. humanresources_employee\n4. humanresources_employeedepartmenthistory\n5. humanresources_employeepayhistory\n6. humanresources_jobcandidate\n7. humanresources_shift\n8. person_address\n9. person_addresstype\n10. person_businessentity",
+    "query_type": "sql",
+    "sql_query": "SELECT d.urn, d.name\nFROM datahub_dataset_all d\nLEFT JOIN datahub_tags t ON d.tag_urn = t.urn\nWHERE d.tag_urn IS NULL OR d.tag_urn = ''\nLIMIT 100;",
+    "timestamp": "2026-01-22T05:12:25.156008",
+    "session_id": null
+  },
+  {
+    "question": "which dataset has no tags",
+    "answer": "Datasets with no tags include:\n\n1. production_transactionhistory  \n2. humanresources_department  \n3. humanresources_employee  \n4. humanresources_employeedepartmenthistory  \n5. humanresources_employeepayhistory  \n6. humanresources_jobcandidate  \n7. humanresources_shift  \n8. person_address  \n9. person_addresstype  \n10. person_businessentity",
+    "query_type": "sql",
+    "sql_query": "SELECT d.urn, d.name\nFROM datahub_dataset_all d\nLEFT JOIN datahub_tags t ON d.tag_urn = t.urn\nWHERE d.tag_urn IS NULL OR d.tag_urn = ''\nLIMIT 100;",
+    "timestamp": "2026-01-22T05:16:16.739236",
+    "session_id": null
+  },
+  {
+    "question": "list me one dataset urn",
+    "answer": "One dataset URN:\nurn:li:dataset:(urn:li:dataPlatform:postgres,IG_DB.public.production_transactionhistory,PROD)",
+    "query_type": "sql",
+    "sql_query": "SELECT urn FROM datahub_dataset_all LIMIT 1;",
+    "timestamp": "2026-01-22T05:26:18.593217",
+    "session_id": null
+  },
+  {
+    "question": "show me a dataset urn from production",
+    "answer": "Here is a sample dataset URN from production:\n\n- urn:li:dataset:(urn:li:dataPlatform:postgres,IG_DB.public.production_transactionhistory,PROD)",
+    "query_type": "sql",
+    "sql_query": "SELECT urn FROM datahub_dataset_all WHERE origin = 'PROD' LIMIT 100;",
+    "timestamp": "2026-01-22T05:26:28.569525",
+    "session_id": null
+  },
+  {
+    "question": "List the total tags",
+    "answer": "Total tags: 7",
+    "query_type": "sql",
+    "sql_query": "SELECT COUNT(*) AS total_tags FROM datahub_tags;",
+    "timestamp": "2026-01-22T07:42:20.067378",
+    "session_id": null
+  },
+  {
+    "question": "How many data sources are ingested here?",
+    "answer": "There are 2 data sources ingested.",
+    "query_type": "sql",
+    "sql_query": "SELECT COUNT(DISTINCT platform_name) AS data_source_count\nFROM datahub_datasets;",
+    "timestamp": "2026-01-22T07:42:33.174093",
+    "session_id": null
+  },
+  {
+    "question": "list the names of few datasets ",
+    "answer": "Here are a few dataset names:\n\n1. production_transactionhistory  \n2. humanresources_department  \n3. humanresources_employee  \n4. humanresources_employeedepartmenthistory  \n5. humanresources_employeepayhistory  \n6. humanresources_jobcandidate  \n7. humanresources_shift  \n8. person_address  \n9. person_addresstype  \n10. person_businessentity",
+    "query_type": "sql",
+    "sql_query": "SELECT name FROM datahub_dataset_all LIMIT 10;",
+    "timestamp": "2026-01-22T07:53:40.854263",
+    "session_id": null
+  },
+  {
+    "question": "again please",
+    "answer": "Certainly! Here are a few example dataset names commonly found in DataHub or similar enterprise data environments:\n\n1. sales_orders  \n2. customer_profiles  \n3. product_catalog  \n4. employee_records  \n5. inventory_levels  \n6. financial_transactions  \n7. marketing_campaigns  \n8. supplier_information  \n9. website_analytics  \n10. support_tickets\n\nIf you need datasets specific to a certain domain or platform, please let me know!",
+    "query_type": "descriptive",
+    "sql_query": null,
+    "timestamp": "2026-01-22T07:54:02.217067",
+    "session_id": null
+  },
+  {
+    "question": "list the many dataset names",
+    "answer": "Here are some dataset names from the list:\n\n1. production_transactionhistory  \n2. humanresources_department  \n3. humanresources_employee  \n4. humanresources_employeedepartmenthistory  \n5. humanresources_employeepayhistory  \n6. humanresources_jobcandidate  \n7. humanresources_shift  \n8. person_address  \n9. person_addresstype  \n10. person_businessentity  \n\nThere are 57 datasets in total. Let me know if you want the full list!",
+    "query_type": "sql",
+    "sql_query": "SELECT name FROM datahub_dataset_all LIMIT 100;",
+    "timestamp": "2026-01-22T07:54:37.292400",
+    "session_id": null
+  },
+  {
+    "question": "please list many dataset names",
+    "answer": "Here are some dataset names:\n\n1. production_transactionhistory  \n2. humanresources_department  \n3. humanresources_employee  \n4. humanresources_employeedepartmenthistory  \n5. humanresources_employeepayhistory  \n6. humanresources_jobcandidate  \n7. humanresources_shift  \n8. person_address  \n9. person_addresstype  \n10. person_businessentity",
+    "query_type": "sql",
+    "sql_query": "SELECT name FROM datahub_dataset_all LIMIT 100;",
+    "timestamp": "2026-01-22T07:56:46.564864",
+    "session_id": null
+  },
+  {
+    "question": "hi",
+    "answer": "Hello! How can I assist you with DataHub today?",
+    "query_type": "descriptive",
+    "sql_query": null,
+    "timestamp": "2026-01-22T09:14:53.312414",
+    "session_id": null
+  },
+  {
+    "question": "give total datasets count",
+    "answer": "Total datasets count: 57",
+    "query_type": "sql",
+    "sql_query": "SELECT COUNT(*) AS total_datasets_count FROM datahub_dataset_all;",
+    "timestamp": "2026-01-27T09:12:44.456472",
+    "session_id": null
+  },
+  {
+    "question": "how to employ governance here?",
+    "answer": "Certainly! In DataHub, **governance** means setting up clear rules and processes to manage data responsibly and ensure it’s trustworthy, secure, and easy to find and use. Think of it as the way an organization takes care of its data, just like a library has rules to organize and protect books.\n\n### What Does Governance Do in DataHub?\n\n1. **Organizes your data assets:** It helps categorize and label data so everyone knows what data exists and where to find it.\n2. **Tracks who owns and manages data:** It records who is responsible for each dataset, so you know who to ask for questions or approvals.\n3. **Controls access:** It lets you decide who can see or change certain data to keep sensitive information safe.\n4. **Records data changes and usage:** It keeps a history of updates and who used the data to maintain transparency and accountability.\n5. **Ensures data quality:** It allows you to set quality standards and alerts when data doesn’t meet them.\n\n### How to Employ Governance in DataHub — Practical Steps:\n\n- **Assign Owners and Stewards:** For each dataset in DataHub, you can add “owners” or “data stewards.” For example, if your marketing team owns customer data, you assign them as owners so they manage updates and ensure accuracy.\n\n- **Add Tags and Classifications:** You can label data with tags like “PII” (personally identifiable information) or “Financial Data.” This helps users understand the sensitivity and proper use of the data.\n\n- **Set Access Policies:** Use DataHub to define who can view or edit datasets. For example, only HR staff might access employee records, protecting privacy.\n\n- **Use Data Lineage:** DataHub visually shows where data comes from and how it’s transformed. If a report shows unexpected results, you can trace back to the original source easily.\n\n- **Enable Audit Logs:** Keep track of who accessed or changed data and when. This is useful for compliance and understanding data usage patterns.\n\n### Example Scenario:\n\nImagine a company has sales data stored in DataHub. Using governance features:\n\n- The sales manager is assigned as the owner.\n- The dataset is tagged as “Confidential” and “Sales.”\n- Only the sales and finance teams have access.\n- DataHub tracks updates to the sales figures daily.\n- If someone questions the sales report, you can trace the data lineage to verify sources.\n\n---\n\n**In short:** DataHub governance helps your organization keep data organized, secure, and trustworthy by defining roles, access, and quality rules — all within a user-friendly platform that even non-technical users can navigate.",
+    "query_type": "datahub_feature",
+    "sql_query": null,
+    "timestamp": "2026-01-27T10:32:29.233855",
+    "session_id": null
+  },
+  {
+    "question": "I'm currently using the oss version of datahub, can i employ quality for datasets in UI",
+    "answer": "Certainly! \n\nIn the open-source (OSS) version of DataHub, **you can track and view dataset quality information directly in the user interface (UI)**, but with some limitations compared to the full enterprise version.\n\n### What does \"quality for datasets\" mean?\nDataset quality refers to how good or reliable your data is. This can include things like:\n- How complete the data is (are there missing values?)\n- Whether the data follows certain rules or standards\n- How fresh or up-to-date the data is\n\nHaving this quality information helps data users trust and understand the data before using it.\n\n### Using quality features in the OSS version of DataHub UI:\n- **Basic quality metadata:** The OSS version allows you to **see quality scores and some quality metrics** if they are provided to DataHub. For example, if you or your data pipelines send quality checks (like \"percentage of missing values\"), these can appear in the UI under the dataset’s quality tab.\n- **Manual or automated uploads:** You can upload quality reports through API or integrate with tools that generate quality metrics, so this info shows up in the UI.\n- **Visual indicators:** The UI will display quality scores or badges, helping you quickly identify datasets with good or poor quality.\n\n### What isn’t included in OSS?\n- Advanced automated quality monitoring and alerts\n- Some enterprise-only integrations and advanced dashboards\n\n### Practical example:\nImagine you have a dataset of customer orders. You run a daily check to see if any order records are missing the customer email address. This check calculates a \"quality score\" (say, 95% complete). You send this score to DataHub, and when you open the dataset in the UI, you see a \"Quality\" tab showing this 95% completeness metric. This helps you and your team quickly see if the data is reliable for analysis.\n\n---\n\n**In summary:**  \nYes, with the OSS version of DataHub, you can employ dataset quality features in the UI by providing quality metrics to DataHub. This helps you visualize and understand your data’s reliability, though some advanced features are only in the enterprise edition.",
+    "query_type": "datahub_feature",
+    "sql_query": null,
+    "timestamp": "2026-01-27T10:36:56.408413",
+    "session_id": null
+  },
+  {
+    "question": "How many data sources are ingested here?",
+    "answer": "There are 5 data sources ingested.",
+    "query_type": "sql",
+    "sql_query": "SELECT COUNT(DISTINCT platform_name) AS data_source_count\nFROM datahub_datasets;",
+    "timestamp": "2026-01-28T07:34:00.223762",
+    "session_id": null
+  },
+  {
+    "question": "Which asset is tagged with sales tag?",
+    "answer": "No asset is currently tagged with the sales tag.",
+    "query_type": "sql",
+    "sql_query": "SELECT dsa.*\nFROM datahub_dataset_all dsa\nJOIN datahub_tags dt ON dsa.tag_urn = dt.urn\nWHERE dt.name ILIKE '%sales%'\nLIMIT 100;",
+    "timestamp": "2026-01-28T07:50:56.437742",
+    "session_id": null
+  },
+  {
+    "question": "list the datasets names currently ingested",
+    "answer": "Here are some of the dataset names currently ingested:\n1. sales_salesterritoryhistory\n2. production_transactionhistory\n3. person_businessentityaddress\n4. payments\n5. humanresources_department\n6. humanresources_employee\n7. Patients\n8. sales_orders\n9. claims\n10. customers",
+    "query_type": "sql",
+    "sql_query": "SELECT name FROM datahub_dataset_all LIMIT 100;",
+    "timestamp": "2026-01-28T07:51:35.417825",
+    "session_id": null
+  }
+]
