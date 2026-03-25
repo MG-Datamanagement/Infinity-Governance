@@ -1,0 +1,51 @@
+name: BE Auto Deploy to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy Backend via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            set -e
+
+            BACKEND_DIR="/var/www/backend"
+            AUTH_URL="https://${{ secrets.ACTIONS_PAT }}@github.com/${{ github.repository }}.git"
+
+            echo "Preparing backend directory..."
+            sudo mkdir -p $BACKEND_DIR
+            sudo chown -R $USER:$USER $BACKEND_DIR
+
+            cd $BACKEND_DIR
+
+            if [ -d ".git" ]; then
+              echo "Updating existing repository..."
+              git remote set-url origin $AUTH_URL
+              git fetch origin
+              git reset --hard origin/main
+              git clean -fd
+            else
+              echo "Cloning repository..."
+              git clone -b main $AUTH_URL .
+            fi
+
+            echo "Stopping old containers..."
+            docker compose down || true
+
+            echo "Building and starting containers..."
+            docker compose up -d --build
+
+            echo "Cleaning unused Docker images..."
+            docker image prune -f
+
+            echo "Deployment completed successfully!"
