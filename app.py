@@ -243,6 +243,9 @@ app.include_router(preview_router)
 from services.audit import router as audit_router
 app.include_router(audit_router) 
 
+from services.secrets import router as secrets_router
+app.include_router(secrets_router)
+
 # ============================================================================
 # MAIN ENTRY POINT
 # ============================================================================
