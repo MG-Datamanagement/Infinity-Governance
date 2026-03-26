@@ -37,19 +37,11 @@ class CustomPropertyItem(BaseModel):
     key:        str
     value:      str
     value_type: str
+    last_updated: Optional[str] = None
 
 
 class CatalogPropertiesResponse(BaseModel):
-    full_name:         Optional[str]
-    database:          Optional[str]
-    schema_name:       Optional[str]
-    source:            Optional[str]
-    source_type:       Optional[str]
-    column_count:      int
-    row_count:         Optional[int]
-    tags:              str
-    owner:             str
-    last_updated:      Optional[str]
+    name:              Optional[str]
     custom_properties: List[CustomPropertyItem] = []
 
 
@@ -57,6 +49,11 @@ class CreateCustomPropertyRequest(BaseModel):
     key:        str
     value:      str
     value_type: Optional[str] = "string"
+
+
+class UpdateCustomPropertyRequest(BaseModel):
+    value:      Optional[str] = None
+    value_type: Optional[str] = None
 
 
 def _build_datacard_prompt(catalog_detail: dict) -> str:
@@ -943,7 +940,7 @@ async def get_catalog_properties(catalog_id: str):
         # ── Custom properties – exclude null/empty values at DB level ─────────
         cp_rows = await db.fetch_all(
             """
-            SELECT id, key, value, value_type
+            SELECT id, key, value, value_type, created_at
             FROM   custom_properties
             WHERE  catalog_id = $1
               AND  value IS NOT NULL
@@ -958,6 +955,7 @@ async def get_catalog_properties(catalog_id: str):
                 key=r["key"],
                 value=r["value"],
                 value_type=r["value_type"] or "string",
+                last_updated=r["created_at"].strftime("%d/%m/%Y %H:%M:%S") if r["created_at"] else None
             )
             for r in cp_rows
         ]
@@ -994,16 +992,7 @@ async def get_catalog_properties(catalog_id: str):
         )
 
         return CatalogPropertiesResponse(
-            full_name=_val(catalog["full_name"]),
-            database=_val(catalog["database_name"]),
-            schema_name=_val(catalog["schema_name"]),
-            source=_val(catalog["source_name"]),
-            source_type=_val(catalog["source_type"]),
-            column_count=column_count,
-            row_count=row_count,
-            tags=tags_str,
-            owner=owner_str,
-            last_updated=last_updated,
+            name=_val(catalog["full_name"]),
             custom_properties=custom_props,
         )
 
@@ -1060,7 +1049,7 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
             """
             INSERT INTO custom_properties (catalog_id, key, value, value_type)
             VALUES ($1, $2, $3, $4)
-            RETURNING id, key, value, value_type
+            RETURNING id, key, value, value_type, created_at
             """,
             catalog_id,
             body.key.strip(),
@@ -1082,10 +1071,124 @@ async def create_custom_property(catalog_id: str, body: CreateCustomPropertyRequ
             key=row["key"],
             value=row["value"],
             value_type=row["value_type"] or "string",
+            last_updated=row["created_at"].strftime("%d/%m/%Y %H:%M:%S") if row["created_at"] else None
         )
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error("create_custom_property error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# PATCH  /api/v1/catalogs/{catalog_id}/properties/{property_id}
+# Update an existing custom property
+# ============================================================================
+
+@router.patch(
+    "/api/v1/catalogs/{catalog_id}/properties/{property_id}",
+    response_model=CustomPropertyItem,
+    summary="Update an existing custom property",
+)
+async def update_custom_property(
+    catalog_id: str,
+    property_id: str,
+    body: UpdateCustomPropertyRequest,
+):
+    from app import db, logger, log_api_action
+    try:
+        # Verify property belongs to catalog
+        existing = await db.fetch_one(
+            "SELECT id, key, value, value_type FROM custom_properties WHERE id = $1 AND catalog_id = $2",
+            property_id, catalog_id,
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Property not found for this catalog.")
+
+        new_value = body.value if body.value is not None else existing["value"]
+        new_type  = body.value_type if body.value_type is not None else existing["value_type"]
+
+        if not new_value or not new_value.strip():
+            raise HTTPException(status_code=400, detail="Property value must not be empty.")
+
+        row = await db.fetch_one(
+            """
+            UPDATE custom_properties
+            SET value = $1, value_type = $2
+            WHERE id = $3
+            RETURNING id, key, value, value_type, created_at
+            """,
+            new_value.strip(),
+            (new_type or "string").strip(),
+            property_id,
+        )
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Property update failed.")
+
+        await log_api_action(
+            endpoint=f"/api/v1/catalogs/{catalog_id}/properties/{property_id}",
+            method="PATCH",
+            action_summary=f"Custom property '{row['key']}' updated in catalog '{catalog_id}'",
+            entity_type="catalog", entity_id=catalog_id,
+            status_code=200,
+            request_body={"value": body.value, "value_type": body.value_type},
+            response_summary=f"property_id={property_id}"
+        )
+
+        return CustomPropertyItem(
+            id=str(row["id"]),
+            key=row["key"],
+            value=row["value"],
+            value_type=row["value_type"] or "string",
+            last_updated=row["created_at"].strftime("%d/%m/%Y %H:%M:%S") if row["created_at"] else None
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("update_custom_property error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# DELETE /api/v1/catalogs/{catalog_id}/properties/{property_id}
+# Delete a custom property
+# ============================================================================
+
+@router.delete(
+    "/api/v1/catalogs/{catalog_id}/properties/{property_id}",
+    status_code=204,
+    summary="Delete a custom property",
+)
+async def delete_custom_property(catalog_id: str, property_id: str):
+    from app import db, logger, log_api_action
+    try:
+        # Verify property exists
+        existing = await db.fetch_one(
+            "SELECT id, key FROM custom_properties WHERE id = $1 AND catalog_id = $2",
+            property_id, catalog_id,
+        )
+        if not existing:
+            raise HTTPException(status_code=404, detail="Property not found for this catalog.")
+
+        await db.execute(
+            "DELETE FROM custom_properties WHERE id = $1",
+            property_id,
+        )
+
+        await log_api_action(
+            endpoint=f"/api/v1/catalogs/{catalog_id}/properties/{property_id}",
+            method="DELETE",
+            action_summary=f"Custom property '{existing['key']}' deleted from catalog '{catalog_id}'",
+            entity_type="catalog", entity_id=catalog_id,
+            status_code=204,
+            response_summary=f"property_id={property_id}"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("delete_custom_property error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
