@@ -1139,7 +1139,7 @@ class IngestionManager:
             return 0
         
     async def _extract_athena_lineage(
-            self, source_id: str, conn_details: dict
+                      self, source_id: str, conn_details: dict
             ):
         """
         Lineage extractor for Athena using boto3 query execution history.
@@ -1152,72 +1152,72 @@ class IngestionManager:
         """
         import boto3
         import sqlglot
-
+ 
         logger.info("[Lineage][Athena] Starting query history based lineage extraction")
-
+ 
         try:
             # ── Connect to Athena via boto3 ───
             aws_region         = conn_details.get("aws_region", os.environ.get("AWS_DEFAULT_REGION"))
             aws_access_key_id  = conn_details.get("aws_access_key_id") or os.environ.get("AWS_ACCESS_KEY_ID")
             aws_secret_key     = conn_details.get("aws_secret_access_key") or os.environ.get("AWS_SECRET_ACCESS_KEY")
             work_group         = conn_details.get("work_group", "primary")
-
+ 
             athena = boto3.client(
                 "athena",
                 region_name           = aws_region,
                 aws_access_key_id     = aws_access_key_id,
                 aws_secret_access_key = aws_secret_key,
             )
-
+ 
             all_query_ids = []
             paginator = athena.get_paginator("list_query_executions")
-
+ 
             for page in paginator.paginate(WorkGroup=work_group):
                 all_query_ids.extend(page.get("QueryExecutionIds", []))
                 if len(all_query_ids) >= 500:
                     break
-
+ 
             logger.info(f"[Lineage][Athena] Found {len(all_query_ids)} total query executions")
-
+ 
             if not all_query_ids:
                 logger.info("[Lineage][Athena] No query executions found")
                 return 0
-
+ 
             # ── Batch fetch query details (max 50 per call) ───────────────────
             from datetime import datetime, timedelta, timezone
             cutoff = datetime.now(timezone.utc) - timedelta(days=7)
-
+ 
             # Each entry: dict with query_text + all execution metadata
             lineage_queries = []
-
+ 
             for i in range(0, len(all_query_ids), 50):
                 batch = all_query_ids[i:i+50]
                 response = athena.batch_get_query_execution(QueryExecutionIds=batch)
-
+ 
                 for qe in response.get("QueryExecutions", []):
                     status      = qe.get("Status", {})
                     state       = status.get("State", "")
                     submit_time = status.get("SubmissionDateTime")
-
+ 
                     if state != "SUCCEEDED":
                         continue
                     if submit_time and submit_time < cutoff:
                         continue
-
+ 
                     query_text = qe.get("Query", "")
                     upper_q    = query_text.upper()
-
+ 
                     if not (
                         ("CREATE TABLE" in upper_q and "SELECT" in upper_q)
                         or ("INSERT INTO" in upper_q and "SELECT" in upper_q)
                     ):
                         continue
-
+ 
                     # ── Capture all execution metadata ────────────────────────
                     stats           = qe.get("Statistics", {})
                     engine_info     = qe.get("EngineVersion", {})
                     result_config   = qe.get("ResultConfiguration", {})
-
+ 
                     query_execution_id = qe.get("QueryExecutionId")
                     query_start_time   = status.get("SubmissionDateTime")  
                     query_end_time     = status.get("CompletionDateTime")   
@@ -1226,7 +1226,7 @@ class IngestionManager:
                     query_status       = state                              
                     engine_version     = engine_info.get("EffectiveEngineVersion") or engine_info.get("SelectedEngineVersion")
                     s3_output_location = result_config.get("OutputLocation")
-
+ 
                     lineage_queries.append({
                         "query_text":          query_text,
                         "query_execution_id":  query_execution_id,
@@ -1238,23 +1238,23 @@ class IngestionManager:
                         "engine_version":      engine_version,
                         "s3_output_location":  s3_output_location,
                     })
-
+ 
             logger.info(f"[Lineage][Athena] {len(lineage_queries)} lineage-producing queries found")
-
+ 
             if not lineage_queries:
                 logger.info("[Lineage][Athena] No CTAS or INSERT INTO SELECT queries found")
                 return 0
-
+ 
             # ── Parse SQL → extract upstream/downstream pairs ─────────────────
             # Each entry: (upstream_name, downstream_name, query_meta_dict)
             lineage_pairs = []
-
+ 
             for qmeta in lineage_queries:
                 query_text = qmeta["query_text"]
                 try:
                     query_text = query_text.replace('\r\n', '\n').replace('\r', '\n')
                     upper_q    = query_text.upper().strip()
-
+ 
                     # ── Extract TARGET table ──────────────────────────────────
                     target_match = re.search(
                         r'CREATE\s+(?:OR\s+REPLACE\s+)?(?:EXTERNAL\s+)?TABLE\s+'
@@ -1266,11 +1266,11 @@ class IngestionManager:
                         query_text,
                         re.IGNORECASE
                     )
-
+ 
                     if not target_match:
                         logger.debug("[Lineage][Athena] Could not extract target table from query")
                         continue
-
+ 
                     g = target_match.groups()
                     if g[0] and g[1]:
                         target_table = g[1]
@@ -1280,9 +1280,9 @@ class IngestionManager:
                         target_table = g[5]
                     else:
                         target_table = g[6]
-
+ 
                     target_table = target_table.strip('"').upper()
-
+ 
                     # ── Find AS SELECT boundary ───────
                     as_select_match = re.search(
                         r'\bAS\s*[\n\r]+\s*SELECT\b|\bAS\s+SELECT\b',
@@ -1292,9 +1292,9 @@ class IngestionManager:
                     if not as_select_match:
                         logger.debug("[Lineage][Athena] No AS SELECT boundary found")
                         continue
-
+ 
                     select_part = query_text[as_select_match.start():]
-
+ 
                     # ── Extract SOURCE tables from FROM / JOIN clauses ────────
                     source_pattern = re.compile(
                         r'(?:FROM|JOIN)\s+'
@@ -1304,14 +1304,14 @@ class IngestionManager:
                         r'|([a-zA-Z0-9_]+))',
                         re.IGNORECASE
                     )
-
+ 
                     _SQL_KEYWORDS = {
                         'SELECT','WHERE','ON','AND','OR','NOT','NULL',
                         'TRUE','FALSE','INNER','LEFT','RIGHT','OUTER',
                         'CROSS','FULL','LATERAL','WITH','AS','HAVING',
                         'GROUP','ORDER','BY','LIMIT','UNION','ALL'
                     }
-
+ 
                     sources = []
                     for m in source_pattern.finditer(select_part):
                         g2 = m.groups()
@@ -1325,26 +1325,26 @@ class IngestionManager:
                             src = g2[6].strip('"').upper()
                         else:
                             continue
-
+ 
                         if src in _SQL_KEYWORDS or src == target_table:
                             continue
-
+ 
                         sources.append(src)
-
+ 
                     logger.info(f"[Lineage][Athena] Parsed: {sources} → {target_table}")
-
+ 
                     if target_table and sources:
                         for src in set(sources):
                             lineage_pairs.append((src, target_table, qmeta))
-
+ 
                 except Exception as parse_err:
                     logger.debug(f"[Lineage][Athena] Parse error: {parse_err}")
                     continue
-
+ 
             if not lineage_pairs:
                 logger.info("[Lineage][Athena] No lineage pairs extracted from queries")
                 return 0
-
+ 
             # ── Write into  Postgres table_lineage ────────────────────────
             sink_conn = psycopg2.connect(
                 host     = self.settings.PG_HOST,
@@ -1355,29 +1355,60 @@ class IngestionManager:
             )
             cur = sink_conn.cursor()
             lineage_stored = 0
-
+ 
             for upstream_name, downstream_name, qmeta in lineage_pairs:
+                # ── Resolve upstream catalog ID ───────────────────────────────
+                # Try the current source first; fall back to any source so that
+                # cross-source lineage edges (e.g. ods tables registered under a
+                # different source_id than ods_profiles) are not silently skipped.
                 cur.execute("""
                     SELECT id FROM catalogs
                     WHERE source_id = %s AND UPPER(table_name) = %s
                     LIMIT 1
                 """, (str(source_id), upstream_name))
                 up_row = cur.fetchone()
-
+                if not up_row:
+                    cur.execute("""
+                        SELECT id FROM catalogs
+                        WHERE UPPER(table_name) = %s
+                        ORDER BY updated_at DESC
+                        LIMIT 1
+                    """, (upstream_name,))
+                    up_row = cur.fetchone()
+                    if up_row:
+                        logger.info(
+                            f"[Lineage][Athena] Cross-source upstream resolved: "
+                            f"{upstream_name} (catalog_id={up_row[0]})"
+                        )
+ 
+                # ── Resolve downstream catalog ID ─────────────────────────────
                 cur.execute("""
                     SELECT id FROM catalogs
                     WHERE source_id = %s AND UPPER(table_name) = %s
                     LIMIT 1
                 """, (str(source_id), downstream_name))
                 dn_row = cur.fetchone()
-
+                if not dn_row:
+                    cur.execute("""
+                        SELECT id FROM catalogs
+                        WHERE UPPER(table_name) = %s
+                        ORDER BY updated_at DESC
+                        LIMIT 1
+                    """, (downstream_name,))
+                    dn_row = cur.fetchone()
+                    if dn_row:
+                        logger.info(
+                            f"[Lineage][Athena] Cross-source downstream resolved: "
+                            f"{downstream_name} (catalog_id={dn_row[0]})"
+                        )
+ 
                 if not up_row or not dn_row:
                     logger.info(
                         f"[Lineage][Athena] Skipping {upstream_name}→{downstream_name}: "
-                        f"not found in catalogs (up={bool(up_row)}, dn={bool(dn_row)})"
+                        f"not found in any catalog (up={bool(up_row)}, dn={bool(dn_row)})"
                     )
                     continue
-
+ 
                 cur.execute("""
                     INSERT INTO table_lineage (
                         upstream_catalog_id,
@@ -1420,9 +1451,9 @@ class IngestionManager:
                     qmeta["engine_version"],
                     qmeta["s3_output_location"],
                 ))
-
+ 
                 query_text_truncated = qmeta["query_text"][:2000]
-
+ 
                 # 1. From downstream table's perspective: it has an upstream
                 cur.execute("""
                     INSERT INTO centric_lineage (
@@ -1438,7 +1469,7 @@ class IngestionManager:
                         upstream_query_logic = EXCLUDED.upstream_query_logic,
                         updated_at = NOW()
                 """, (str(dn_row[0]), str(up_row[0]), query_text_truncated))
-
+ 
                 # 2. From upstream table's perspective: it has a downstream
                 cur.execute("""
                     INSERT INTO centric_lineage (
@@ -1454,7 +1485,7 @@ class IngestionManager:
                         downstream_query_logic = EXCLUDED.downstream_query_logic,
                         updated_at = NOW()
                 """, (str(up_row[0]), str(dn_row[0]), query_text_truncated))
-
+ 
                 logger.info(
                     f"[Lineage][Athena] ✓ Stored: {upstream_name} → {downstream_name} "
                     f"[exec_id={qmeta['query_execution_id']}, "
@@ -1462,17 +1493,18 @@ class IngestionManager:
                     f"scanned={qmeta['data_scanned_bytes']}B]"
                 )
                 lineage_stored += 1
-
+ 
             sink_conn.commit()
             cur.close()
             sink_conn.close()
-
+ 
             logger.info(f"[Lineage][Athena] ✓ Total lineage pairs stored: {lineage_stored}")
             return lineage_stored
-
+ 
         except Exception as e:
             logger.exception(f"[Lineage][Athena] Extraction failed: {e}")
             return 0
+ 
 
     async def _sync_athena_descriptions(self, source_id: str):
         """

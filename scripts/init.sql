@@ -986,129 +986,192 @@ CREATE TRIGGER update_column_queries_updated_at
 
 INSERT INTO column_queries (table_name, column_name, query_expression) VALUES
 
--- ── bookingpassenger ─────────────────────────────────────────────────────────
-('bookingpassenger', 'age_years',
- 'DATEDIFF(''year'', bp.passengerdob, CURRENT_DATE)'),
+-- ── profile (customer unified table) ─────────────────────────────
 
-('bookingpassenger', 'age_bucket',
- 'CASE WHEN age < 12 THEN ''child'' WHEN age < 18 THEN ''teenager'' WHEN age < 35 THEN ''young_adult'' WHEN age < 55 THEN ''adult'' ELSE ''senior'' END'),
+('profile', 'profile_id',
+ 'edw_customer.customer_id'),
 
-('bookingpassenger', 'passport_days_to_expiry',
- 'DATEDIFF(''day'', CURRENT_DATE, bp.passportexpiry)'),
+('profile', 'person_id',
+ 'all_person.person_id'),
 
-('bookingpassenger', 'passport_status',
- 'CASE WHEN days < 0 THEN ''expired'' WHEN days < 90 THEN ''expiring_soon'' WHEN days < 365 THEN ''expiring_within_year'' ELSE ''valid'' END'),
+('profile', 'title',
+ 'MAX(title) FILTER (WHERE name_type = ''LEGAL'' AND is_primary = TRUE)'),
 
-('bookingpassenger', 'payment_completion_rate',
- 'CASE WHEN bp.totalcost > 0 THEN ROUND(1.0 - (bp.balancedue / bp.totalcost), 4) ELSE NULL END'),
+('profile', 'first_name',
+ 'MAX(first_name) FILTER (WHERE name_type = ''LEGAL'' AND is_primary = TRUE)'),
 
-('bookingpassenger', 'used_discount',
- 'CASE WHEN bp.discountcode IS NOT NULL THEN 1 ELSE 0 END'),
+('profile', 'last_name',
+ 'MAX(last_name) FILTER (WHERE name_type = ''LEGAL'' AND is_primary = TRUE)'),
 
-('bookingpassenger', 'passport_risk_flag',
- 'CASE WHEN passport_days_to_expiry < 90 AND has_international_travel = 1 THEN 1 ELSE 0 END'),
+('profile', 'full_name',
+ 'CONCAT(title,'' '',first_name,'' '',last_name)'),
 
-('bookingpassenger', 'payment_risk_flag',
- 'CASE WHEN bp.totalcost > 0 AND (bp.balancedue / bp.totalcost) > 0.5 THEN 1 ELSE 0 END'),
+('profile', 'booker_name',
+ 'CONCAT(c.first_name,'' '',c.last_name) FILTER (WHERE contact_type = ''PRIMARY'')'),
 
--- ── booking ───────────────────────────────────────────────────────────────────
-('booking', 'booking_lead_days',
- 'DATEDIFF(''day'', b.bookingutc, MIN(pjs.departuredate) OVER (PARTITION BY bp.passengerid, bp.bookingid))'),
+('profile', 'date_of_birth',
+ 'COALESCE(p.date_of_birth, c.date_of_birth)'),
 
-('booking', 'booking_lead_category',
- 'CASE WHEN lead <= 3 THEN ''last_minute'' WHEN lead <= 14 THEN ''short_lead'' WHEN lead <= 60 THEN ''medium_lead'' ELSE ''early_planner'' END'),
+('profile', 'age',
+ 'DATE_PART(''year'', AGE(COALESCE(p.date_of_birth, c.date_of_birth)))'),
 
-('booking', 'used_hold',
- 'CASE WHEN b.holdutc IS NOT NULL THEN 1 ELSE 0 END'),
+('profile', 'age_band',
+ 'CASE WHEN age < 18 THEN ''Under 18'' WHEN age < 35 THEN ''18-34'' WHEN age < 55 THEN ''35-54'' ELSE ''55+'' END'),
 
-('booking', 'used_promo',
- 'CASE WHEN b.bookingpromocode IS NOT NULL THEN 1 ELSE 0 END'),
+('profile', 'gender',
+ 'COALESCE(p.gender, c.gender)'),
 
-('booking', 'booking_hour_utc',
- 'EXTRACT(HOUR FROM b.bookingutc)'),
+('profile', 'nationality',
+ 'COALESCE(p.nationality, c.nationality, td.nationality)'),
 
-('booking', 'booking_time_of_day',
- 'CASE WHEN hour BETWEEN 6 AND 11 THEN ''morning'' WHEN hour BETWEEN 12 AND 17 THEN ''afternoon'' WHEN hour BETWEEN 18 AND 21 THEN ''evening'' ELSE ''night_owl'' END'),
+('profile', 'primary_email',
+ 'MAX(email_address) FILTER (WHERE email_type = ''PRIMARY'' AND is_verified = TRUE)'),
 
--- ── passengerjourneysegment ───────────────────────────────────────────────────
-('passengerjourneysegment', 'total_segments',
- 'COUNT(DISTINCT pjs.segmentid)'),
+('profile', 'primary_phone',
+ 'MAX(phone_number) FILTER (WHERE phone_type = ''MOBILE'' AND is_primary = TRUE)'),
 
-('passengerjourneysegment', 'total_journeys',
- 'COUNT(DISTINCT pjs.journeynumber)'),
+('profile', 'home_city',
+ 'MAX(city) FILTER (WHERE address_type = ''HOME'' AND is_primary = TRUE)'),
 
-('passengerjourneysegment', 'total_trips',
- 'COUNT(DISTINCT pjs.tripnumber)'),
+('profile', 'home_country',
+ 'MAX(country_code) FILTER (WHERE address_type = ''HOME'' AND is_primary = TRUE)'),
 
-('passengerjourneysegment', 'unique_flights',
- 'COUNT(DISTINCT pjs.xrefflightnumber)'),
+('profile', 'home_address_full',
+ 'CONCAT(address_line1,'', '',COALESCE(address_line2,''''),'', '',city,'', '',country_code)'),
 
-('passengerjourneysegment', 'has_international_travel',
- 'MAX(CASE WHEN pjs.international = TRUE THEN 1 ELSE 0 END)'),
+('profile', 'loyalty_number',
+ 'edw_customer.loyalty_number'),
 
-('passengerjourneysegment', 'intl_segment_count',
- 'SUM(CASE WHEN pjs.international = TRUE THEN 1 ELSE 0 END)'),
+('profile', 'loyalty_tier',
+ 'edw_customer.loyalty_tier'),
 
-('passengerjourneysegment', 'domestic_segment_count',
- 'SUM(CASE WHEN pjs.international = FALSE THEN 1 ELSE 0 END)'),
+('profile', 'loyalty_points',
+ 'edw_customer.loyalty_points'),
 
-('passengerjourneysegment', 'unique_routes',
- 'COUNT(DISTINCT pjs.departurestation || ''-'' || pjs.arrivalstation)'),
+('profile', 'total_bookings',
+ 'COUNT(DISTINCT booking_id) FILTER (WHERE booking_status = ''CONFIRMED'')'),
 
-('passengerjourneysegment', 'unique_departure_stations',
- 'COUNT(DISTINCT pjs.departurestation)'),
+('profile', 'total_revenue',
+ 'SUM(total_revenue) FILTER (WHERE booking_status = ''CONFIRMED'')'),
 
-('passengerjourneysegment', 'unique_arrival_stations',
- 'COUNT(DISTINCT pjs.arrivalstation)'),
+('profile', 'total_fare',
+ 'SUM(total_fare) FILTER (WHERE booking_status = ''CONFIRMED'')'),
 
-('passengerjourneysegment', 'has_roundtrip',
- 'MAX(CASE WHEN pjs.triptype = ''RT'' THEN 1 ELSE 0 END)'),
+('profile', 'total_ancillary_spend',
+ 'SUM(fee_amount) FILTER (WHERE fee_status = ''ACTIVE'')'),
 
-('passengerjourneysegment', 'has_oneway',
- 'MAX(CASE WHEN pjs.triptype = ''OW'' THEN 1 ELSE 0 END)'),
+('profile', 'avg_booking_value',
+ 'SUM(total_revenue) / NULLIF(COUNT(DISTINCT booking_id),0)'),
 
-('passengerjourneysegment', 'seats_assigned',
- 'COUNT(CASE WHEN pjs.seatnumber IS NOT NULL THEN 1 END)'),
+('profile', 'first_booking_date',
+ 'MIN(booking_date)::DATE'),
 
-('passengerjourneysegment', 'seats_unassigned',
- 'COUNT(CASE WHEN pjs.seatnumber IS NULL THEN 1 END)'),
+('profile', 'last_booking_date',
+ 'MAX(booking_date)::DATE'),
 
-('passengerjourneysegment', 'unique_farebases',
- 'COUNT(DISTINCT pjs.farebasis)'),
+('profile', 'days_since_last_book',
+ 'DATE_PART(''day'', CURRENT_DATE - MAX(booking_date))'),
 
-('passengerjourneysegment', 'has_open_fare',
- 'MAX(CASE WHEN pjs.farestatus = ''OPEN'' THEN 1 ELSE 0 END)'),
+('profile', 'preferred_cabin',
+ 'MODE() WITHIN GROUP (ORDER BY cabin_class)'),
 
-('passengerjourneysegment', 'is_ticketed',
- 'MAX(CASE WHEN pjs.ticketstatus = ''TICKETED'' THEN 1 ELSE 0 END)'),
+('profile', 'preferred_origin',
+ 'MODE() WITHIN GROUP (ORDER BY origin)'),
 
-('passengerjourneysegment', 'first_departure_date',
- 'MIN(pjs.departuredate)'),
+('profile', 'preferred_dest',
+ 'MODE() WITHIN GROUP (ORDER BY destination)'),
 
-('passengerjourneysegment', 'last_departure_date',
- 'MAX(pjs.departuredate)'),
+('profile', 'booking_channel',
+ 'MODE() WITHIN GROUP (ORDER BY booking_channel)'),
 
-('passengerjourneysegment', 'travel_intensity_score',
- 'ROUND(COUNT(DISTINCT segmentid)*1.0 + MAX(intl)*3.0 + COUNT(DISTINCT routes)*0.5 + COUNT(DISTINCT flights)*0.5, 2)'),
+('profile', 'cancellation_count',
+ 'COUNT(*) FILTER (WHERE booking_status = ''CANCELLED'')'),
 
-('passengerjourneysegment', 'passenger_value_segment',
- 'CASE WHEN totalcost>=5000 AND intl=1 THEN ''premium_intl'' WHEN totalcost>=5000 THEN ''premium_domestic'' WHEN totalcost>=1000 AND intl=1 THEN ''mid_intl'' WHEN totalcost>=1000 THEN ''mid_domestic'' ELSE ''budget'' END'),
+('profile', 'cancellation_rate',
+ 'COUNT(*) FILTER (WHERE booking_status = ''CANCELLED'') * 100.0 / NULLIF(COUNT(*),0)'),
 
--- ── agent ─────────────────────────────────────────────────────────────────────
-('agent', 'agent_tenure_years',
- 'DATEDIFF(''year'', a.agentsince, CURRENT_DATE)'),
+('profile', 'passport_nationality',
+ 'COALESCE(ptd.nationality, td.nationality)'),
 
-('agent', 'agent_seniority_tier',
- 'CASE WHEN tenure < 2 THEN ''junior'' WHEN tenure < 5 THEN ''mid'' WHEN tenure < 10 THEN ''senior'' ELSE ''veteran'' END'),
+('profile', 'passport_expiry',
+ 'MAX(expiry_date) FILTER (WHERE doc_type = ''PASSPORT'')'),
 
--- ── system ────────────────────────────────────────────────────────────────────
-('system', 'profile_refreshed_utc',
- 'CURRENT_TIMESTAMP AS profile_refreshed_utc')
+('profile', 'has_expired_passport',
+ 'CASE WHEN MAX(expiry_date) < CURRENT_DATE THEN TRUE ELSE FALSE END'),
+
+('profile', 'total_segments',
+ 'COUNT(DISTINCT journeysegment_id)'),
+
+('profile', 'total_flight_hours',
+ 'SUM(flight_duration_min)/60.0'),
+
+('profile', 'avg_delay_minutes',
+ 'AVG(delay_minutes)'),
+
+('profile', 'sfmc_subscriber_key',
+ 'all_subscribers.subscriber_key'),
+
+('profile', 'email_send_count',
+ 'COUNT(*)'),
+
+('profile', 'email_open_count',
+ 'COUNT(*) FILTER (WHERE is_unique = TRUE)'),
+
+('profile', 'email_click_count',
+ 'COUNT(*) FILTER (WHERE is_unique = TRUE)'),
+
+('profile', 'email_open_rate',
+ 'COUNT(*) FILTER (WHERE is_unique = TRUE) * 100.0 / NULLIF(COUNT(*),0)'),
+
+('profile', 'email_click_rate',
+ 'COUNT(*) FILTER (WHERE is_unique = TRUE) * 100.0 / NULLIF(COUNT(*),0)'),
+
+('profile', 'last_email_open_date',
+ 'MAX(event_date)::DATE'),
+
+('profile', 'last_email_click_date',
+ 'MAX(event_date)::DATE'),
+
+('profile', 'email_opt_in',
+ 'COALESCE(pe.is_opted_in, c.email_consent)'),
+
+('profile', 'sms_opt_in',
+ 'COALESCE(pp.is_sms_opted_in, c.sms_consent)'),
+
+('profile', 'booked_via_agent',
+ 'CASE WHEN MAX(sales_agent_id) IS NOT NULL THEN TRUE ELSE FALSE END'),
+
+('profile', 'preferred_agent_name',
+ 'MODE() WITHIN GROUP (ORDER BY ag.agency_name)'),
+
+('profile', 'ciam_registration_dt',
+ 'edw_customer.registration_date'),
+
+('profile', 'last_login_date',
+ 'edw_customer.last_login_date'),
+
+('profile', 'profile_created_date',
+ 'MIN(created_at)'),
+
+('profile', 'profile_updated_date',
+ 'CURRENT_TIMESTAMP'),
+
+('profile', 'rfm_recency_score',
+ 'NTILE(5) OVER (ORDER BY DATE_PART(''day'', CURRENT_DATE - MAX(booking_date)))'),
+
+('profile', 'rfm_frequency_score',
+ 'NTILE(5) OVER (ORDER BY COUNT(DISTINCT booking_id))'),
+
+('profile', 'rfm_monetary_score',
+ 'NTILE(5) OVER (ORDER BY SUM(total_revenue))'),
+
+('profile', 'rfm_segment',
+ 'CASE WHEN (r+f+m) >= 13 THEN ''Champions'' ELSE ''At Risk'' END')
 
 ON CONFLICT (table_name, column_name)
 DO UPDATE SET
     query_expression = EXCLUDED.query_expression,
-    updated_at       = NOW();
+    updated_at = NOW();
 
 
 -- ============================================================================
