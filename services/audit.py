@@ -12,10 +12,67 @@ router = APIRouter(tags=["audit"])
 
 class AuditSummary(BaseModel):
     total_events: int
-    schema_changes: int
-    pending_schema_reviews: int  # Example for the UI subtitle
+    metadata_updates: int
+    classification_events: int
     access_events: int
-    policy_changes: int
+    lineage_events: int
+
+class ActivityEventItem(BaseModel):
+    id: str
+    when_time: datetime
+    who_name: str
+    what_action: str
+    where_location: str
+    details: Optional[str]
+    status: str
+
+class CatalogAuditTrailResponse(BaseModel):
+    catalog_id: str
+    summary: AuditSummary
+    total_log_count: int
+    activity_log: List[ActivityEventItem]
+
+# ============================================================================
+# API Endpoint Logic
+# ============================================================================
+
+@router.get(
+    "/api/v1/catalogs/{catalog_id}/audit-trail",
+    response_model=CatalogAuditTrailResponse,
+    summary="Retrieve the comprehensive audit trail for a dataset (catalog)"
+)
+async def get_catalog_audit_trail(
+    catalog_id: str, 
+    limit: int = 50, 
+    offset: int = 0
+):
+    """
+    Fetches the summary metrics and paginated activity logs for the Audit Screen.
+    Matches the `entity_id` in `api_logs` to the given `catalog_id`.
+    """
+    from app import db, logger  # Assuming `db` is the instance from the app module
+    
+    # -------------------------------------------------------------------------
+    # 1. Fetch Summary Metrics (The top 4 cards)
+    # -------------------------------------------------------------------------
+from fastapi import APIRouter, HTTPException, Query
+from typing import Optional, List
+from datetime import datetime
+from pydantic import BaseModel
+import json
+
+router = APIRouter(tags=["audit"])
+
+# ============================================================================
+# Schemas for the Audit Trail Screen
+# ============================================================================
+
+class AuditSummary(BaseModel):
+    total_events: int
+    metadata_updates: int
+    classification_events: int
+    access_events: int
+    lineage_events: int
 
 class ActivityEventItem(BaseModel):
     id: str
@@ -61,25 +118,31 @@ async def get_catalog_audit_trail(
             -- 1. Total Events (Last 30 Days)
             COUNT(*) AS total_events,
             
-            -- 2. Schema Changes
+            -- 2. Metadata Updates
             COUNT(*) FILTER (
-                WHERE LOWER(action_summary) LIKE '%schema%' 
-                   OR LOWER(action_summary) LIKE '%column%'
-                   OR LOWER(action_summary) LIKE '%table%'
-            ) AS schema_changes,
+                WHERE method != 'GET' AND (
+                   LOWER(action_summary) LIKE '%property%' 
+                   OR LOWER(action_summary) LIKE '%datacard%'
+                )
+            ) AS metadata_updates,
             
-            -- Example mock for pending reviews if you don't have it explicitly tracked
-            0 AS pending_schema_reviews, 
-            
-            -- 3. Access Events (assuming GET requests are viewed as access/read)
-            COUNT(*) FILTER (WHERE method = 'GET') AS access_events,
-            
-            -- 4. Policy Changes (assuming tags/classifications are policy actions)
+            -- 3. Classification Events
             COUNT(*) FILTER (
-                WHERE LOWER(action_summary) LIKE '%tag%' 
-                   OR LOWER(action_summary) LIKE '%policy%'
-                   OR LOWER(action_summary) LIKE '%domain%'
-            ) AS policy_changes
+                WHERE method != 'GET' AND (
+                   LOWER(action_summary) LIKE '%tag%' 
+                   OR LOWER(action_summary) LIKE '%classif%'
+                )
+            ) AS classification_events, 
+            
+            -- 4. Access Events (Placeholder, calculated dynamically below)
+            0 AS access_events,
+            
+            -- 5. Lineage Events
+            COUNT(*) FILTER (
+                WHERE method != 'GET' AND (
+                   LOWER(action_summary) LIKE '%lineage%'
+                ) 
+            ) AS lineage_events
 
         FROM api_logs
         WHERE entity_id = $1 
@@ -213,14 +276,24 @@ async def get_catalog_audit_trail(
             )
         )
         
+    # Calculate mutually exclusive sums representing 100% of logs
+    meta_ev  = summary_record["metadata_updates"] or 0
+    class_ev = summary_record["classification_events"] or 0
+    lin_ev   = summary_record["lineage_events"] or 0
+
+    # Ensure total sum equals the total_count
+    acc_ev   = total_count - (meta_ev + class_ev + lin_ev)
+    if acc_ev < 0:
+        acc_ev = 0
+
     return CatalogAuditTrailResponse(
         catalog_id=catalog_id,
         summary=AuditSummary(
             total_events=total_count,
-            schema_changes=summary_record["schema_changes"] or 0,
-            pending_schema_reviews=summary_record["pending_schema_reviews"] or 0,
-            access_events=total_count,
-            policy_changes=summary_record["policy_changes"] or 0,
+            metadata_updates=meta_ev,
+            classification_events=class_ev,
+            access_events=acc_ev,
+            lineage_events=lin_ev,
         ),
         total_log_count=total_count,
         activity_log=activity_log
