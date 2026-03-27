@@ -157,6 +157,67 @@ async def list_catalogs(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# PII column names set
+PII_COLUMNS = {
+    "bookingpassenger_id", "booking_id", "passenger_id", "is_lead_passenger",
+    "seat_number", "meal_preference", "special_assistance", "frequent_flyer_number",
+    "frequent_flyer_program", "bookingcontact_id", "contact_type", "first_name",
+    "last_name", "email", "phone", "relationship", "booking_reference",
+    "travel_date", "return_date", "origin", "destination", "sales_agent_id",
+    "passengeraddress_id", "address_type", "address_line1", "address_line2",
+    "city", "state_province", "postal_code", "country_code", "is_primary",
+    "valid_from", "valid_to", "traveldoc_id", "doc_type", "doc_number",
+    "issuing_country", "nationality", "issue_date", "expiry_date",
+    "journeyleg_id", "journeysegment_id", "leg_number", "departure_airport",
+    "arrival_airport", "departure_datetime", "arrival_datetime", "segment_number",
+    "flight_number", "operating_carrier", "fare_basis", "booking_class",
+    "segment_status", "passengerfee_id", "fee_type", "fee_code", "fee_description",
+    "fee_amount", "currency_code", "quantity", "fee_status", "agent_id",
+    "agent_code", "agency_name", "person_id", "person_type", "date_of_birth",
+    "gender", "language_preference", "personname_id", "name_type", "title",
+    "middle_name", "full_name", "personemail_id", "email_address", "email_type",
+    "is_verified", "is_opted_in", "opt_in_date", "opt_out_date", "personaddress_id",
+    "personphone_id", "phone_number", "phone_type", "is_sms_opted_in", "is_expired",
+    "customer_id", "external_person_id", "account_status", "loyalty_tier",
+    "loyalty_number", "loyalty_points", "registration_date", "last_login_date",
+    "preferred_language", "marketing_consent", "email_consent", "sms_consent",
+    "open_id", "send_id", "subscriber_key", "is_unique", "email_client",
+    "from_name", "from_email", "email_id", "event_date", "list_id", "status",
+    "created_date", "unsubscribed_date", "bounce_count", "url", "link_nameclick_id",
+    "profile_id", "booker_name", "age", "age_band", "primary_email", "primary_phone",
+    "home_city", "home_country", "home_address_full", "total_bookings", "total_revenue",
+    "total_fare", "total_ancillary_spend", "avg_booking_value", "first_booking_date",
+    "last_booking_date", "days_since_last_book", "preferred_cabin", "preferred_origin",
+    "preferred_dest", "booking_channel", "cancellation_count", "cancellation_rate",
+    "passport_nationality", "passport_expiry", "has_expired_passport", "total_segments",
+    "total_flight_hours", "avg_delay_minutes", "sfmc_subscriber_key", "email_send_count",
+    "email_open_count", "email_click_count", "email_open_rate", "email_click_rate",
+    "last_email_open_date", "last_email_click_date", "email_opt_in", "sms_opt_in",
+    "booked_via_agent", "preferred_agent_name", "ciam_registration_dt",
+    "profile_created_date", "profile_updated_date", "rfm_recency_score",
+    "rfm_frequency_score", "rfm_monetary_score", "rfm_segment"
+}
+
+def _get_pii_tag(column_name: str) -> list:
+    """Return a PII or NON-PII synthetic tag based on column name."""
+    is_pii = column_name.lower() in PII_COLUMNS
+    if is_pii:
+        return [{
+            "id":    "7e9e94e8-982a-4f49-801a-a55epii",
+            "name":  "PII",
+            "color": "#FF4D4F",   # red
+        }]
+    else:
+        return [{
+            "id":    "7e9e94e8-982a-4f49-801a-non-pii",
+            "name":  "NON-PII",
+            "color": "#52C41A",   # green
+        }]
+
+
+
+
 @router.get("/api/v1/catalog/detail/{catalog_id}", response_model=CatalogInfo, tags=["Catalogs"])
 async def get_catalog(catalog_id: str):
     """Get catalog by ID with full details"""
@@ -290,17 +351,7 @@ async def get_catalog_detail(catalog_id: str):
             ORDER BY ordinal_position ASC
         """, catalog_id)
 
-        # Per-column tags (all columns for this catalog in one query)
-        column_tags_rows = await db.fetch_all("""
-            SELECT
-                tca.column_id,
-                t.id        AS tag_id,
-                t.name      AS tag_name,
-                t.color     AS tag_color
-            FROM tag_column_assignments tca
-            JOIN tags t ON tca.tag_id = t.id
-            WHERE tca.catalog_id = $1
-        """, catalog_id)
+        
 
         # Per-column glossary terms (all columns for this catalog in one query)
         column_terms_rows = await db.fetch_all("""
@@ -316,15 +367,6 @@ async def get_catalog_detail(catalog_id: str):
         """, catalog_id)
 
         # Build lookup maps keyed by column_id
-        tags_by_column = {}
-        for row in column_tags_rows:
-            col_id = str(row["column_id"])
-            tags_by_column.setdefault(col_id, []).append({
-                "id":    str(row["tag_id"]),
-                "name":  row["tag_name"],
-                "color": row["tag_color"],
-            })
-
         terms_by_column = {}
         for row in column_terms_rows:
             col_id = str(row["column_id"])
@@ -333,6 +375,8 @@ async def get_catalog_detail(catalog_id: str):
                 "name":        row["term_name"],
                 "description": row["term_description"],
             })
+
+        
 
     
 
@@ -395,7 +439,7 @@ async def get_catalog_detail(catalog_id: str):
                     "is_foreign_key":   col["is_foreign_key"],
                     "ordinal_position": col["ordinal_position"],
                     "description":      col["description"],
-                    "tags":             tags_by_column.get(str(col["id"]), []),
+                    "tags":             _get_pii_tag(col["name"]),
                     "glossary_terms":   terms_by_column.get(str(col["id"]), []),
                 }
                 for col in columns
