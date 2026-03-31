@@ -658,6 +658,7 @@ def get_recently_viewed():
             SELECT
                 c.table_name,
                 ds.name AS source_name,
+                ds.source_type,
                 t.name AS tag,
                 al.created_at
             FROM api_logs al
@@ -678,6 +679,7 @@ def get_recently_viewed():
             {
                 "dataset": row["table_name"],
                 "source": row["source_name"],
+                "source_type": row["source_type"],
                 "tag": row["tag"],
                 "time": format_time_ago(row["created_at"])
             }
